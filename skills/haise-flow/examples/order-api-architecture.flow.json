@@ -1,0 +1,205 @@
+{
+  "title": "Order API — Request Architecture",
+  "description": "Illustrative layered architecture: client, API layer, domain services, and data / messaging, with the async fulfilment path.",
+  "lang": "en",
+  "lanes": [
+    {
+      "id": "client",
+      "label": "Client"
+    },
+    {
+      "id": "api",
+      "label": "API layer"
+    },
+    {
+      "id": "domain",
+      "label": "Domain services"
+    },
+    {
+      "id": "data",
+      "label": "Data and messaging"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "web",
+      "lane": "client",
+      "col": 0,
+      "kind": "frontend",
+      "label": "Web app",
+      "sublabel": "React SPA",
+      "detail": "Browser client; calls POST /orders"
+    },
+    {
+      "id": "mobile",
+      "lane": "client",
+      "col": 1,
+      "kind": "frontend",
+      "label": "Mobile app",
+      "sublabel": "Flutter",
+      "detail": "Same API as the web app"
+    },
+    {
+      "id": "gateway",
+      "lane": "api",
+      "col": 0,
+      "kind": "security",
+      "label": "API gateway",
+      "sublabel": "Auth · rate limit",
+      "detail": "JWT check, per-client rate limit"
+    },
+    {
+      "id": "order_ctrl",
+      "lane": "api",
+      "col": 1,
+      "kind": "backend",
+      "label": "OrderController",
+      "sublabel": "POST /orders",
+      "detail": "Validates the request body, maps to a command"
+    },
+    {
+      "id": "order_svc",
+      "lane": "domain",
+      "col": 1,
+      "kind": "backend",
+      "label": "OrderService",
+      "sublabel": "Create + reserve stock",
+      "detail": "Transaction: insert order, reserve stock, emit OrderCreated"
+    },
+    {
+      "id": "stock_svc",
+      "lane": "domain",
+      "col": 2,
+      "kind": "backend",
+      "label": "StockService",
+      "sublabel": "Reserve / release",
+      "detail": "Row lock on stock"
+    },
+    {
+      "id": "payment",
+      "lane": "domain",
+      "col": 3,
+      "kind": "external",
+      "optional": true,
+      "label": "Payment provider",
+      "sublabel": "Only prepaid orders",
+      "detail": "3rd-party API, called only when payment_type = prepaid"
+    },
+    {
+      "id": "db",
+      "lane": "data",
+      "col": 1,
+      "kind": "database",
+      "label": "orders DB",
+      "sublabel": "orders · stock",
+      "detail": "PostgreSQL"
+    },
+    {
+      "id": "bus",
+      "lane": "data",
+      "col": 3,
+      "kind": "messagebus",
+      "label": "Event bus",
+      "sublabel": "OrderCreated",
+      "detail": "At-least-once delivery"
+    },
+    {
+      "id": "fulfil",
+      "lane": "data",
+      "col": 4,
+      "kind": "cloud",
+      "label": "Fulfilment",
+      "sublabel": "Warehouse system",
+      "detail": "Consumes OrderCreated"
+    }
+  ],
+  "edges": [
+    {
+      "from": "web",
+      "to": "gateway",
+      "label": "HTTPS",
+      "variant": "emphasis"
+    },
+    {
+      "from": "mobile",
+      "to": "gateway",
+      "label": "HTTPS"
+    },
+    {
+      "from": "gateway",
+      "to": "order_ctrl",
+      "label": "JWT ok",
+      "variant": "security"
+    },
+    {
+      "from": "order_ctrl",
+      "to": "order_svc",
+      "label": "command",
+      "variant": "emphasis"
+    },
+    {
+      "from": "order_svc",
+      "to": "stock_svc",
+      "label": "reserve"
+    },
+    {
+      "from": "order_svc",
+      "to": "payment",
+      "label": "prepaid",
+      "route": "over"
+    },
+    {
+      "from": "order_svc",
+      "to": "db",
+      "label": "tx",
+      "variant": "emphasis"
+    },
+    {
+      "from": "stock_svc",
+      "to": "db",
+      "label": "lock"
+    },
+    {
+      "from": "order_svc",
+      "to": "bus",
+      "label": "OrderCreated"
+    },
+    {
+      "from": "bus",
+      "to": "fulfil",
+      "label": "consume"
+    },
+    {
+      "from": "fulfil",
+      "to": "order_ctrl",
+      "label": "status callback",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Request path",
+      "items": [
+        "Clients call the gateway over HTTPS",
+        "Gateway checks the JWT and rate limit, then forwards to OrderController"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Domain",
+      "items": [
+        "OrderService writes the order and reserves stock in one transaction",
+        "Payment is called only for prepaid orders"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Async",
+      "items": [
+        "OrderCreated goes to the event bus",
+        "Fulfilment reports status back through a callback"
+      ]
+    }
+  ]
+}
