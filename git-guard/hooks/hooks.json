@@ -1,0 +1,29 @@
+{
+  "description": "git-guard: check git/gh commands against the identity, commit-message and github-cli contracts; brief Claude on identity problems at session start",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/pre_tool_use.py\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/session_start.py\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>git-guard rules</title>
+<style>
+:root {
+  --bg: #f7f7f5; --panel: #ffffff; --ink: #1d1d1b; --muted: #6b6b66; --line: #e3e2dc;
+  --accent: #2f5bd3; --code-bg: #f1f0ec;
+  --deny: #b42318; --deny-bg: #fdecea; --ask: #a15c07; --ask-bg: #fff4e0;
+  --warn: #6b5900; --warn-bg: #fbf6d8; --off: #6b6b66; --off-bg: #eeeeea;
+  --good: #1f7a3d; --bad: #b42318;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #151515; --panel: #1e1e1d; --ink: #ecebe6; --muted: #a09f98; --line: #34332f;
+    --accent: #8aa8ff; --code-bg: #272724;
+    --deny: #ff8a80; --deny-bg: #3a1d1b; --ask: #ffc266; --ask-bg: #3a2c14;
+    --warn: #e9d870; --warn-bg: #33301a; --off: #a09f98; --off-bg: #2a2a28;
+    --good: #7ad49a; --bad: #ff8a80;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #151515; --panel: #1e1e1d; --ink: #ecebe6; --muted: #a09f98; --line: #34332f;
+  --accent: #8aa8ff; --code-bg: #272724;
+  --deny: #ff8a80; --deny-bg: #3a1d1b; --ask: #ffc266; --ask-bg: #3a2c14;
+  --warn: #e9d870; --warn-bg: #33301a; --off: #a09f98; --off-bg: #2a2a28;
+  --good: #7ad49a; --bad: #ff8a80;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+code, pre, .mono { font-family: ui-monospace, "Cascadia Code", Consolas, Menlo, monospace; font-size: 13px; }
+.wrap { max-width: 1040px; margin: 0 auto; padding: 0 16px; }
+header { padding: 28px 0 12px; }
+h1 { margin: 0 0 4px; font-size: 26px; letter-spacing: -0.01em; }
+.sub { color: var(--muted); margin: 0; }
+.stats { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+.toolbar { position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); padding: 10px 0; }
+.toolbar .wrap { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+input[type=search] { flex: 1 1 240px; min-width: 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--panel); color: var(--ink); font: inherit; }
+.tabs, .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+button.tab, button.chip, button.theme { border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+  padding: 6px 11px; border-radius: 999px; font: inherit; font-size: 13px; cursor: pointer; }
+button.tab[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+button.chip[aria-pressed="false"] { opacity: .45; text-decoration: line-through; }
+.badge { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.sev-deny { color: var(--deny); background: var(--deny-bg); }
+.sev-ask { color: var(--ask); background: var(--ask-bg); }
+.sev-warn { color: var(--warn); background: var(--warn-bg); }
+.sev-off, .sev-allow { color: var(--off); background: var(--off-bg); }
+section.contract { margin: 26px 0 8px; }
+section.contract > h2 { font-size: 20px; margin: 0 0 2px; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.file { color: var(--muted); font-weight: 400; font-size: 13px; }
+.desc { color: var(--muted); margin: 4px 0 10px; }
+.applies { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.pill { font-size: 12px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+details.settings { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px; margin-bottom: 12px; }
+details.settings summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+.rule { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin: 10px 0; }
+.rule.off { opacity: .6; }
+.rule-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.rule-id { font-weight: 700; }
+.rule-name { color: var(--muted); }
+.rule h3 { font-size: 16px; margin: 6px 0 2px; }
+.rule p { margin: 4px 0; }
+.kv { display: grid; grid-template-columns: minmax(110px, max-content) 1fr; gap: 4px 14px; margin: 10px 0 0; font-size: 13px; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.kv code, .ex code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+.table-scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 6px 8px; border-top: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; }
+.ex { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+.ex h4 { margin: 0 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+.ex .good h4 { color: var(--good); } .ex .bad h4 { color: var(--bad); }
+.ex pre { margin: 0 0 6px; background: var(--code-bg); padding: 6px 8px; border-radius: 6px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.problems { background: var(--deny-bg); color: var(--deny); border-radius: 10px; padding: 10px 14px; margin: 12px 0; }
+.empty { color: var(--muted); padding: 30px 0; text-align: center; }
+.help { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; margin: 26px 0 40px; font-size: 14px; }
+.help pre { background: var(--code-bg); padding: 8px 10px; border-radius: 6px; overflow-x: auto; }
+mark { background: var(--warn-bg); color: inherit; }
+code.var { color: var(--accent); background: transparent; border: 1px dashed var(--accent); }
+.profile { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin: 18px 0 4px; }
+.profile h2 { font-size: 18px; margin: 0 0 4px; }
+.profile .unset { color: var(--muted); font-style: italic; }
+@media (max-width: 640px) { .ex { grid-template-columns: 1fr; } .kv { grid-template-columns: 1fr; } .kv dt { margin-top: 6px; } }
+</style>
+</head>
+<body>
+<header class="wrap">
+  <h1>git-guard rules</h1>
+  <p class="sub" id="meta"></p>
+  <div class="stats" id="stats"></div>
+  <div id="problems"></div>
+</header>
+<div class="toolbar">
+  <div class="wrap">
+    <input type="search" id="q" placeholder="Search rules, ids, params…" aria-label="Search rules">
+    <div class="tabs" id="tabs" role="group" aria-label="Contract"></div>
+    <div class="chips" id="chips" role="group" aria-label="Severity"></div>
+    <button class="theme" id="theme" type="button" title="Toggle theme">◐</button>
+  </div>
+</div>
+<main class="wrap" id="main"></main>
+<div class="wrap">
+  <div class="help">
+    <strong>How decisions work.</strong> Every rule has a severity: <span class="badge sev-deny">deny</span> blocks the command,
+    <span class="badge sev-ask">ask</span> asks you to confirm, <span class="badge sev-warn">warn</span> lets it run with a warning,
+    <span class="badge sev-off">off</span> disables the rule. The strictest finding wins.
+    <br>Edit the JSON files in <code>.claude/hooks/git-guard/contracts/</code>, then refresh this page with:
+    <pre>python .claude/hooks/git-guard/scripts/render_rules.py --open</pre>
+    Check a message by hand: <code>python .claude/hooks/git-guard/scripts/check_message.py "feat(api): add retry"</code>
+  </div>
+</div>
+<script id="data" type="application/json">/*__GIT_GUARD_DATA__*/null</script>
+<script>
+(function () {
+  "use strict";
+  var DATA = JSON.parse(document.getElementById("data").textContent);
+  var SEVS = ["deny", "ask", "warn", "off"];
+  var state = { tab: "all", q: "", sev: { deny: true, ask: true, warn: true, off: true } };
+  try { var saved = JSON.parse(localStorage.getItem("git-guard-view") || "null"); if (saved) { state.tab = saved.tab || "all"; state.sev = Object.assign(state.sev, saved.sev || {}); } } catch (e) {}
+  try { var th = localStorage.getItem("git-guard-theme"); if (th) document.documentElement.dataset.theme = th; } catch (e) {}
+
+  function el(tag, attrs, kids) {
+    var n = document.createElement(tag);
+    if (attrs) Object.keys(attrs).forEach(function (k) {
+      if (k === "text") n.textContent = attrs[k];
+      else if (k === "cls") n.className = attrs[k];
+      else n.setAttribute(k, attrs[k]);
+    });
+    (kids || []).forEach(function (c) { if (c != null) n.appendChild(typeof c === "string" ? document.createTextNode(c) : c); });
+    return n;
+  }
+  function badge(sev) { return el("span", { cls: "badge sev-" + sev, text: sev }); }
+  function save() { try { localStorage.setItem("git-guard-view", JSON.stringify({ tab: state.tab, sev: state.sev })); } catch (e) {} }
+
+  function renderValue(v) {
+    if (Array.isArray(v)) {
+      if (!v.length) return el("span", { cls: "file", text: "(none)" });
+      if (typeof v[0] === "object" && v[0] !== null) {
+        var cols = Object.keys(v[0]);
+        var head = el("tr", null, cols.map(function (c) { return el("th", { text: c }); }));
+        var rows = v.map(function (row) {
+          return el("tr", null, cols.map(function (c) {
+            var val = row[c];
+            if (c === "decision") return el("td", null, [badge(val === "allow" ? "off" : val)]);
+            return el("td", null, [c === "match" ? el("code", { text: String(val) }) : String(val == null ? "" : val)]);
+          }));
+        });
+        return el("div", { cls: "table-scroll" }, [el("table", null, [el("thead", null, [head]), el("tbody", null, rows)])]);
+      }
+      var wrap = el("span");
+      v.forEach(function (x, i) { if (i) wrap.appendChild(document.createTextNode(" ")); wrap.appendChild(codeOrVar(String(x))); });
+      return wrap;
+    }
+    if (v !== null && typeof v === "object") return el("code", { text: JSON.stringify(v) });
+    if (["deny", "ask", "warn", "off"].indexOf(v) >= 0) return badge(v);
+    return codeOrVar(String(v));
+  }
+  function codeOrVar(s) {
+    if (/\$\{[A-Za-z_]\w*\}/.test(s)) {
+      var m = s.match(/^\$\{([A-Za-z_]\w*)\}$/);
+      var c = el("code", { cls: "var", text: s, title: "profile variable" });
+      if (m) {
+        var row = (DATA.profile || []).filter(function (r) { return r.name === m[1]; })[0];
+        if (row) c.title = row.value == null ? "unset in your profile: rule falls back to a presence check" : "your value: " + JSON.stringify(row.value);
+      }
+      return c;
+    }
+    return el("code", { text: s });
+  }
+  function kv(obj) {
+    var dl = el("dl", { cls: "kv" });
+    Object.keys(obj).forEach(function (k) { dl.appendChild(el("dt", { text: k })); dl.appendChild(el("dd", null, [renderValue(obj[k])])); });
+    return dl;
+  }
+  function haystack(rule) { return JSON.stringify(rule).toLowerCase(); }
+
+  function renderRule(rule) {
+    var card = el("article", { cls: "rule" + (rule.severity === "off" ? " off" : ""), id: rule.id });
+    card.appendChild(el("div", { cls: "rule-head" }, [
+      el("span", { cls: "rule-id mono", text: rule.id }), badge(rule.severity), el("span", { cls: "rule-name mono", text: rule.name })
+    ]));
+    card.appendChild(el("h3", { text: rule.title }));
+    card.appendChild(el("p", { text: rule.description }));
+    if (rule.params && Object.keys(rule.params).length) card.appendChild(kv(rule.params));
+    var ex = rule.examples || {};
+    if ((ex.good && ex.good.length) || (ex.bad && ex.bad.length)) {
+      var box = el("div", { cls: "ex" });
+      [["good", "Passes"], ["bad", "Fails"]].forEach(function (p) {
+        var col = el("div", { cls: p[0] }, [el("h4", { text: p[1] })]);
+        (ex[p[0]] || []).forEach(function (s) { col.appendChild(el("pre", { text: s })); });
+        box.appendChild(col);
+      });
+      card.appendChild(box);
+    }
+    return card;
+  }
+
+  function renderProfile() {
+    var box = el("section", { cls: "profile" }, [
+      el("h2", { text: "Your profile" }),
+      el("p", { cls: "desc", text: "The shared contracts never name an account. Rules refer to these variables as ${name}; each user sets them in profile.local.json (this project, git-ignored), ~/.claude/git-guard/profile.json (all projects) or the environment variable. Unset variables make the rule check presence only." })
+    ]);
+    var head = el("tr", null, ["Variable", "Your value", "Source", "Env var", "Meaning"].map(function (h) { return el("th", { text: h }); }));
+    var rows = DATA.profile.map(function (r) {
+      var val = r.value == null ? el("span", { cls: "unset", text: "unset" }) : renderValue(r.value);
+      return el("tr", null, [el("td", null, [el("code", { cls: "var", text: "${" + r.name + "}" })]), el("td", null, [val]),
+        el("td", { cls: "mono", text: r.source }), el("td", null, [el("code", { text: r.env || "" })]), el("td", { text: r.description })]);
+    });
+    box.appendChild(el("div", { cls: "table-scroll" }, [el("table", null, [el("thead", null, [head]), el("tbody", null, rows)])]));
+    box.appendChild(el("p", { cls: "desc" }, ["Set them with ", el("code", { text: "python3 .claude/hooks/git-guard/scripts/setup_profile.py init --from-current" })]));
+    return box;
+  }
+
+  function render() {
+    var main = document.getElementById("main");
+    main.textContent = "";
+    var q = state.q.trim().toLowerCase();
+    var shown = 0;
+    if ((state.tab === "all" || state.tab === "identity") && !q && DATA.profile && DATA.profile.length) main.appendChild(renderProfile());
+    DATA.order.forEach(function (name) {
+      if (state.tab !== "all" && state.tab !== name) return;
+      var c = DATA.contracts[name];
+      var rules = c.rules.filter(function (r) { return state.sev[r.severity] && (!q || haystack(r).indexOf(q) >= 0); });
+      if (!rules.length && q) return;
+      var sec = el("section", { cls: "contract" });
+      sec.appendChild(el("h2", null, [c.title, el("span", { cls: "file mono", text: "contracts/" + DATA.files[name] + " · v" + c.version })]));
+      sec.appendChild(el("p", { cls: "desc", text: c.description }));
+      if (c.applies_to && c.applies_to.length) sec.appendChild(el("div", { cls: "applies" }, c.applies_to.map(function (a) { return el("span", { cls: "pill mono", text: a }); })));
+      if (c.settings && Object.keys(c.settings).length) {
+        sec.appendChild(el("details", { cls: "settings" }, [el("summary", { text: "Contract settings" }), kv(c.settings)]));
+      }
+      rules.forEach(function (r) { sec.appendChild(renderRule(r)); shown++; });
+      if (!rules.length) sec.appendChild(el("p", { cls: "empty", text: "No rules match the severity filter." }));
+      main.appendChild(sec);
+    });
+    if (!shown && q) main.appendChild(el("p", { cls: "empty", text: "No rules match “" + state.q + "”." }));
+  }
+
+  function buildControls() {
+    var tabs = document.getElementById("tabs");
+    [["all", "All"]].concat(DATA.order.map(function (n) { return [n, DATA.contracts[n].title]; })).forEach(function (t) {
+      var b = el("button", { cls: "tab", type: "button", "aria-pressed": String(state.tab === t[0]), text: t[1] });
+      b.addEventListener("click", function () {
+        state.tab = t[0]; save();
+        Array.prototype.forEach.call(tabs.children, function (x) { x.setAttribute("aria-pressed", String(x === b)); });
+        render();
+      });
+      tabs.appendChild(b);
+    });
+    var chips = document.getElementById("chips");
+    SEVS.forEach(function (s) {
+      var b = el("button", { cls: "chip", type: "button", "aria-pressed": String(state.sev[s]) }, [badge(s)]);
+      b.addEventListener("click", function () { state.sev[s] = !state.sev[s]; b.setAttribute("aria-pressed", String(state.sev[s])); save(); render(); });
+      chips.appendChild(b);
+    });
+    var q = document.getElementById("q");
+    q.addEventListener("input", function () { state.q = q.value; render(); });
+    document.getElementById("theme").addEventListener("click", function () {
+      var root = document.documentElement;
+      var dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+      root.dataset.theme = dark ? "light" : "dark";
+      try { localStorage.setItem("git-guard-theme", root.dataset.theme); } catch (e) {}
+    });
+  }
+
+  function header() {
+    document.getElementById("meta").textContent = "Generated " + DATA.generated_at + " · git-guard " + DATA.version + " · Claude Code PreToolUse hook for Bash and PowerShell";
+    var counts = { deny: 0, ask: 0, warn: 0, off: 0 }, total = 0;
+    DATA.order.forEach(function (n) { DATA.contracts[n].rules.forEach(function (r) { counts[r.severity] = (counts[r.severity] || 0) + 1; total++; }); });
+    var stats = document.getElementById("stats");
+    stats.appendChild(el("span", { cls: "pill", text: total + " rules" }));
+    SEVS.forEach(function (s) { stats.appendChild(el("span", { cls: "badge sev-" + s, text: counts[s] + " " + s })); });
+    if (DATA.problems && DATA.problems.length) {
+      var p = el("div", { cls: "problems" }, [el("strong", { text: "Contract problems — the hook will ask before every git/gh command until fixed:" })]);
+      var ul = el("ul");
+      DATA.problems.forEach(function (x) { ul.appendChild(el("li", { text: x })); });
+      p.appendChild(ul);
+      document.getElementById("problems").appendChild(p);
+    }
+  }
+
+  if (!DATA) { document.getElementById("main").appendChild(el("p", { cls: "empty", text: "No data: generate this page with scripts/render_rules.py." })); return; }
+  header(); buildControls(); render();
+})();
+</script>
+</body>
+</html>
