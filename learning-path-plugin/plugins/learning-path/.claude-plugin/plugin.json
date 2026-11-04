@@ -1,0 +1,6 @@
+{
+  "name": "learning-path",
+  "version": "1.0.0",
+  "description": "Interview-driven learning path for the node-path style notebooks (node-path, java-path, frontend-path), plus a static-site build for sharing it on the web.",
+  "author": { "name": "MINHNN4" }
+}

@@ -1,0 +1,6 @@
+
+/* ---- learning path (added by the learning-path plugin build) ---- */
+.sidebar nav a.on-path { box-shadow: inset 3px 0 0 var(--accent); }
+.q.on-path { box-shadow: 0 0 0 2px var(--accent-soft); }
+.path-badge { margin-left: auto; font-size: 11px; padding: 1px 8px; border: 1px solid var(--accent);
+  border-radius: 999px; color: var(--accent); background: var(--accent-soft); text-decoration: none; }
