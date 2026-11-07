@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sdlc-decision-event@1",
+  "title": "Decision log event",
+  "description": "One line of decisions.jsonl. `prev` = sha256 of the previous line (or 'genesis'): the hash chain the driver verifies on every load.",
+  "type": "object",
+  "required": [
+    "at",
+    "event",
+    "prev"
+  ],
+  "properties": {
+    "at": {
+      "type": "string"
+    },
+    "event": {
+      "enum": [
+        "init",
+        "record",
+        "gate",
+        "invalidate",
+        "worktree",
+        "handback",
+        "receipts-reissued",
+        "git",
+        "lang",
+        "state-write",
+        "lock-broken",
+        "ship-request",
+        "ship",
+        "review-fetch"
+      ]
+    },
+    "prev": {
+      "type": "string",
+      "pattern": "^(genesis|[0-9a-f]{64})$"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "event": {
+            "const": "gate"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "node",
+          "verdict",
+          "actor"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event": {
+            "const": "invalidate"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "node",
+          "stale",
+          "reason"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event": {
+            "const": "record"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "node",
+          "unit",
+          "resultDigest"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event": {
+            "const": "state-write"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "stateDigest"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event": {
+            "const": "git"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "repo",
+          "args"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event": {
+            "const": "handback"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "round",
+          "digest"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event": {
+            "const": "ship"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "repo",
+          "commit",
+          "approval"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event": {
+            "const": "ship-request"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "repo",
+          "requestDigest"
+        ]
+      }
+    }
+  ]
+}

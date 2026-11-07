@@ -1,0 +1,26 @@
+<h2>Contracts that describe the project (configuration)</h2>
+<p>These contracts are written once per project or per harness release. They decide <em>which</em> nodes exist for a ticket, <em>which</em> rules each node judges, and <em>what</em> instructions a unit gets. The driver reads them on every command. {{ cite('src-ticketroot') }}</p>
+<div class="callout info"><strong>How enforcement is labelled:</strong> <em>driver</em> = refused at runtime when wrong; <em>partial</em> = some fields checked; <em>none</em> = trusted as written. Each contract's note says exactly which checks exist.</div>
+{% set ids = ['project-profile', 'adapter', 'rulepack', 'extension', 'graph-node'] %}
+<div class="tbl">
+  <p class="cap">Configuration contracts at a glance</p>
+  <table>
+    <tr><th>Contract</th><th>Schema id</th><th>Where</th><th>Written by</th><th>Read by</th><th>Enforced</th></tr>
+    {% for id in ids %}{% set c = find(contracts, 'id', id) %}
+    <tr{% if c.enforced == 'none' %} class="hl"{% endif %}><td><a href="#c-{{ c.id }}">{{ c.name }}</a></td><td><code>{{ c.schemaId }}</code></td><td>{{ rich(c.file) }}</td><td>{{ c.writer }}</td><td>{{ c.reader }}</td><td>{{ c.enforced }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% for id in ids %}{% set c = find(contracts, 'id', id) %}
+<h3 id="c-{{ c.id }}">{{ c.name }}</h3>
+<div class="card {{ 'ok' if c.enforced in ['driver', 'driver-written'] else ('bad' if c.enforced in ['none', 'existence only'] else 'warn') }}"><strong>Enforced: {{ c.enforced }}.</strong> {{ rich(c.enforcedNote) }} {{ cite(c.cites) }}</div>
+<div class="tbl">
+  <p class="cap">Shape of <code>{{ c.schemaId }}</code> · {{ rich(c.file) }}</p>
+  <table>
+    <tr><th>Field</th><th>Type</th><th>Required</th><th>Meaning</th></tr>
+    {% for f in c.fields %}
+    <tr><td><code>{{ f.name }}</code></td><td><code>{{ f.type }}</code></td><td>{{ 'yes' if f.req else 'no' }}</td><td>{{ rich(f.meaning) }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endfor %}

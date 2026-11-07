@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "channels@1",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": [
+      "id",
+      "from",
+      "to",
+      "carrier",
+      "contract",
+      "carries",
+      "enforced"
+    ],
+    "additionalProperties": false,
+    "properties": {
+      "id": {
+        "type": "string",
+        "pattern": "^C[0-9]+$"
+      },
+      "from": {
+        "type": "string"
+      },
+      "to": {
+        "type": "string"
+      },
+      "carrier": {
+        "type": "string"
+      },
+      "contract": {
+        "type": "string"
+      },
+      "carries": {
+        "type": "string"
+      },
+      "enforced": {
+        "type": "string"
+      }
+    }
+  }
+}

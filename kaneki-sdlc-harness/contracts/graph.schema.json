@@ -1,0 +1,478 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sdlc-graph@1",
+  "title": "Lifecycle graph",
+  "description": "graph/lifecycle.json. Unknown keys are refused so a typo in a node spec fails at load instead of being ignored.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "graphId",
+    "layers",
+    "order",
+    "nodes",
+    "gates"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "graphId": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "layers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "label"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "order": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "nodes": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "layer",
+          "purpose",
+          "requires",
+          "produces",
+          "mutability",
+          "units",
+          "boundary",
+          "gates",
+          "artifacts",
+          "card"
+        ],
+        "properties": {
+          "layer": {
+            "enum": [
+              "analysis",
+              "implementation",
+              "delivery",
+              "after-pr"
+            ]
+          },
+          "when": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "kind": {},
+              "family": {},
+              "surface": {},
+              "stack": {},
+              "reviewRound": {
+                "type": "boolean"
+              }
+            }
+          },
+          "purpose": {
+            "type": "string"
+          },
+          "requires": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "produces": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "mutability": {
+            "enum": [
+              "none",
+              "state",
+              "artifacts",
+              "findings-only",
+              "source"
+            ]
+          },
+          "units": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "role",
+                "tier"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "role": {
+                  "enum": [
+                    "worker"
+                  ]
+                },
+                "tier": {
+                  "enum": [
+                    "routine",
+                    "deep"
+                  ]
+                }
+              }
+            }
+          },
+          "reviewer": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "tier"
+            ],
+            "properties": {
+              "tier": {
+                "enum": [
+                  "routine",
+                  "deep"
+                ]
+              }
+            }
+          },
+          "pattern": {
+            "type": "string"
+          },
+          "boundary": {
+            "enum": [
+              "controller",
+              "user"
+            ]
+          },
+          "gates": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "G1",
+                "G3",
+                "G4",
+                "G5",
+                "G6",
+                "G7"
+              ]
+            }
+          },
+          "rulePhases": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "design",
+                "code",
+                "test",
+                "evidence",
+                "delivery"
+              ]
+            }
+          },
+          "artifacts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "optionalArtifacts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "card": {
+            "type": "string"
+          },
+          "loopBackTo": {
+            "type": "string"
+          },
+          "subjectNode": {
+            "type": "boolean"
+          },
+          "issuesReceipts": {
+            "type": "boolean"
+          },
+          "checksReceipts": {
+            "type": "boolean"
+          },
+          "reopens": {
+            "type": "boolean"
+          },
+          "checks": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "sections": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "parsers": {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "confidence",
+                      "conditions",
+                      "design-rules",
+                      "rule-self-check",
+                      "rule-verdicts",
+                      "verdict",
+                      "reopen"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "feeds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "family": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "gates": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    }
+  },
+  "$defs": {
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "layer",
+        "purpose",
+        "requires",
+        "produces",
+        "mutability",
+        "units",
+        "boundary",
+        "gates",
+        "artifacts",
+        "card"
+      ],
+      "properties": {
+        "layer": {
+          "enum": [
+            "analysis",
+            "implementation",
+            "delivery",
+            "after-pr"
+          ]
+        },
+        "when": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {},
+            "family": {},
+            "surface": {},
+            "stack": {},
+            "reviewRound": {
+              "type": "boolean"
+            }
+          }
+        },
+        "purpose": {
+          "type": "string"
+        },
+        "requires": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "produces": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "mutability": {
+          "enum": [
+            "none",
+            "state",
+            "artifacts",
+            "findings-only",
+            "source"
+          ]
+        },
+        "units": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "role",
+              "tier"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "role": {
+                "enum": [
+                  "worker"
+                ]
+              },
+              "tier": {
+                "enum": [
+                  "routine",
+                  "deep"
+                ]
+              }
+            }
+          }
+        },
+        "reviewer": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tier"
+          ],
+          "properties": {
+            "tier": {
+              "enum": [
+                "routine",
+                "deep"
+              ]
+            }
+          }
+        },
+        "pattern": {
+          "type": "string"
+        },
+        "boundary": {
+          "enum": [
+            "controller",
+            "user"
+          ]
+        },
+        "gates": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "G1",
+              "G3",
+              "G4",
+              "G5",
+              "G6",
+              "G7"
+            ]
+          }
+        },
+        "rulePhases": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "design",
+              "code",
+              "test",
+              "evidence",
+              "delivery"
+            ]
+          }
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "optionalArtifacts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "card": {
+          "type": "string"
+        },
+        "loopBackTo": {
+          "type": "string"
+        },
+        "subjectNode": {
+          "type": "boolean"
+        },
+        "issuesReceipts": {
+          "type": "boolean"
+        },
+        "checksReceipts": {
+          "type": "boolean"
+        },
+        "reopens": {
+          "type": "boolean"
+        },
+        "checks": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "sections": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "parsers": {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "confidence",
+                    "conditions",
+                    "design-rules",
+                    "rule-self-check",
+                    "rule-verdicts",
+                    "verdict",
+                    "reopen"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "feeds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "family": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

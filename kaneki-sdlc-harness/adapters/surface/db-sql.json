@@ -1,0 +1,11 @@
+{
+  "kind": "surface",
+  "id": "db-sql",
+  "surface": "db",
+  "description": "Relational database state used as before/after evidence for other surfaces.",
+  "prerequisites": ["read-only connection for evidence queries", "a write connection only after G6 with a recorded restore value"],
+  "run": "Run the SELECT that proves each expected value before and after the case; never run writes except the case's own action.",
+  "capture": ["query text", "result rows (redacted PII) before/after"],
+  "mutatesSharedState": "never by evidence queries; writes need G6 and a cleanup-ledger row",
+  "requiresG6": false
+}

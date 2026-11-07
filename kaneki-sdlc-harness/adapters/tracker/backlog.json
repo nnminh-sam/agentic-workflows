@@ -1,0 +1,11 @@
+{
+  "kind": "tracker",
+  "id": "backlog",
+  "description": "Tickets are Nulab Backlog issues (the WMS setup).",
+  "config": {"space": "<space>.backlog.jp", "projectKey": "KEY", "apiKeyEnv": "BACKLOG_API_KEY"},
+  "fetch": {
+    "instructions": "GET /api/v2/issues/{ticket} and /api/v2/issues/{ticket}/comments with the key from the env var named in config (never print it). Save summary, description, custom fields and all comments verbatim to ticket.md; download attachments to attachments/ and convert xlsx/pdf specs to text dumps next to them."
+  },
+  "kindHints": {"bug": ["バグ", "Bug"], "feature": ["タスク", "要望", "Task"]},
+  "reply": {"draft": "tracker-reply", "format": "Backlog markdown, customer language (locale.tracker)", "post": "manual, only on the user's explicit go"}
+}

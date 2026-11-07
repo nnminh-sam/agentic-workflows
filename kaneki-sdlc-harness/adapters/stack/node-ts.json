@@ -1,0 +1,21 @@
+{
+  "kind": "stack",
+  "id": "node-ts",
+  "description": "Node.js / TypeScript service or web app.",
+  "allowedSurfaces": ["web", "api", "cli", "batch", "db"],
+  "filePatterns": ["**/*.ts", "**/*.tsx", "**/*.js", "package.json"],
+  "commands": {
+    "doctor": ["node --version", "npm --version", "npm ci --dry-run"],
+    "format": "npx prettier --check {paths}",
+    "lint": "npx eslint {paths}",
+    "build": "npm run build --if-present",
+    "unitTest": "npm test -- {testPaths}"
+  },
+  "worktree": "{git} worktree add {worktreeRoot}/{repoId}-{ticket} -b {branchPrefix}{ticket} {base}",
+  "conventions": [
+    "Follow the repo's eslint/prettier config; never disable a rule inline without a reason comment.",
+    "No `any` in new code unless the plan justifies it.",
+    "Async errors are awaited or explicitly handled."
+  ],
+  "rulepack": "stack:node-ts"
+}

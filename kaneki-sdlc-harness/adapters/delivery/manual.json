@@ -1,0 +1,31 @@
+{
+  "kind": "delivery",
+  "id": "manual",
+  "description": "The harness stops at approved drafts; a human commits, pushes and opens the PR/MR on any platform.",
+  "drafts": {
+    "commit-msg": {
+      "template": "templates/commit-msg.md"
+    },
+    "pr-body": {
+      "template": "templates/pr-body.md"
+    }
+  },
+  "review": {
+    "instructions": "Paste or export the review comments into a markdown file and pass it to `sdlc handback`."
+  },
+  "ship": {
+    "requiresUserGo": true,
+    "push": false,
+    "steps": [
+      "sdlc ship-request --ticket <id> --repo <repo>  (show the full request to the user)",
+      "sdlc ship --ticket <id> --repo <repo> --approve <requestDigest>  (only after the user approves that exact request)"
+    ],
+    "note": "kaneki-ship stages exactly the reviewed files, commits as git.user, and stops there: a person pushes and opens the PR/MR on any platform."
+  },
+  "reship": {
+    "requiresUserGo": true,
+    "steps": [
+      "after the review round reaches deliverable-ready again: ship-request, approval, ship (same branch; the push updates the open PR)"
+    ]
+  }
+}

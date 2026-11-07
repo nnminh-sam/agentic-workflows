@@ -1,0 +1,10 @@
+{
+  "packId": "stack-php-laravel@1",
+  "description": "Laravel-specific rules, loaded automatically for repositories with stack php-laravel.",
+  "rules": [
+    {"id": "STACK-LV-1", "phase": "code", "severity": "critical", "title": "Raw SQL binds every value", "check": "DB::raw/selectRaw/whereRaw/statement calls pass every variable as a binding.", "appliesTo": {"stacks": ["php-laravel"]}},
+    {"id": "STACK-LV-2", "phase": "code", "severity": "high", "title": "Mass assignment guarded", "check": "New models/fields use $fillable or explicit assignment; request data is validated before create/update.", "appliesTo": {"stacks": ["php-laravel"]}},
+    {"id": "STACK-LV-3", "phase": "code", "severity": "high", "title": "Multi-table writes in a transaction", "check": "Writes to more than one table in one operation run inside DB::transaction with row locks where they read-then-write.", "appliesTo": {"stacks": ["php-laravel"]}},
+    {"id": "STACK-LV-4", "phase": "design", "severity": "medium", "title": "Migrations are reversible", "check": "Every migration in the plan has a working down() or the plan says why not.", "appliesTo": {"stacks": ["php-laravel"]}}
+  ]
+}

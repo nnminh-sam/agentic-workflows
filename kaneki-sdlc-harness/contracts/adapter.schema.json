@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sdlc-adapter@1",
+  "title": "Adapter",
+  "description": "An adapter is data plus instructions a unit reads. It never runs by itself; the unit executes what it describes under the packet's limits.",
+  "type": "object",
+  "required": ["kind", "id", "description"],
+  "properties": {
+    "kind": {"enum": ["tracker", "stack", "surface", "delivery"]},
+    "id": {"type": "string"},
+    "description": {"type": "string"},
+    "config": {"type": "object"},
+    "extends": {"type": "string", "description": "Bundled adapter id of the same kind; this file overrides it (dicts merge, lists replace)."},
+    "draft": {"type": "boolean", "description": "Generated without a bundled base; review before use (validate warns)."},
+    "generatedBy": {"type": "string", "description": "Set by kaneki-onboarding; a refresh may regenerate the file only while its digest matches the sidecar."}
+  },
+  "allOf": [
+    {"if": {"properties": {"kind": {"const": "tracker"}}},
+     "then": {"required": ["fetch", "reply"], "properties": {
+       "fetch": {"type": "object", "properties": {"command": {"type": "string"}, "instructions": {"type": "string"}}, "required": ["instructions"]},
+       "kindHints": {"type": "object"},
+       "reply": {"type": "object"}}}},
+    {"if": {"properties": {"kind": {"const": "stack"}}},
+     "then": {"required": ["allowedSurfaces", "commands", "worktree"], "properties": {
+       "allowedSurfaces": {"type": "array", "items": {"type": "string"}},
+       "filePatterns": {"type": "array", "items": {"type": "string"}},
+       "commands": {"type": "object", "required": ["doctor", "lint", "unitTest"], "properties": {
+         "doctor": {"type": "array", "items": {"type": "string"}}, "format": {"type": ["string", "null"]},
+         "lint": {"type": ["string", "null"]}, "build": {"type": ["string", "null"]}, "unitTest": {"type": ["string", "null"]}}},
+       "worktree": {"type": "string"},
+       "conventions": {"type": "array", "items": {"type": "string"}},
+       "rulepack": {"type": "string"}}}},
+    {"if": {"properties": {"kind": {"const": "surface"}}},
+     "then": {"required": ["surface", "prerequisites", "run", "capture", "requiresG6"], "properties": {
+       "surface": {"type": "string"},
+       "prerequisites": {"type": "array", "items": {"type": "string"}},
+       "run": {"type": "string"},
+       "capture": {"type": "array", "items": {"type": "string"}},
+       "mutatesSharedState": {"type": "string"},
+       "requiresG6": {"type": "boolean"}}}},
+    {"if": {"properties": {"kind": {"const": "delivery"}}},
+     "then": {"required": ["drafts", "review", "ship"], "properties": {
+       "drafts": {"type": "object", "additionalProperties": {"type": "object", "required": ["template"]}},
+       "review": {"type": "object"},
+       "ship": {"type": "object", "required": ["requiresUserGo"], "properties": {"requiresUserGo": {"const": true}, "push": {"type": "boolean"}, "pr": {"type": "object", "required": ["cli"], "properties": {"cli": {"enum": ["gh", "glab"]}}}}},
+       "reship": {"type": "object"}}}}
+  ]
+}

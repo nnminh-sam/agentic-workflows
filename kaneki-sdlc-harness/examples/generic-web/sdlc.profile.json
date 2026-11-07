@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 1,
+  "project": {
+    "id": "acme-shop",
+    "name": "Acme Shop",
+    "description": "TypeScript API + web front end, GitHub issues and PRs."
+  },
+  "git": {
+    "user": {
+      "name": "Acme Bot",
+      "email": "dev@acme.example"
+    }
+  },
+  "paths": {
+    "ticketRoot": ".sdlc/tickets",
+    "branchPrefix": "ticket/"
+  },
+  "models": {
+    "routine": "sonnet",
+    "deep": "opus"
+  },
+  "tracker": {
+    "adapter": "github-issues",
+    "config": {
+      "repo": "acme/shop"
+    }
+  },
+  "repositories": [
+    {
+      "id": "api",
+      "path": "../../../acme-api",
+      "stack": "node-ts",
+      "surfaces": [
+        "api",
+        "db"
+      ],
+      "defaultBranch": "main"
+    },
+    {
+      "id": "web",
+      "path": "../../../acme-web",
+      "stack": "node-ts",
+      "surfaces": [
+        "web"
+      ],
+      "defaultBranch": "main"
+    }
+  ],
+  "rulepacks": [
+    "core"
+  ],
+  "testcase": {
+    "format": "markdown",
+    "template": "templates/testcase.md"
+  },
+  "evidence": {
+    "surfaces": {
+      "api": {
+        "adapter": "api-http",
+        "config": {
+          "baseUrl": "http://localhost:3000"
+        }
+      },
+      "db": {
+        "adapter": "db-sql"
+      },
+      "web": {
+        "adapter": "web-playwright",
+        "config": {
+          "baseUrl": "http://localhost:5173"
+        }
+      }
+    }
+  },
+  "delivery": {
+    "adapter": "github-pr",
+    "drafts": [
+      "commit-msg",
+      "pr-body",
+      "tracker-reply"
+    ],
+    "receiptTtlHours": 72,
+    "minHoursLeft": 24
+  },
+  "gates": {
+    "loopCap": 2,
+    "autoSkipPlanApproval": false
+  },
+  "environment": {
+    "doctor": [
+      "docker compose ps"
+    ],
+    "sharedState": []
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "kind": "surface",
+  "id": "api-http",
+  "surface": "api",
+  "description": "HTTP API exercised with curl/httpie or a REST client script.",
+  "prerequisites": ["base URL reachable", "auth token from env (redacted in every transcript)"],
+  "run": "Send the request for each case; save request (redacted) and full response (status, headers that matter, body).",
+  "capture": ["request/response transcript per case", "DB rows before/after for mutating calls"],
+  "mutatesSharedState": "for POST/PUT/PATCH/DELETE against a shared environment",
+  "requiresG6": false
+}

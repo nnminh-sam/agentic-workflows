@@ -1,0 +1,8 @@
+{
+  "packId": "stack-node-ts@1",
+  "description": "Node/TypeScript rules, loaded automatically for repositories with stack node-ts.",
+  "rules": [
+    {"id": "STACK-TS-1", "phase": "code", "severity": "high", "title": "Promises are awaited or handled", "check": "No floating promises in new code; rejections reach a handler.", "appliesTo": {"stacks": ["node-ts"]}},
+    {"id": "STACK-TS-2", "phase": "code", "severity": "medium", "title": "Typed boundaries", "check": "Inputs at API/DB boundaries are validated and typed (schema or type guard), not cast with `as`.", "appliesTo": {"stacks": ["node-ts"]}}
+  ]
+}

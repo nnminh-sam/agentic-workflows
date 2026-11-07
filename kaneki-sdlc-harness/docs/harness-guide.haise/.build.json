@@ -1,0 +1,27 @@
+{
+  "rev": 3,
+  "hashes": {
+    "doc.json": "64098e05fc3e507a",
+    "data/channels.json": "b1ea8502cec9d21d",
+    "data/contracts.json": "01bd8da4d139781e",
+    "data/facts.json": "2708b77688882daa",
+    "data/gaps.json": "7c000fc27b6d31dd",
+    "data/glossary.json": "820256eb1a3ae4ec",
+    "data/invalidations.json": "47a2009268dc0d1a",
+    "data/layout.json": "1a61dbeece7436c0",
+    "data/nodes.json": "731220f5918d2d58",
+    "data/sources.json": "7a8155e4480de237",
+    "data/tokens.json": "39b026cb06443e3a",
+    "sections/answer.html": "4a6c480aa764a549",
+    "sections/big-picture.html": "e47a5d8d1b11a59d",
+    "sections/node-handoff.html": "ea48528432f27263",
+    "sections/node-cycle.html": "63ff7092ba477a1d",
+    "sections/contracts-config.html": "695f23ce0dd980cc",
+    "sections/contracts-runtime.html": "4a44c3698becec2f",
+    "sections/contracts-messages.html": "2469f4508ada72f6",
+    "sections/local-files.html": "7f834726cf498df5",
+    "sections/nodes-ref.html": "82ec3603fd4bcaa3",
+    "sections/review-points.html": "2a9ab4109f030fbf",
+    "sections/glossary.html": "2840a51a419bb526"
+  }
+}

@@ -1,0 +1,18 @@
+<h2>The harness in one page</h2>
+<div class="verdict"><span class="label">Short answer</span>
+  <p>Nodes never call each other. A node finishes by leaving <strong>files</strong> in the ticket directory and a <strong>done</strong> record in <code>state.json</code>. The next node may start only when every <strong>token</strong> it requires has a done producer. {{ cite('src-missing') }} {{ tag('sure') }} Everything a node receives comes through a driver-rendered <strong>packet</strong>, and everything it returns is a <strong>result file</strong> the controller records by digest. {{ cite('src-dispatch-id', 'src-record') }}</p></div>
+<div class="stats">
+  <div class="stat"><span class="v">{{ facts.nodeCount }}</span><span class="k">core nodes in {{ facts.layerCount }} layers</span></div>
+  <div class="stat"><span class="v">{{ facts.tokenCount }}</span><span class="k">tokens linking them</span></div>
+  <div class="stat"><span class="v">{{ len(contracts) }}</span><span class="k">contracts</span></div>
+  <div class="stat"><span class="v">{{ len(channels) }}</span><span class="k">communication channels</span></div>
+  <div class="stat warn"><span class="v">{{ count(gaps, 'sev', 'high') }}</span><span class="k">high-severity review points</span></div>
+</div>
+<ol class="findings">
+  <li><strong>Two kinds of handoff.</strong> Control moves through tokens in <code>state.json</code> (driver-enforced). Data moves through artifact files such as <code>plan.md</code> (only their existence is checked). {{ cite('src-missing', 'src-absent') }} {{ tag('sure') }}</li>
+  <li><strong>The driver is the only writer of state.</strong> It replaces <code>state.json</code> atomically and appends every event to <code>decisions.jsonl</code>. {{ cite('src-save', 'src-log') }} {{ tag('sure') }}</li>
+  <li><strong>Reruns are surgical.</strong> Invalidating a node stales only the later nodes that consume its tokens. Reopening <code>coding</code> keeps the {{ len(find(invalidations, 'start', 'coding').kept) }} test-case nodes. {{ cite('src-dependents', 'src-test-inval') }} {{ tag('sure') }}</li>
+  <li><strong>{{ count(contracts, 'enforced', 'none') }} contracts have no machine check at all</strong> (graph node spec, facts JSON), and three exist only as conventions. See <a href="#review-points">review points</a>. {{ tag('sure') }}</li>
+  <li><strong>Two real defects</strong>: a rerun node can pass with its old artifact, and the receipt ignores new untracked file contents. {{ cite('src-absent', 'src-subject') }} {{ tag('sure') }}</li>
+</ol>
+<div class="callout info"><strong>How to read this guide:</strong> §2 shows the actors and channels. §3–§4 answer "how does a node talk to the next one". §5–§7 give the shape of every contract. §8 maps every file on disk. §10 lists what to fix.</div>

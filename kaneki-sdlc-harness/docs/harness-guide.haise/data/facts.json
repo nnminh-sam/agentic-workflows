@@ -1,0 +1,65 @@
+{
+  "$contract": "facts@1",
+  "rev": 2,
+  "updated": "2026-11-04",
+  "description": "Headline facts derived from graph/lifecycle.json and the test run",
+  "data": {
+    "graphId": "sdlc-lifecycle@1",
+    "version": "0.1.0",
+    "harness": "D:/workspace/HAISE/kaneki-sdlc-harness",
+    "nodeCount": 17,
+    "layerCount": 4,
+    "bugTrace": 11,
+    "featureTrace": 12,
+    "reviewTrace": 14,
+    "tokenCount": 18,
+    "tests": 52,
+    "testDate": "2026-11-04",
+    "layers": [
+      {
+        "id": "analysis",
+        "label": "Analysis · bug (investigate) or feature (requirement)",
+        "nodes": [
+          "prepare",
+          "investigate",
+          "fix-plan",
+          "requirement-analysis",
+          "impact-analysis",
+          "feature-plan"
+        ]
+      },
+      {
+        "id": "implementation",
+        "label": "Implementation and review",
+        "nodes": [
+          "coding",
+          "code-review",
+          "testcase",
+          "testcase-review"
+        ]
+      },
+      {
+        "id": "delivery",
+        "label": "Verification and delivery",
+        "nodes": [
+          "execute-and-evidence",
+          "final-review",
+          "delivery-drafts",
+          "deliverable-ready"
+        ]
+      },
+      {
+        "id": "after-pr",
+        "label": "After PR · review-fix (reuses the main graph through reopen)",
+        "nodes": [
+          "read-review",
+          "triage-review",
+          "respond-review"
+        ]
+      }
+    ],
+    "loopCap": 2,
+    "ttl": 72,
+    "minHoursLeft": 24
+  }
+}

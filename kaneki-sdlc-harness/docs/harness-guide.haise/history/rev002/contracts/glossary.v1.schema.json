@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "glossary@1",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": [
+      "term",
+      "meaning"
+    ],
+    "additionalProperties": false,
+    "properties": {
+      "term": {
+        "type": "string"
+      },
+      "meaning": {
+        "type": "string"
+      }
+    }
+  }
+}

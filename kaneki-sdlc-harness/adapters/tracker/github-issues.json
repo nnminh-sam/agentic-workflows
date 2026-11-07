@@ -1,0 +1,12 @@
+{
+  "kind": "tracker",
+  "id": "github-issues",
+  "description": "Tickets are GitHub issues.",
+  "config": {"repo": "owner/name (profile tracker.config.repo)"},
+  "fetch": {
+    "command": "gh issue view {ticket} --repo {repo} --json number,title,body,labels,comments,url",
+    "instructions": "Save title, body, labels and every comment (author, date, text) verbatim to ticket.md. List attachment/image URLs; download only if the ticket's meaning depends on them."
+  },
+  "kindHints": {"bug": ["bug", "defect"], "feature": ["enhancement", "feature"]},
+  "reply": {"draft": "tracker-reply", "format": "GitHub markdown", "post": "gh issue comment {ticket} --repo {repo} --body-file drafts/tracker-reply.md (only on the user's explicit go)"}
+}

@@ -1,0 +1,48 @@
+{
+  "$contract": "glossary@1",
+  "rev": 1,
+  "updated": "2026-11-04",
+  "description": "Terms used in the guide",
+  "data": [
+    {
+      "term": "Controller",
+      "meaning": "The main Claude session running SKILL.md. Plans, dispatches, verifies, asks the user, closes nodes. Never does a unit's work."
+    },
+    {
+      "term": "Driver",
+      "meaning": "`sdlc.py` / `harness/`: the only writer of `state.json` and `decisions.jsonl`."
+    },
+    {
+      "term": "Unit",
+      "meaning": "One fresh subagent run for one planned role of one node (worker or reviewer)."
+    },
+    {
+      "term": "Token",
+      "meaning": "An abstract name in `produces`/`requires` (e.g. `approved-plan`). The node-to-node control contract."
+    },
+    {
+      "term": "Generation",
+      "meaning": "Run number of a node; +1 on every invalidate. Records of older generations no longer count."
+    },
+    {
+      "term": "Dispatch id",
+      "meaning": "`<node>.g<G>.<unit>.r<R>`: names a packet, its rules file and its result file."
+    },
+    {
+      "term": "Subject digest",
+      "meaning": "sha256 over what would be shipped from a repo; pinned at subject nodes and in receipts."
+    },
+    {
+      "term": "Receipt",
+      "meaning": "Per-repo proof that final-review approved this exact subject, valid for a TTL."
+    },
+    {
+      "term": "Boundary",
+      "meaning": "Who closes a node's G0: `controller` (recorded) or `user` (asked)."
+    },
+    {
+      "term": "Family",
+      "meaning": "Optional capability (e.g. IF) that adds nodes at a slot and rules; enabled per ticket."
+    }
+  ]
+}

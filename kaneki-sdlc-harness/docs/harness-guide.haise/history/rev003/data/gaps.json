@@ -1,0 +1,56 @@
+{
+  "$contract": "gaps@1",
+  "rev": 1,
+  "updated": "2026-11-04",
+  "description": "Review points found while writing this guide (code read on 2026-11-04)",
+  "data": [
+    {
+      "id": "R1",
+      "sev": "high",
+      "title": "A rerun node can pass with the previous generation's artifact",
+      "detail": "On a reopen, artifact files stay on disk and the gate only checks `is_file()` [[src-absent]]. `artifactDigests` is recorded but never compared with the previous generation, so a worker that forgets to rewrite `plan.md` still passes. Fix: refuse approval when a stale node's artifact digest equals its last approved digest, unless the controller passes `--unchanged-ok`."
+    },
+    {
+      "id": "R2",
+      "sev": "high",
+      "title": "Receipt ignores the contents of new untracked files",
+      "detail": "The subject digest hashes HEAD, `git diff HEAD` and only the **names** of untracked files [[src-subject]]. Editing a newly created (untracked) file after final-review does not break the receipt. Fix: hash each untracked file's content, or `git add -N` the intended paths first."
+    },
+    {
+      "id": "R3",
+      "sev": "med",
+      "title": "Node inputs are implicit",
+      "detail": "A token says a predecessor is done, but the packet lists only the node's own outputs [[src-dispatch-id]]. A unit finds `plan.md` or `investigation.md` by convention. Fix: derive an `inputs` list per node (token → producer's artifacts, see the token table) and render it into the packet."
+    },
+    {
+      "id": "R4",
+      "sev": "med",
+      "title": "Artifact shape is prose-only",
+      "detail": "Required sections (`## Confirmed cause`, `## Condition → negative case`, `## Rule self-check`) live in node cards; the gate does not parse them. Fix: add `requiredSections` to node specs and check headings at the gate."
+    },
+    {
+      "id": "R5",
+      "sev": "med",
+      "title": "No schema for graph/lifecycle.json, facts JSON or decision events",
+      "detail": "Three of the contracts exist only as conventions; a typo in a graph key is silently ignored. Fix: add `graph.schema.json`, `facts.schema.json`, `decision-event.schema.json` and validate on load."
+    },
+    {
+      "id": "R6",
+      "sev": "med",
+      "title": "Profile validation is lighter than the schema",
+      "detail": "The schema says `additionalProperties: false`, but the built-in check does not enforce it [[src-profile-schema]]. Fix: validate with `jsonschema` when available, fall back to the light check."
+    },
+    {
+      "id": "R7",
+      "sev": "low",
+      "title": "Read commands write state",
+      "detail": "`status` and `plan` call `save()` [[src-plan-save]] to add records for nodes that newly entered the trace. Harmless today, but it makes a read a write. Fix: add missing records only in `handback`/`init`."
+    },
+    {
+      "id": "R8",
+      "sev": "low",
+      "title": "Decision log is not tamper-evident",
+      "detail": "`decisions.jsonl` is append-only by convention and never read back [[src-log]]. Fix: add `prevDigest` per line (hash chain) and verify it in `status`."
+    }
+  ]
+}

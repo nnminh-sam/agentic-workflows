@@ -1,0 +1,115 @@
+{
+  "schemaVersion": 1,
+  "project": {
+    "id": "wms-kai",
+    "name": "WMS (Kai customer)",
+    "description": "The wms-flow setup expressed as a profile: Laravel web/batch + Flutter handheld, Backlog tickets, xlsx workbooks, Japanese delivery. Kai is this profile; IF is a family."
+  },
+  "locale": {
+    "chat": "vi",
+    "artifacts": "ja",
+    "review": "ja",
+    "tracker": "ja"
+  },
+  "git": {
+    "user": {
+      "name": "WMS Developer",
+      "email": "developer@wms.example"
+    },
+    "sshCommand": "ssh -i ~/.ssh/wms_ed25519 -o IdentitiesOnly=yes"
+  },
+  "paths": {
+    "ticketRoot": "tickets",
+    "branchPrefix": "feature/"
+  },
+  "models": {
+    "routine": "sonnet",
+    "deep": "opus"
+  },
+  "tracker": {
+    "adapter": "backlog",
+    "config": {
+      "space": "<space>.backlog.jp",
+      "projectKey": "WMS",
+      "apiKeyEnv": "BACKLOG_API_KEY"
+    }
+  },
+  "repositories": [
+    {
+      "id": "wms-web",
+      "path": "D:/workspace/wms/web",
+      "stack": "php-laravel",
+      "surfaces": [
+        "web",
+        "batch",
+        "db"
+      ],
+      "defaultBranch": "develop"
+    },
+    {
+      "id": "wms-ht",
+      "path": "D:/workspace/wms/handheld",
+      "stack": "flutter-dart",
+      "surfaces": [
+        "mobile",
+        "device"
+      ],
+      "defaultBranch": "develop"
+    }
+  ],
+  "rulepacks": [
+    "core"
+  ],
+  "testcase": {
+    "format": "xlsx",
+    "template": "templates/kai-testcase.xlsx",
+    "helper": "scripts/workbook.py"
+  },
+  "evidence": {
+    "surfaces": {
+      "web": {
+        "adapter": "web-playwright"
+      },
+      "batch": {
+        "adapter": "cli"
+      },
+      "db": {
+        "adapter": "db-sql"
+      },
+      "mobile": {
+        "adapter": "mobile-flutter"
+      },
+      "device": {
+        "adapter": "device-manual"
+      }
+    },
+    "template": "templates/kai-evidence.xlsx"
+  },
+  "delivery": {
+    "adapter": "github-pr",
+    "drafts": [
+      "commit-msg",
+      "pr-body",
+      "tracker-reply"
+    ],
+    "receiptTtlHours": 72,
+    "minHoursLeft": 24
+  },
+  "families": [
+    {
+      "id": "if",
+      "nodes": "extensions/if-family.json",
+      "description": "Interface (import/export) registration and real-path verification."
+    }
+  ],
+  "gates": {
+    "loopCap": 2,
+    "autoSkipPlanApproval": false
+  },
+  "environment": {
+    "doctor": [],
+    "sharedState": [
+      "shared dev DB"
+    ]
+  }
+}

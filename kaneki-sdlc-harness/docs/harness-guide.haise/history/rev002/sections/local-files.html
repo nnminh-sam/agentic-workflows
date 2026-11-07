@@ -1,0 +1,50 @@
+<h2>Where everything lives on disk</h2>
+<p>Everything a ticket produces lives in one directory, <code>&lt;ticketRoot&gt;/&lt;ticket&gt;/</code>. <code>ticketRoot</code> comes from the profile and resolves <em>relative to the profile file</em>, not the shell's working directory. {{ cite('src-ticketroot') }} {{ tag('sure') }} Source code is the one exception: it changes only in a per-ticket worktree next to each repository.</p>
+<figure class="fig">
+<pre><code>my-project/
+├─ sdlc.profile.json                 ← you: the project contract
+├─ rules/project.json                ← you: optional project rulepack
+├─ extensions/&lt;family&gt;.json          ← you: optional family nodes
+└─ .sdlc/tickets/                    ← paths.ticketRoot (example value)
+   └─ BUG-1/
+      ├─ state.json                  ← driver only, atomic replace
+      ├─ decisions.jsonl             ← driver only, append-only
+      ├─ ticket.md  environment.md   ← prepare
+      ├─ investigation.md  questions.md  plan.md
+      ├─ implementation.md  code-review.md
+      ├─ testcases.md  testcase-review.md
+      ├─ run-report.md  evidence/…   final-review.md
+      ├─ drafts/commit-msg.md  drafts/pr-body.md  …
+      ├─ reviews/round-1.md          ← driver (handback)
+      ├─ review-thread.md  triage.md  review-reply.md
+      ├─ packets/
+      │   ├─ coding.g1.worker.r1.md  coding.g1.worker.r1.rules.json
+      │   └─ coding.g2.worker.r1.md  …          ← reopened: generation 2
+      ├─ results/
+      │   ├─ coding.g1.worker.r1.md
+      │   └─ coding.g2.worker.r1.md
+      └─ HANDOFF.md                  ← controller, resume aid
+
+../my-repo-BUG-1/                    ← worktree (stack adapter "worktree")</code></pre>
+<figcaption>A ticket directory after one code-review loop and one PR review round. Packets and results keep every generation; artifacts keep only the latest content. {{ cite('src-dispatch-id', 'src-handback') }}</figcaption>
+</figure>
+<div class="tbl">
+  <p class="cap">Every file or folder: who writes it, when, and how it lives</p>
+  <table>
+    <tr><th>Path</th><th>Location</th><th>Written by</th><th>When</th><th>Lifecycle</th><th>Contract</th></tr>
+    {% for l in layout %}
+    <tr{% if 'overwritten in place' in l.lifecycle %} class="hl"{% endif %}><td>{{ rich('`' + l.path + '`') }}</td><td>{{ l.where }}</td><td>{{ l.writer }}</td><td>{{ l.when }}</td><td>{{ l.lifecycle }}</td><td>{% if l.contract != '—' %}<code>{{ l.contract }}</code>{% else %}—{% endif %}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+
+<h3 id="file-rules">The rules files follow</h3>
+<ol class="findings">
+  <li><strong>One writer per file.</strong> <code>state.json</code> and <code>decisions.jsonl</code> are written only by the driver. Artifacts are written only by their node's worker. Units never touch state. {{ cite('src-save', 'src-log') }} {{ tag('sure') }}</li>
+  <li><strong>Messages are immutable.</strong> Packet, rules and result names carry generation and round, so a rerun adds files and never overwrites. The unit record pins the result's sha256. {{ cite('src-dispatch-id', 'src-record') }} {{ tag('sure') }}</li>
+  <li><strong>Artifacts are mutable.</strong> A rerun overwrites <code>plan.md</code> in place, and nothing archives the previous generation. The approved digest stays only in <code>artifactDigests</code>. {{ cite('src-gate-effects') }} {{ tag('sure') }}</li>
+  <li><strong>Nothing is deleted.</strong> Invalidation changes records, not files; the stale artifact stays on disk until the rerun overwrites it, which is the root of R1. {{ cite('src-invalidate') }} {{ tag('sure') }}</li>
+  <li><strong>Review inputs are copied in.</strong> <code>handback</code> copies the exported review to <code>reviews/round-N</code> and logs its digest, so the ticket does not depend on the original file. {{ cite('src-handback') }} {{ tag('sure') }}</li>
+  <li><strong>The repository is touched only by <code>coding</code></strong> (mutability <code>source</code>). What ships from it is pinned by the subject digest and receipt. {{ cite('src-graph-coding', 'src-subject') }} {{ tag('sure') }}</li>
+</ol>
+<div class="callout warn"><strong>Suggested fix for mutable artifacts:</strong> on <code>invalidate</code>, move each stale node's artifacts to <code>archive/g&lt;N&gt;/</code>. The rerun must then recreate them, which closes R1, and you get a readable history per generation for free.</div>

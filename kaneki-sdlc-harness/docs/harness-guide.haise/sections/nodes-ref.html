@@ -1,0 +1,13 @@
+<h2>Node reference</h2>
+<p>All {{ facts.nodeCount }} core nodes, generated from <code>graph/lifecycle.json</code>. A bug ticket runs {{ facts.bugTrace }} of them, a feature ticket {{ facts.featureTrace }}, and a bug with one review round {{ facts.reviewTrace }}. Families add nodes at the two slots after <code>code-review</code> and after <code>execute-and-evidence</code>. {{ cite('src-graph-order') }}</p>
+{% for l in facts.layers %}
+<div class="tbl">
+  <p class="cap">{{ l.label }}</p>
+  <table>
+    <tr><th>Node</th><th>Runs when</th><th>Requires</th><th>Produces</th><th>Units (tier)</th><th>Reviewer</th><th>Boundary</th><th>Gates</th><th>Rule phases</th><th>Artifacts</th><th>Gate effects</th></tr>
+    {% for nid in l.nodes %}{% set n = find(nodes, 'id', nid) %}
+    <tr><td><code>{{ n.id }}</code></td><td>{{ n.when }}</td><td>{{ join(n.requires, ', ') or '—' }}</td><td>{{ join(n.produces, ', ') }}</td><td>{{ join(n.units, ', ') or 'none (controller)' }}</td><td>{{ n.reviewer or '—' }}</td><td>{{ n.boundary }}</td><td>{{ join(n.gates, ' ') or '—' }}</td><td>{{ join(n.rulePhases, ', ') or '—' }}</td><td>{% for a in n.artifacts %}<code>{{ a }}</code>{% if not loop.last %}, {% endif %}{% endfor %}{% if not n.artifacts %}—{% endif %}</td><td>{{ join(n.flags, ', ') or '—' }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endfor %}

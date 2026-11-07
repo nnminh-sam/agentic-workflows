@@ -1,0 +1,33 @@
+{
+  "slot": "after-code-review",
+  "order": ["if-registration", "if-real-path-verification"],
+  "nodes": {
+    "if-registration": {
+      "purpose": "Register (feature) or check/update (bug) the interface definition: id allocation, field mapping, direction.",
+      "requires": ["source-change"],
+      "produces": ["if-registration"],
+      "mutability": "artifacts",
+      "units": [{"id": "worker", "role": "worker", "tier": "routine"}],
+      "reviewer": {"tier": "deep"},
+      "boundary": "controller",
+      "gates": ["G6", "G7"],
+      "rulePhases": ["code"],
+      "artifacts": ["if-registration.md"],
+      "card": "cards/if-registration.md"
+    },
+    "if-real-path-verification": {
+      "purpose": "Run the interface end to end on its real path (file drop / API) for each direction the ticket declares.",
+      "requires": ["source-change", "if-registration"],
+      "produces": ["if-proof"],
+      "feeds": ["execute-and-evidence", "final-review"],
+      "mutability": "artifacts",
+      "units": [{"id": "worker", "role": "worker", "tier": "routine"}],
+      "reviewer": {"tier": "deep"},
+      "boundary": "controller",
+      "gates": ["G6"],
+      "rulePhases": ["evidence"],
+      "artifacts": ["if-real-path.md"],
+      "card": "cards/if-real-path-verification.md"
+    }
+  }
+}

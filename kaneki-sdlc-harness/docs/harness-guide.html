@@ -1,0 +1,1752 @@
+<!doctype html>
+<html lang="en" data-haise="doc" data-haise-version="2.1.0">
+<head>
+<meta charset="utf-8">
+<meta name="haise-build" content="src=harness-guide.haise; rev=3">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kaneki SDLC Harness — Review Guide</title>
+<script>
+/* haise: apply the saved theme before first paint (no flash) */
+(function(){try{var t=localStorage.getItem('haise.theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
+<style id="haise-shell-css">
+/* ===== haise-doc shell v2.1.0 — do not edit per document ===== */
+:root{
+  --bg:#f7f6f2; --panel:#ffffff; --ink:#1d1d1b; --muted:#5f5e58; --line:#dedcd3;
+  --accent:#1f5fa8; --accent-soft:#e6eef8; --ok:#1e7a46; --ok-soft:#e3f2e8;
+  --bad:#b3261e; --bad-soft:#fbe7e5; --warn:#8a5a00; --warn-soft:#fdf1d8;
+  --info:#5b4a9e; --info-soft:#eeeaf8;
+  --code:#f0eee7; --hit:#ffe58a; --hit-cur:#ffb84d;
+  --c1:#1f5fa8; --c2:#b5541b; --c3:#1e7a46; --c4:#6b4fa0; --c5:#8a5a00;
+  --topbar-h:54px; --nav-w:292px;
+  --fig-label:"Figure"; --tbl-label:"Table";
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#171716; --panel:#212120; --ink:#ecebe6; --muted:#a6a49c; --line:#3a3936;
+    --accent:#7fb0ea; --accent-soft:#1f2c3b; --ok:#7fcf9c; --ok-soft:#1d3226;
+    --bad:#f0928a; --bad-soft:#3b2120; --warn:#e9c06a; --warn-soft:#3a2f17;
+    --info:#b9a2e6; --info-soft:#2a2338;
+    --code:#2b2b29; --hit:#6b5a12; --hit-cur:#a8671a;
+    --c1:#7fb0ea; --c2:#f0a070; --c3:#7fcf9c; --c4:#b9a2e6; --c5:#e9c06a;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#171716; --panel:#212120; --ink:#ecebe6; --muted:#a6a49c; --line:#3a3936;
+  --accent:#7fb0ea; --accent-soft:#1f2c3b; --ok:#7fcf9c; --ok-soft:#1d3226;
+  --bad:#f0928a; --bad-soft:#3b2120; --warn:#e9c06a; --warn-soft:#3a2f17;
+  --info:#b9a2e6; --info-soft:#2a2338;
+  --code:#2b2b29; --hit:#6b5a12; --hit-cur:#a8671a;
+  --c1:#7fb0ea; --c2:#f0a070; --c3:#7fcf9c; --c4:#b9a2e6; --c5:#e9c06a;
+}
+:root:lang(vi){ --fig-label:"Hình"; --tbl-label:"Bảng"; }
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:16px/1.7 "Segoe UI","Hiragino Sans","Noto Sans JP","Noto Sans",system-ui,sans-serif}
+a{color:var(--accent)}
+[id]{scroll-margin-top:calc(var(--topbar-h) + 14px)}
+
+/* --- progress + top bar --- */
+.progress{position:fixed;top:0;left:0;height:3px;width:0;background:var(--accent);z-index:60}
+.topbar{position:sticky;top:0;z-index:50;height:var(--topbar-h);display:flex;align-items:center;gap:10px;
+  padding:0 12px;background:var(--panel);border-bottom:1px solid var(--line)}
+.topbar .doc-title{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1 1 auto}
+.iconbtn{flex:none;display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:8px;
+  border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer;font-size:16px;line-height:1}
+.iconbtn:hover{background:var(--code)}
+.iconbtn svg{width:18px;height:18px;margin:0}
+.search{flex:0 1 420px;display:flex;align-items:center;gap:6px;min-width:0}
+.search .box{position:relative;flex:1;min-width:0}
+.search input{width:100%;height:36px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);
+  padding:0 10px 0 32px;font:inherit;font-size:.92rem}
+.search input:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.search .box svg{position:absolute;left:9px;top:9px;width:16px;height:16px;margin:0;color:var(--muted)}
+.search .count{font-size:.8rem;color:var(--muted);min-width:64px;text-align:center;white-space:nowrap}
+.search .iconbtn{width:30px;height:30px;font-size:13px}
+
+/* --- sidebar (table of contents) --- */
+.sidebar{position:fixed;top:var(--topbar-h);bottom:0;left:0;width:var(--nav-w);overflow-y:auto;z-index:40;
+  background:var(--panel);border-right:1px solid var(--line);padding:16px 10px 48px;transition:transform .2s ease}
+.sidebar h2{font-size:.78rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 8px 8px}
+.toc ol{list-style:none;margin:0;padding:0}
+.toc ol ol{padding-left:14px;margin:2px 0 6px;border-left:1px solid var(--line);margin-left:12px}
+.toc a{display:flex;gap:6px;align-items:baseline;padding:4px 8px;border-radius:6px;color:var(--ink);
+  text-decoration:none;font-size:.9rem;line-height:1.4}
+.toc ol ol a{font-size:.84rem;color:var(--muted)}
+.toc a:hover{background:var(--code)}
+.toc a.active{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.toc .num{color:var(--muted);font-variant-numeric:tabular-nums;flex:none}
+.toc .badge{margin-left:auto;flex:none;font-size:.7rem;font-weight:700;padding:0 6px;border-radius:999px;
+  background:var(--hit);color:var(--ink)}
+.toc .badge:empty{display:none}
+.backdrop{display:none}
+.page{margin-left:var(--nav-w);transition:margin .2s ease}
+body.nav-collapsed .sidebar{transform:translateX(-100%)}
+body.nav-collapsed .page{margin-left:0}
+@media (max-width:960px){
+  .page{margin-left:0}
+  .sidebar{transform:translateX(-100%);box-shadow:4px 0 24px rgba(0,0,0,.18)}
+  body.nav-open .sidebar{transform:none}
+  body.nav-open .backdrop{display:block;position:fixed;inset:var(--topbar-h) 0 0 0;background:rgba(0,0,0,.35);z-index:35}
+  .topbar .doc-title{display:none}
+  .search{flex:1 1 auto}
+}
+
+/* --- document body --- */
+.wrap{max-width:none;margin:0;padding:28px clamp(16px,3vw,56px) 96px}
+.doc-head{margin:0 0 24px}
+.doc-head .eyebrow{margin:0 0 4px;font-size:.8rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.doc-head h1{font-size:1.8rem;line-height:1.3;margin:0 0 8px}
+.doc-head .sub{color:var(--muted);margin:0 0 14px}
+.meta{display:flex;flex-wrap:wrap;gap:8px;margin:0;padding:0;list-style:none}
+.meta li{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:4px 10px;font-size:.85rem;min-width:0}
+.meta li b{color:var(--muted);font-weight:600;margin-right:4px}
+section{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:22px 24px;margin:0 0 22px}
+section > h2{font-size:1.32rem;margin:0 0 12px;line-height:1.35}
+h3{font-size:1.07rem;margin:22px 0 8px}
+h4{font-size:1rem;margin:16px 0 6px}
+h2 .num,h3 .num{color:var(--muted);font-weight:600;margin-right:.4em;font-variant-numeric:tabular-nums}
+p{margin:8px 0}
+ul,ol{padding-left:22px}
+li{margin:3px 0}
+code,.mono{font-family:Consolas,"Cascadia Mono",Menlo,monospace;font-size:.88em;background:var(--code);padding:1px 5px;border-radius:4px}
+pre{background:var(--code);border-radius:8px;padding:12px 14px;overflow-x:auto;font-size:.85rem;line-height:1.5;margin:10px 0}
+pre code{background:none;padding:0}
+p code,li code,td code,.card code{overflow-wrap:anywhere}
+.tbl{overflow-x:auto;margin:10px 0}
+table{width:100%;border-collapse:collapse;font-size:.93rem}
+th,td{border:1px solid var(--line);padding:7px 9px;text-align:left;vertical-align:top}
+th{background:var(--code);font-weight:600}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+tr.hl td{background:var(--warn-soft)}
+.small{font-size:.86rem;color:var(--muted)}
+.good{color:var(--ok);font-weight:600} .badv{color:var(--bad);font-weight:600}
+hr{border:none;border-top:1px solid var(--line);margin:18px 0}
+
+/* translated keyword + original */
+strong.kw{font-weight:700}
+.orig{color:var(--muted);font-size:.94em;white-space:nowrap}
+
+/* verdict / callouts / tags */
+.verdict{border:2px solid var(--accent);background:var(--accent-soft);border-radius:12px;padding:14px 18px;margin:4px 0 14px}
+.verdict .label{display:block;font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);margin-bottom:4px}
+.verdict p{margin:4px 0;font-size:1.06rem}
+.callout{border-left:4px solid var(--accent);background:var(--accent-soft);padding:10px 14px;border-radius:0 8px 8px 0;margin:12px 0}
+.callout.ok{border-color:var(--ok);background:var(--ok-soft)}
+.callout.bad{border-color:var(--bad);background:var(--bad-soft)}
+.callout.warn{border-color:var(--warn);background:var(--warn-soft)}
+.callout.info{border-color:var(--info);background:var(--info-soft)}
+.callout > :first-child{margin-top:0} .callout > :last-child{margin-bottom:0}
+.tag{display:inline-block;font-size:.72rem;font-weight:700;padding:0 7px;border-radius:999px;border:1px solid currentColor;
+  margin-left:4px;vertical-align:1px;white-space:nowrap;line-height:1.6}
+.tag.sure{color:var(--ok)} .tag.infer{color:var(--warn)} .tag.open{color:var(--bad)}
+.sev{display:inline-block;font-size:.72rem;font-weight:700;padding:0 7px;border-radius:4px;white-space:nowrap}
+.sev.high{background:var(--bad-soft);color:var(--bad)} .sev.med{background:var(--warn-soft);color:var(--warn)} .sev.low{background:var(--code);color:var(--muted)}
+
+/* findings list */
+ol.findings{counter-reset:f;list-style:none;padding:0;margin:8px 0}
+ol.findings > li{counter-increment:f;position:relative;padding:8px 10px 8px 44px;border-bottom:1px dashed var(--line)}
+ol.findings > li:last-child{border-bottom:none}
+ol.findings > li::before{content:counter(f);position:absolute;left:8px;top:8px;width:26px;height:26px;border-radius:50%;
+  background:var(--accent);color:var(--panel);font-weight:700;font-size:.85rem;display:flex;align-items:center;justify-content:center}
+
+/* cards, grids, stat tiles, steps */
+.grid2,.grid3{display:grid;gap:14px;margin:10px 0}
+.grid2{grid-template-columns:1fr 1fr} .grid3{grid-template-columns:repeat(3,1fr)}
+.grid2>*,.grid3>*{min-width:0}
+.card{border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:var(--panel)}
+.card h4{margin:0 0 6px}
+.card.ok{border-color:var(--ok)} .card.bad{border-color:var(--bad)} .card.warn{border-color:var(--warn)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:12px 0}
+.stat{border:1px solid var(--line);border-radius:10px;padding:10px 14px}
+.stat .v{display:block;font-size:1.6rem;font-weight:700;line-height:1.2;font-variant-numeric:tabular-nums}
+.stat .k{display:block;font-size:.82rem;color:var(--muted)}
+.stat.ok .v{color:var(--ok)} .stat.bad .v{color:var(--bad)} .stat.warn .v{color:var(--warn)}
+ol.steps{list-style:none;padding:0;margin:10px 0;counter-reset:s}
+ol.steps > li{counter-increment:s;position:relative;padding:0 0 14px 40px;border-left:2px solid var(--line);margin-left:13px}
+ol.steps > li:last-child{border-left-color:transparent}
+ol.steps > li::before{content:counter(s);position:absolute;left:-14px;top:0;width:26px;height:26px;border-radius:50%;
+  background:var(--panel);border:2px solid var(--accent);color:var(--accent);font-weight:700;font-size:.82rem;
+  display:flex;align-items:center;justify-content:center}
+ol.steps > li.bad::before{border-color:var(--bad);color:var(--bad)}
+ol.steps > li.ok::before{border-color:var(--ok);color:var(--ok)}
+
+/* collapsible deep dives */
+details.more{border:1px solid var(--line);border-radius:10px;margin:12px 0;background:var(--panel)}
+details.more > summary{cursor:pointer;padding:9px 14px;font-weight:600;list-style:none}
+details.more > summary::-webkit-details-marker{display:none}
+details.more > summary::before{content:"▸";display:inline-block;width:1.1em;color:var(--muted);transition:transform .15s}
+details.more[open] > summary::before{transform:rotate(90deg)}
+details.more > .body{padding:2px 16px 12px}
+
+/* figures (diagrams, charts) */
+figure.fig{margin:16px 0;padding:12px 12px 8px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}
+figure.fig svg{max-width:100%;height:auto;display:block;margin:4px auto}
+figure.fig svg text{font-family:"Segoe UI","Noto Sans JP",sans-serif}
+main{counter-reset:fig tbl}
+figure.fig > figcaption{font-size:.86rem;color:var(--muted);margin-top:6px}
+figure.fig > figcaption::before{counter-increment:fig;content:var(--fig-label) " " counter(fig) " — ";font-weight:700;color:var(--ink)}
+.tbl > .cap{font-size:.86rem;color:var(--muted);margin:0 0 4px}
+.tbl > .cap::before{counter-increment:tbl;content:var(--tbl-label) " " counter(tbl) " — ";font-weight:700;color:var(--ink)}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:.82rem;color:var(--muted);margin:4px 0 0}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+
+/* citations */
+a.cite{font-size:.72em;font-weight:700;vertical-align:super;line-height:0;text-decoration:none;
+  padding:0 3px;border-radius:4px;background:var(--accent-soft);margin-left:1px;white-space:nowrap}
+a.cite:hover{text-decoration:underline}
+a.cite.broken{background:var(--bad-soft);color:var(--bad)}
+a.cite:target{outline:2px solid var(--accent)}
+ol.sources{list-style:none;padding:0;margin:8px 0}
+ol.sources > li{border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin:0 0 10px}
+ol.sources > li:target{outline:2px solid var(--accent)}
+.src-head{display:flex;flex-wrap:wrap;gap:6px;align-items:baseline}
+.src-id{font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums}
+.src-title{font-weight:600}
+.src-type{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:0 6px;border-radius:4px;
+  background:var(--code);color:var(--muted)}
+.src-loc{font-size:.86rem;margin:4px 0;overflow-wrap:anywhere}
+blockquote.src-quote{margin:6px 0;padding:6px 12px;border-left:3px solid var(--line);background:var(--bg);font-size:.88rem;border-radius:0 6px 6px 0}
+blockquote.src-quote .tr{display:block;color:var(--muted);margin-top:4px}
+.src-note{font-size:.84rem;color:var(--muted)}
+.backrefs{font-size:.8rem;color:var(--muted);margin-top:4px}
+.backrefs a{margin-right:6px}
+
+/* search hits */
+mark.hit{background:var(--hit);color:inherit;border-radius:2px;padding:0 1px}
+mark.hit.cur{background:var(--hit-cur);outline:2px solid var(--warn)}
+
+footer.doc-foot{color:var(--muted);font-size:.85rem;margin-top:30px}
+@media (max-width:700px){
+  .grid2,.grid3{grid-template-columns:1fr}
+  section{padding:18px 16px}
+  .doc-head h1{font-size:1.5rem}
+}
+@media print{
+  .topbar,.sidebar,.backdrop,.progress{display:none!important}
+  .page{margin:0!important}
+  section{break-inside:avoid-page;border-color:#ccc}
+  details.more{border:none} details.more > .body{display:block}
+  mark.hit{background:none}
+}
+</style>
+</head>
+<body>
+<div class="progress" id="haise-progress"></div>
+
+<header class="topbar no-search">
+  <button class="iconbtn" id="haise-nav-btn" type="button" aria-controls="haise-sidebar">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+  </button>
+  <div class="doc-title">Kaneki SDLC Harness — Review Guide</div>
+  <div class="search" role="search">
+    <div class="box">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <input id="haise-q" type="search" autocomplete="off" spellcheck="false">
+    </div>
+    <span class="count" id="haise-count" aria-live="polite"></span>
+    <button class="iconbtn" id="haise-prev" type="button">▲</button>
+    <button class="iconbtn" id="haise-next" type="button">▼</button>
+  </div>
+  <button class="iconbtn" id="haise-reload" type="button">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg>
+  </button>
+  <button class="iconbtn" id="haise-theme" type="button"></button>
+</header>
+
+<aside class="sidebar no-search" id="haise-sidebar">
+  <h2 id="haise-toc-label"></h2>
+  <nav class="toc" id="haise-toc"></nav>
+</aside>
+<div class="backdrop" id="haise-backdrop"></div>
+
+<div class="page">
+<main id="content" class="wrap">
+<!-- ===================== DOCUMENT CONTENT START ===================== -->
+<header class="doc-head">
+  <p class="eyebrow">Review guide · sdlc-lifecycle@1 · driver v0.1.0</p>
+  <h1>Kaneki SDLC Harness — Review Guide</h1>
+  <p class="sub">How the 17 nodes hand work to each other, the shape of every contract they use, and where each file lives on disk, with the gaps found while reading the code.</p>
+  <ul class="meta">
+    <li><b>Updated</b>2026-11-04</li>
+    <li><b>Scope</b>kaneki-sdlc-harness draft v0.1.0</li>
+    <li><b>Graph</b>17 nodes · 4 layers · 18 tokens</li>
+    <li><b>Tests</b>52 passing (2026-11-04)</li>
+    <li><b>Audience</b>harness reviewer</li>
+    <li><b>Revision</b>3</li>
+  </ul>
+</header>
+
+<section id="answer">
+<h2>The harness in one page</h2>
+<div class="verdict"><span class="label">Short answer</span>
+  <p>Nodes never call each other. A node finishes by leaving <strong>files</strong> in the ticket directory and a <strong>done</strong> record in <code>state.json</code>. The next node may start only when every <strong>token</strong> it requires has a done producer. <a class="cite" href="#src-missing">S6</a> <span class="tag sure">VERIFIED</span> Everything a node receives comes through a driver-rendered <strong>packet</strong>, and everything it returns is a <strong>result file</strong> the controller records by digest. <a class="cite" href="#src-dispatch-id">S15</a><a class="cite" href="#src-record">S16</a></p></div>
+<div class="stats">
+  <div class="stat"><span class="v">17</span><span class="k">core nodes in 4 layers</span></div>
+  <div class="stat"><span class="v">18</span><span class="k">tokens linking them</span></div>
+  <div class="stat"><span class="v">16</span><span class="k">contracts</span></div>
+  <div class="stat"><span class="v">11</span><span class="k">communication channels</span></div>
+  <div class="stat warn"><span class="v">2</span><span class="k">high-severity review points</span></div>
+</div>
+<ol class="findings">
+  <li><strong>Two kinds of handoff.</strong> Control moves through tokens in <code>state.json</code> (driver-enforced). Data moves through artifact files such as <code>plan.md</code> (only their existence is checked). <a class="cite" href="#src-missing">S6</a><a class="cite" href="#src-absent">S18</a> <span class="tag sure">VERIFIED</span></li>
+  <li><strong>The driver is the only writer of state.</strong> It replaces <code>state.json</code> atomically and appends every event to <code>decisions.jsonl</code>. <a class="cite" href="#src-save">S8</a><a class="cite" href="#src-log">S9</a> <span class="tag sure">VERIFIED</span></li>
+  <li><strong>Reruns are surgical.</strong> Invalidating a node stales only the later nodes that consume its tokens. Reopening <code>coding</code> keeps the 2 test-case nodes. <a class="cite" href="#src-dependents">S4</a><a class="cite" href="#src-test-inval">S29</a> <span class="tag sure">VERIFIED</span></li>
+  <li><strong>2 contracts have no machine check at all</strong> (graph node spec, facts JSON), and three exist only as conventions. See <a href="#review-points">review points</a>. <span class="tag sure">VERIFIED</span></li>
+  <li><strong>Two real defects</strong>: a rerun node can pass with its old artifact, and the receipt ignores new untracked file contents. <a class="cite" href="#src-absent">S18</a><a class="cite" href="#src-subject">S10</a> <span class="tag sure">VERIFIED</span></li>
+</ol>
+<div class="callout info"><strong>How to read this guide:</strong> §2 shows the actors and channels. §3–§4 answer "how does a node talk to the next one". §5–§7 give the shape of every contract. §8 maps every file on disk. §10 lists what to fix.</div>
+</section>
+
+<section id="big-picture">
+<h2>Who talks to whom</h2>
+<p>There are five actors. The <strong>controller</strong> (the main Claude session running <code>SKILL.md</code>) is the only one that talks to everybody. The <strong>driver</strong> (<code>sdlc.py</code>) owns state. <strong>Units</strong> are fresh subagents that each do one job and see only their packet. The <strong>user</strong> approves at fixed points. The <strong>files</strong> are the shared memory. <a class="cite" href="#src-skill-loop">S23</a></p>
+<figure class="fig">
+<svg viewBox="0 0 900 400" role="img" aria-label="Actors and channels of the harness">
+  <defs><marker id="arr-bp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker></defs>
+  <g font-size="13" fill="var(--ink)">
+    <rect x="20" y="20" width="200" height="70" rx="10" fill="var(--panel)" stroke="var(--line)"/>
+    <text x="120" y="48" text-anchor="middle" font-weight="600">Profile + adapters</text>
+    <text x="120" y="70" text-anchor="middle" font-size="12" fill="var(--muted)">sdlc.profile.json · adapters/ · rulepacks/</text>
+
+    <rect x="350" y="20" width="200" height="70" rx="10" fill="var(--accent-soft)" stroke="var(--accent)"/>
+    <text x="450" y="48" text-anchor="middle" font-weight="600">User</text>
+    <text x="450" y="70" text-anchor="middle" font-size="12" fill="var(--muted)">approves plan · drafts · triage</text>
+
+    <rect x="350" y="160" width="200" height="70" rx="10" fill="var(--panel)" stroke="var(--ink)" stroke-width="1.6"/>
+    <text x="450" y="188" text-anchor="middle" font-weight="600">Controller</text>
+    <text x="450" y="210" text-anchor="middle" font-size="12" fill="var(--muted)">SKILL.md loop · never does unit work</text>
+
+    <rect x="20" y="160" width="200" height="70" rx="10" fill="var(--info-soft)" stroke="var(--info)"/>
+    <text x="120" y="188" text-anchor="middle" font-weight="600">Driver (sdlc.py)</text>
+    <text x="120" y="210" text-anchor="middle" font-size="12" fill="var(--muted)">only writer of state</text>
+
+    <rect x="680" y="160" width="200" height="70" rx="10" fill="var(--panel)" stroke="var(--line)"/>
+    <text x="780" y="188" text-anchor="middle" font-weight="600">Units (subagents)</text>
+    <text x="780" y="210" text-anchor="middle" font-size="12" fill="var(--muted)">worker · reviewer · fresh context</text>
+
+    <rect x="20" y="300" width="330" height="80" rx="10" fill="var(--ok-soft)" stroke="var(--ok)"/>
+    <text x="185" y="328" text-anchor="middle" font-weight="600">Ticket directory</text>
+    <text x="185" y="350" text-anchor="middle" font-size="12" fill="var(--muted)">state.json · decisions.jsonl · artifacts</text>
+    <text x="185" y="368" text-anchor="middle" font-size="12" fill="var(--muted)">packets/ · results/ · reviews/</text>
+
+    <rect x="560" y="300" width="320" height="80" rx="10" fill="var(--warn-soft)" stroke="var(--warn)"/>
+    <text x="720" y="328" text-anchor="middle" font-weight="600">Repository worktree</text>
+    <text x="720" y="350" text-anchor="middle" font-size="12" fill="var(--muted)">source changes (coding only)</text>
+    <text x="720" y="368" text-anchor="middle" font-size="12" fill="var(--muted)">digested into subject + receipts</text>
+
+    <g stroke="var(--muted)" stroke-width="1.6" fill="none">
+      <line x1="120" y1="90" x2="120" y2="158" marker-end="url(#arr-bp)"/>
+      <line x1="348" y1="195" x2="222" y2="195" marker-end="url(#arr-bp)" marker-start="url(#arr-bp)"/>
+      <line x1="552" y1="195" x2="678" y2="195" marker-end="url(#arr-bp)" marker-start="url(#arr-bp)"/>
+      <line x1="450" y1="92" x2="450" y2="158" marker-end="url(#arr-bp)" marker-start="url(#arr-bp)"/>
+      <line x1="120" y1="232" x2="120" y2="298" marker-end="url(#arr-bp)"/>
+      <line x1="740" y1="232" x2="360" y2="300" marker-end="url(#arr-bp)"/>
+      <line x1="800" y1="232" x2="800" y2="298" marker-end="url(#arr-bp)"/>
+      <line x1="140" y1="232" x2="720" y2="298" stroke-dasharray="5 4" marker-end="url(#arr-bp)"/>
+    </g>
+    <g font-size="12" fill="var(--muted)">
+      <text x="128" y="128">C11 config</text>
+      <text x="285" y="186" text-anchor="middle">C3 / C4 CLI JSON</text>
+      <text x="615" y="186" text-anchor="middle">C5 packet / C7 result</text>
+      <text x="458" y="128">C9 approvals</text>
+      <text x="128" y="268">C1 tokens · log</text>
+      <text x="575" y="262" text-anchor="middle">C2 artifacts</text>
+      <text x="808" y="268">C8 source</text>
+      <text x="300" y="262" text-anchor="middle">digest</text>
+    </g>
+  </g>
+</svg>
+<figcaption>The controller sits in the middle; units never talk to the driver or to each other directly. They meet only through files. Channel ids match the table below. <a class="cite" href="#src-skill-loop">S23</a><a class="cite" href="#src-save">S8</a></figcaption>
+</figure>
+<div class="tbl">
+  <p class="cap">Every channel, what it carries and how strictly it is checked</p>
+  <table>
+    <tr><th>Id</th><th>From → To</th><th>Carrier</th><th>Carries</th><th>Contract</th><th>Checked by</th></tr>
+    <tr><td><code>C1</code></td><td>Earlier node → Later node</td><td>tokens in <code>state.json</code> (<code>requires</code> / <code>produces</code>)</td><td>control: may this node run? must it rerun?</td><td><a href="#c-graph-node"><code>graph-node</code></a></td><td>driver</td></tr>
+    <tr class="hl"><td><code>C2</code></td><td>Earlier node&#x27;s unit → Later node&#x27;s unit</td><td>artifact files in the ticket directory (<code>plan.md</code>, <code>investigation.md</code>…)</td><td>data: the actual analysis, plan, cases, evidence</td><td><a href="#c-node-artifact"><code>node-artifact</code></a></td><td>existence only</td></tr>
+    <tr><td><code>C3</code></td><td>Controller → Driver</td><td><code>sdlc &lt;command&gt; --ticket …</code> arguments</td><td>commands and decisions (record, gate, invalidate)</td><td><a href="#c-cli-envelope"><code>cli-envelope</code></a></td><td>driver</td></tr>
+    <tr><td><code>C4</code></td><td>Driver → Controller</td><td>one JSON line on stdout, exit 0 or 2</td><td>plan, packet path + sha256, next pending, errors with gate id</td><td><a href="#c-cli-envelope"><code>cli-envelope</code></a></td><td>driver</td></tr>
+    <tr><td><code>C5</code></td><td>Controller → Unit (subagent)</td><td>one-line prompt → packet <code>.md</code> + <code>.rules.json</code></td><td>purpose, card, artifacts to write, rules, facts, write limits</td><td><a href="#c-packet"><code>packet</code></a></td><td>driver renders, agent checks sha256</td></tr>
+    <tr class="hl"><td><code>C6</code></td><td>Controller → Packet</td><td>facts JSON file (<code>--facts</code>)</td><td>weakest claim, observed, doubts, settled, authorized paths, findings to fix</td><td><a href="#c-facts"><code>facts</code></a></td><td>none (free JSON)</td></tr>
+    <tr><td><code>C7</code></td><td>Unit → Controller</td><td>result file <code>results/&lt;dispatch&gt;.md</code> + ≤150-word reply</td><td>status, claims, evidence, doubts, verdict</td><td><a href="#c-result-file"><code>result-file</code></a></td><td>existence + digest</td></tr>
+    <tr><td><code>C8</code></td><td>Unit (coding only) → Repository</td><td>source edits in the ticket worktree</td><td>the change itself</td><td><a href="#c-receipt"><code>receipt</code></a></td><td>subject digest at gate</td></tr>
+    <tr><td><code>C9</code></td><td>User → Driver</td><td>AskUserQuestion → <code>gate --actor user</code></td><td>plan approval, G4 override, triage reopen, draft approval</td><td><a href="#c-decision-event"><code>decision-event</code></a></td><td>driver (boundary: user)</td></tr>
+    <tr><td><code>C10</code></td><td>External PR review → after-PR nodes</td><td>exported file → <code>handback</code> → <code>reviews/round-N.md</code></td><td>review comments</td><td><a href="#c-decision-event"><code>decision-event</code></a></td><td>driver copies + digests</td></tr>
+    <tr><td><code>C11</code></td><td>Profile + adapters → Driver and units</td><td><code>sdlc.profile.json</code>, <code>adapters/*/*.json</code>, rulepacks</td><td>everything project-specific</td><td><a href="#c-project-profile"><code>project-profile</code></a></td><td>light check (`validate`)</td></tr>
+  </table>
+</div>
+<div class="callout warn"><strong>Note:</strong> highlighted rows are the weakest links. The facts JSON (C6) is free-form, and artifact files (C2) are checked only for existence, yet C2 carries the actual analysis and plan from node to node.</div>
+</section>
+
+<section id="node-handoff">
+<h2>How one node hands work to the next</h2>
+<div class="callout info"><strong>In one sentence:</strong> a node declares the tokens it <code>requires</code> and <code>produces</code>; the driver lets it run only when every required token has a producer whose record is <code>done</code>, and the actual content travels as files the producer wrote into the ticket directory.</div>
+
+<h3 id="tokens">Control: tokens</h3>
+<p>A <strong>token</strong> is an abstract name for "this kind of output exists and is approved", such as <code>approved-plan</code>. It is not a file. Several nodes may produce the same token: <code>analysis</code> comes from <code>investigate</code> on a bug and from <code>requirement-analysis</code> on a feature. That is how the two analysis branches merge into one implementation layer. <a class="cite" href="#src-graph-order">S1</a></p>
+<p>The readiness rule is: for each required token, find the nodes <em>in this ticket's trace</em> that produce it. If there are some and none is <code>done</code>, the node is not ready. A token that no node in the trace produces is ignored. This is how a family token (for example the IF proof) blocks <code>final-review</code> only when the family is on. <a class="cite" href="#src-missing">S6</a><a class="cite" href="#src-feeds">S5</a> <span class="tag sure">VERIFIED</span></p>
+<figure class="fig">
+<svg viewBox="0 0 900 560" role="img" aria-label="Token flow between nodes">
+  <defs><marker id="arr-tk" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker></defs>
+  <g font-size="13" fill="var(--ink)">
+    <rect x="20" y="20" width="150" height="56" rx="9" fill="var(--panel)" stroke="var(--line)"/><text x="95" y="53" text-anchor="middle" font-weight="600">prepare</text>
+    <rect x="240" y="20" width="280" height="56" rx="9" fill="var(--panel)" stroke="var(--line)"/>
+    <text x="380" y="42" text-anchor="middle" font-weight="600">bug: investigate</text>
+    <text x="380" y="62" text-anchor="middle" font-size="12" fill="var(--muted)">feature: requirement-analysis → impact-analysis</text>
+    <rect x="600" y="20" width="160" height="56" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+    <text x="680" y="42" text-anchor="middle" font-weight="600">fix-plan |</text><text x="680" y="62" text-anchor="middle" font-weight="600">feature-plan</text>
+
+    <rect x="20" y="150" width="150" height="56" rx="9" fill="var(--panel)" stroke="var(--line)"/><text x="95" y="183" text-anchor="middle" font-weight="600">coding</text>
+    <rect x="230" y="150" width="160" height="56" rx="9" fill="var(--panel)" stroke="var(--line)"/><text x="310" y="183" text-anchor="middle" font-weight="600">code-review</text>
+    <rect x="520" y="150" width="150" height="56" rx="9" fill="var(--panel)" stroke="var(--line)"/><text x="595" y="183" text-anchor="middle" font-weight="600">testcase</text>
+    <rect x="720" y="150" width="160" height="56" rx="9" fill="var(--panel)" stroke="var(--line)"/><text x="800" y="183" text-anchor="middle" font-weight="600">testcase-review</text>
+
+    <rect x="360" y="270" width="180" height="56" rx="9" fill="var(--panel)" stroke="var(--line)"/><text x="450" y="303" text-anchor="middle" font-weight="600">execute-and-evidence</text>
+
+    <rect x="120" y="370" width="160" height="56" rx="9" fill="var(--info-soft)" stroke="var(--info)"/><text x="200" y="403" text-anchor="middle" font-weight="600">final-review</text>
+    <rect x="340" y="370" width="160" height="56" rx="9" fill="var(--panel)" stroke="var(--line)"/><text x="420" y="403" text-anchor="middle" font-weight="600">delivery-drafts</text>
+    <rect x="560" y="370" width="160" height="56" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="640" y="403" text-anchor="middle" font-weight="600">deliverable-ready</text>
+
+    <rect x="120" y="480" width="160" height="56" rx="9" fill="var(--panel)" stroke="var(--line)" stroke-dasharray="5 3"/><text x="200" y="513" text-anchor="middle" font-weight="600">read-review</text>
+    <rect x="340" y="480" width="160" height="56" rx="9" fill="var(--accent-soft)" stroke="var(--accent)" stroke-dasharray="5 3"/><text x="420" y="513" text-anchor="middle" font-weight="600">triage-review</text>
+    <rect x="560" y="480" width="160" height="56" rx="9" fill="var(--accent-soft)" stroke="var(--accent)" stroke-dasharray="5 3"/><text x="640" y="513" text-anchor="middle" font-weight="600">respond-review</text>
+
+    <g stroke="var(--muted)" stroke-width="1.5" fill="none">
+      <line x1="170" y1="48" x2="238" y2="48" marker-end="url(#arr-tk)"/>
+      <line x1="520" y1="48" x2="598" y2="48" marker-end="url(#arr-tk)"/>
+      <line x1="650" y1="76" x2="100" y2="148" marker-end="url(#arr-tk)"/>
+      <line x1="700" y1="76" x2="600" y2="148" marker-end="url(#arr-tk)"/>
+      <line x1="170" y1="178" x2="228" y2="178" marker-end="url(#arr-tk)"/>
+      <line x1="670" y1="178" x2="718" y2="178" marker-end="url(#arr-tk)"/>
+      <line x1="310" y1="206" x2="420" y2="268" marker-end="url(#arr-tk)"/>
+      <line x1="800" y1="206" x2="490" y2="268" marker-end="url(#arr-tk)"/>
+      <line x1="440" y1="326" x2="220" y2="368" marker-end="url(#arr-tk)"/>
+      <line x1="280" y1="398" x2="338" y2="398" marker-end="url(#arr-tk)"/>
+      <line x1="500" y1="398" x2="558" y2="398" marker-end="url(#arr-tk)"/>
+      <line x1="280" y1="508" x2="338" y2="508" marker-end="url(#arr-tk)"/>
+      <line x1="500" y1="508" x2="558" y2="508" marker-end="url(#arr-tk)"/>
+      <line x1="640" y1="426" x2="640" y2="478" marker-end="url(#arr-tk)"/>
+      <line x1="200" y1="452" x2="200" y2="478" marker-end="url(#arr-tk)"/>
+      <polyline points="420,536 420,552 8,552 8,178 18,178" stroke="var(--bad)" stroke-dasharray="6 4" marker-end="url(#arr-tk)"/>
+    </g>
+    <g font-size="11.5" fill="var(--muted)">
+      <text x="204" y="40" text-anchor="middle">environment</text><text x="204" y="94" text-anchor="middle">ticket-authority</text>
+      <text x="560" y="40" text-anchor="middle">analysis</text>
+      <text x="340" y="104" text-anchor="middle">approved-plan · review-scope</text>
+      <text x="700" y="118">approved-plan</text>
+      <text x="199" y="170" text-anchor="middle">source-change</text>
+      <text x="694" y="170" text-anchor="middle">testcases</text>
+      <text x="300" y="250">code-reviewed</text>
+      <text x="650" y="250">reviewed-testcases</text>
+      <text x="300" y="350" text-anchor="middle">evidence</text>
+      <text x="309" y="390" text-anchor="middle">receipts</text>
+      <text x="529" y="390" text-anchor="middle">drafts</text>
+      <text x="648" y="458">release-ready</text>
+      <text x="208" y="466">handback</text>
+      <text x="309" y="500" text-anchor="middle">review-thread</text>
+      <text x="529" y="500" text-anchor="middle">triage</text>
+      <text x="30" y="545" fill="var(--bad)">triage --reopen coding → invalidate (example)</text>
+    </g>
+  </g>
+</svg>
+<figcaption>Arrows are tokens, not calls. Dashed boxes enter the trace only after <code>handback</code>. <code>testcase</code> consumes the plan, not the code, so a code fix never stales the test cases. <a class="cite" href="#src-graph-testcase">S3</a><a class="cite" href="#src-graph-order">S1</a></figcaption>
+</figure>
+<div class="tbl">
+  <p class="cap">All 18 tokens: producers, the files those producers leave, and consumers (generated from <code>graph/lifecycle.json</code>) <a class="cite" href="#src-graph-order">S1</a></p>
+  <table>
+    <tr><th>Token</th><th>Produced by</th><th>Files in ticket dir</th><th>Consumed by</th></tr>
+    <tr class="hl"><td><code>context</code></td><td>prepare</td><td><code>ticket.md</code>, <code>environment.md</code></td><td>— (no consumer)</td></tr>
+    <tr><td><code>environment</code></td><td>prepare</td><td><code>ticket.md</code>, <code>environment.md</code></td><td>investigate, requirement-analysis</td></tr>
+    <tr><td><code>ticket-authority</code></td><td>prepare</td><td><code>ticket.md</code>, <code>environment.md</code></td><td>investigate, requirement-analysis</td></tr>
+    <tr><td><code>analysis</code></td><td>investigate, requirement-analysis</td><td><code>investigation.md</code>, <code>requirements.md</code></td><td>fix-plan, impact-analysis, feature-plan</td></tr>
+    <tr><td><code>approved-plan</code></td><td>fix-plan, feature-plan</td><td><code>plan.md</code></td><td>coding, testcase</td></tr>
+    <tr><td><code>review-scope</code></td><td>fix-plan, feature-plan</td><td><code>plan.md</code></td><td>coding</td></tr>
+    <tr><td><code>impact</code></td><td>impact-analysis</td><td><code>impact.md</code></td><td>feature-plan</td></tr>
+    <tr><td><code>source-change</code></td><td>coding</td><td><code>implementation.md</code></td><td>code-review, execute-and-evidence, final-review</td></tr>
+    <tr><td><code>code-reviewed</code></td><td>code-review</td><td><code>code-review.md</code></td><td>execute-and-evidence, final-review</td></tr>
+    <tr><td><code>testcases</code></td><td>testcase</td><td><code>testcases.md</code></td><td>testcase-review</td></tr>
+    <tr><td><code>reviewed-testcases</code></td><td>testcase-review</td><td><code>testcase-review.md</code></td><td>execute-and-evidence</td></tr>
+    <tr><td><code>evidence</code></td><td>execute-and-evidence</td><td><code>run-report.md</code></td><td>final-review, delivery-drafts</td></tr>
+    <tr><td><code>receipts</code></td><td>final-review</td><td><code>final-review.md</code></td><td>delivery-drafts, deliverable-ready</td></tr>
+    <tr><td><code>drafts</code></td><td>delivery-drafts</td><td><code>@delivery.drafts</code></td><td>deliverable-ready</td></tr>
+    <tr><td><code>release-ready</code></td><td>deliverable-ready</td><td></td><td>respond-review</td></tr>
+    <tr><td><code>review-thread</code></td><td>read-review</td><td><code>review-thread.md</code></td><td>triage-review</td></tr>
+    <tr><td><code>triage</code></td><td>triage-review</td><td><code>triage.md</code></td><td>respond-review</td></tr>
+    <tr class="hl"><td><code>review-reply</code></td><td>respond-review</td><td><code>review-reply.md</code></td><td>— (no consumer)</td></tr>
+  </table>
+</div>
+<p>Highlighted rows have no consumer. <code>context</code> is never required (harmless, but it could be removed), and <code>review-reply</code> ends the trace. <span class="tag sure">VERIFIED</span></p>
+
+<h3 id="data">Data: artifact files</h3>
+<p>Tokens say <em>that</em> a predecessor finished. <em>What</em> it found travels as files. <code>coding</code> reads <code>plan.md</code>, and <code>code-review</code> reads the diff plus <code>plan.md</code>. The packet names only the node's own output files and the ticket directory, so a unit finds its inputs by the naming convention in the node cards. <a class="cite" href="#src-dispatch-id">S15</a><a class="cite" href="#src-artifacts-expand">S13</a> <span class="tag sure">VERIFIED</span></p>
+<div class="callout warn"><strong>Review point:</strong> inputs are implicit. The token table above already maps each token to its producer's files, so an <code>inputs</code> list per node could be generated and rendered into the packet (R3 in <a href="#review-points">review points</a>).</div>
+
+<h3 id="invalidation">Going back: invalidation</h3>
+<p>When an earlier output is wrong, <code>invalidate --node X</code> (or a <code>needs-changes</code> gate, or <code>triage-review --reopen X</code>) walks forward from X. It collects every later node whose <code>requires</code> overlaps the tokens produced so far. Those nodes become <code>stale</code> with <code>generation + 1</code>. Every other node keeps its record. If <code>final-review</code> is among them, the receipts are dropped. <a class="cite" href="#src-dependents">S4</a><a class="cite" href="#src-invalidate">S20</a> <span class="tag sure">VERIFIED</span></p>
+<figure class="fig">
+  <div class="grid3">
+    <div class="card"><h4>Reopen <code>coding</code> (bug trace)</h4>
+      <p><strong>Stale (6):</strong> <code>coding</code> → <code>code-review</code> → <code>execute-and-evidence</code> → <code>final-review</code> → <code>delivery-drafts</code> → <code>deliverable-ready</code></p>
+      <p><strong>Kept after it:</strong> <code>testcase</code>, <code>testcase-review</code></p></div>
+    <div class="card"><h4>Reopen <code>testcase</code> (bug trace)</h4>
+      <p><strong>Stale (6):</strong> <code>testcase</code> → <code>testcase-review</code> → <code>execute-and-evidence</code> → <code>final-review</code> → <code>delivery-drafts</code> → <code>deliverable-ready</code></p>
+      <p><strong>Kept after it:</strong> none</p></div>
+    <div class="card"><h4>Reopen <code>fix-plan</code> (bug trace)</h4>
+      <p><strong>Stale (9):</strong> <code>fix-plan</code> → <code>coding</code> → <code>code-review</code> → <code>testcase</code> → <code>testcase-review</code> → <code>execute-and-evidence</code> → <code>final-review</code> → <code>delivery-drafts</code> → <code>deliverable-ready</code></p>
+      <p><strong>Kept after it:</strong> none</p></div>
+  </div>
+  <figcaption>Real output of <code>harness.graph.dependents()</code> on the bug trace (nodes before the reopened one are always kept). Reopening <code>coding</code> keeps the test cases, which the test suite also asserts. <a class="cite" href="#src-dependents">S4</a><a class="cite" href="#src-test-inval">S29</a></figcaption>
+</figure>
+</section>
+
+<section id="node-cycle">
+<h2>What happens inside one node</h2>
+<p>Every node runs the same cycle: <strong>plan → packet → dispatch → result → record → gate</strong>. Only the controller calls the driver, and only the unit does the work. A node with a reviewer runs the dispatch–record part twice: workers first, then the reviewer over their results. <a class="cite" href="#src-skill-loop">S23</a></p>
+<figure class="fig">
+<svg viewBox="0 0 900 500" role="img" aria-label="Sequence of one node cycle">
+  <defs><marker id="arr-cy" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink)"/></marker></defs>
+  <g font-size="13" fill="var(--ink)">
+    <rect x="50" y="14" width="140" height="34" rx="8" fill="var(--panel)" stroke="var(--line)"/><text x="120" y="36" text-anchor="middle" font-weight="600">Controller</text>
+    <rect x="290" y="14" width="140" height="34" rx="8" fill="var(--info-soft)" stroke="var(--info)"/><text x="360" y="36" text-anchor="middle" font-weight="600">Driver</text>
+    <rect x="530" y="14" width="140" height="34" rx="8" fill="var(--panel)" stroke="var(--line)"/><text x="600" y="36" text-anchor="middle" font-weight="600">Unit</text>
+    <rect x="740" y="14" width="140" height="34" rx="8" fill="var(--ok-soft)" stroke="var(--ok)"/><text x="810" y="36" text-anchor="middle" font-weight="600">Ticket dir</text>
+    <g stroke="var(--line)" stroke-dasharray="4 4"><line x1="120" y1="48" x2="120" y2="490"/><line x1="360" y1="48" x2="360" y2="490"/><line x1="600" y1="48" x2="600" y2="490"/><line x1="810" y1="48" x2="810" y2="490"/></g>
+    <g stroke-width="1.6" fill="none">
+      <line x1="120" y1="80" x2="356" y2="80" stroke="var(--ink)" marker-end="url(#arr-cy)"/>
+      <line x1="360" y1="108" x2="124" y2="108" stroke="var(--ink)" stroke-dasharray="5 3" marker-end="url(#arr-cy)"/>
+      <line x1="120" y1="140" x2="356" y2="140" stroke="var(--ink)" marker-end="url(#arr-cy)"/>
+      <line x1="360" y1="160" x2="806" y2="160" stroke="var(--ok)" marker-end="url(#arr-cy)"/>
+      <line x1="360" y1="184" x2="124" y2="184" stroke="var(--ink)" stroke-dasharray="5 3" marker-end="url(#arr-cy)"/>
+      <line x1="120" y1="216" x2="596" y2="216" stroke="var(--ink)" marker-end="url(#arr-cy)"/>
+      <line x1="600" y1="246" x2="806" y2="246" stroke="var(--ok)" marker-end="url(#arr-cy)"/>
+      <line x1="806" y1="272" x2="604" y2="272" stroke="var(--ok)" stroke-dasharray="5 3" marker-end="url(#arr-cy)"/>
+      <line x1="600" y1="300" x2="806" y2="300" stroke="var(--ok)" marker-end="url(#arr-cy)"/>
+      <line x1="600" y1="330" x2="124" y2="330" stroke="var(--ink)" stroke-dasharray="5 3" marker-end="url(#arr-cy)"/>
+      <line x1="120" y1="368" x2="356" y2="368" stroke="var(--ink)" marker-end="url(#arr-cy)"/>
+      <line x1="360" y1="390" x2="806" y2="390" stroke="var(--ok)" marker-end="url(#arr-cy)"/>
+      <line x1="120" y1="430" x2="356" y2="430" stroke="var(--accent)" marker-end="url(#arr-cy)"/>
+      <line x1="360" y1="456" x2="806" y2="456" stroke="var(--ok)" marker-end="url(#arr-cy)"/>
+    </g>
+    <g font-size="12">
+      <text x="238" y="73" text-anchor="middle">① plan --node N --card</text>
+      <text x="238" y="102" text-anchor="middle" fill="var(--muted)">plan JSON: units, gates, artifacts</text>
+      <text x="238" y="133" text-anchor="middle">② packet --unit U --facts f.json</text>
+      <text x="583" y="153" text-anchor="middle" fill="var(--ok)">packets/N.gG.U.rR.md + .rules.json</text>
+      <text x="238" y="178" text-anchor="middle" fill="var(--muted)">{path, packetDigest, resultPath}</text>
+      <text x="358" y="209" text-anchor="middle">③ "Read the packet at … (sha256 …)"</text>
+      <text x="703" y="239" text-anchor="middle" fill="var(--ok)">④ read packet + card</text>
+      <text x="703" y="266" text-anchor="middle" fill="var(--ok)">inputs: plan.md, …</text>
+      <text x="703" y="294" text-anchor="middle" fill="var(--ok)">⑤ write artifacts + result</text>
+      <text x="358" y="323" text-anchor="middle" fill="var(--muted)">⑥ reply ≤150 words: path + sha256</text>
+      <text x="238" y="361" text-anchor="middle">⑦ record --result --model</text>
+      <text x="583" y="383" text-anchor="middle" fill="var(--ok)">unit record → state.json + decisions.jsonl</text>
+      <text x="238" y="423" text-anchor="middle" fill="var(--accent)">⑧ gate --status … [--actor user]</text>
+      <text x="583" y="449" text-anchor="middle" fill="var(--ok)">node done / stale others + log event</text>
+      <text x="20" y="485" fill="var(--muted)">Between ⑦ and ⑧: verify citations, ask HIGH doubts (AskUserQuestion); reviewer units repeat ②–⑦.</text>
+    </g>
+  </g>
+</svg>
+<figcaption>The unit never calls the driver; the driver never reads the unit's reply. The only link between them is the packet path going in and the result file coming back, both pinned by sha256. <a class="cite" href="#src-dispatch-id">S15</a><a class="cite" href="#src-record">S16</a><a class="cite" href="#src-skill-loop">S23</a></figcaption>
+</figure>
+
+<h3 id="node-states">Node record states</h3>
+<figure class="fig">
+<svg viewBox="0 0 900 200" role="img" aria-label="Node status state machine">
+  <defs><marker id="arr-st" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker></defs>
+  <g font-size="13" fill="var(--ink)">
+    <rect x="30" y="70" width="140" height="50" rx="25" fill="var(--panel)" stroke="var(--line)"/><text x="100" y="100" text-anchor="middle" font-weight="600">pending</text>
+    <rect x="280" y="70" width="160" height="50" rx="25" fill="var(--panel)" stroke="var(--line)"/><text x="360" y="100" text-anchor="middle" font-weight="600">in_progress</text>
+    <rect x="560" y="70" width="140" height="50" rx="25" fill="var(--ok-soft)" stroke="var(--ok)"/><text x="630" y="100" text-anchor="middle" font-weight="600">done</text>
+    <rect x="740" y="70" width="140" height="50" rx="25" fill="var(--warn-soft)" stroke="var(--warn)"/><text x="810" y="100" text-anchor="middle" font-weight="600">stale (gen+1)</text>
+    <g stroke="var(--muted)" stroke-width="1.6" fill="none">
+      <line x1="170" y1="95" x2="278" y2="95" marker-end="url(#arr-st)"/>
+      <line x1="440" y1="95" x2="558" y2="95" marker-end="url(#arr-st)"/>
+      <line x1="700" y1="95" x2="738" y2="95" marker-end="url(#arr-st)"/>
+      <path d="M810,120 C810,180 360,180 360,122" marker-end="url(#arr-st)"/>
+      <path d="M100,70 C100,20 810,20 810,68" stroke-dasharray="5 4" marker-end="url(#arr-st)"/>
+    </g>
+    <g font-size="12" fill="var(--muted)">
+      <text x="224" y="87" text-anchor="middle">record</text>
+      <text x="499" y="87" text-anchor="middle">gate approved</text>
+      <text x="719" y="62" text-anchor="middle">invalidate</text>
+      <text x="585" y="172" text-anchor="middle">record (new generation)</text>
+      <text x="455" y="30" text-anchor="middle">invalidate of a node that already ran (a never-run pending node is skipped)</text>
+    </g>
+  </g>
+</svg>
+<figcaption>Only <code>done</code> satisfies a token. <code>needs-changes</code> stales the loop-back node and its dependents (including the review node itself) and counts an attempt; <code>rejected</code>/<code>stopped</code> set the verdict but leave the status. <a class="cite" href="#src-newrecord">S7</a><a class="cite" href="#src-invalidate">S20</a><a class="cite" href="#src-gate">S17</a></figcaption>
+</figure>
+
+<h3 id="gate-checks">What the gate checks before a node is done</h3>
+<ol class="steps">
+  <li><strong>Not already closed</strong> and <strong>ready</strong>: every required token has a done producer, otherwise <code>G7 … not ready</code>. <a class="cite" href="#src-gate">S17</a></li>
+  <li><strong>Every planned unit has an <code>ok</code> record in the current generation</strong>; records from older generations do not count. <a class="cite" href="#src-absent">S18</a></li>
+  <li><strong>The last reviewer verdict is not <code>FAIL</code></strong> (nodes with a reviewer). <a class="cite" href="#src-absent">S18</a></li>
+  <li class="bad"><strong>Every artifact file exists</strong>. This is an existence check only: content and freshness are not checked (R1). <a class="cite" href="#src-absent">S18</a></li>
+  <li><strong>User boundary</strong>: <code>--actor user</code> is required on user-boundary nodes; <code>autoSkipPlanApproval</code> relaxes it only on the two plan nodes. <a class="cite" href="#src-absent">S18</a></li>
+  <li><strong>Side effects</strong>: pin the subject digest (subject nodes), issue receipts (<code>final-review</code>), verify receipts (<code>deliverable-ready</code>), record artifact digests, and apply <code>--reopen</code> (<code>triage-review</code>). <a class="cite" href="#src-gate-effects">S19</a></li>
+  <li><strong>Loop cap</strong>: <code>needs-changes</code> at attempt ≥ 2 raises <code>G4</code> unless <code>--actor user</code>. <a class="cite" href="#src-gate">S17</a></li>
+</ol>
+</section>
+
+<section id="contracts-config">
+<h2>Contracts that describe the project (configuration)</h2>
+<p>These contracts are written once per project or per harness release. They decide <em>which</em> nodes exist for a ticket, <em>which</em> rules each node judges, and <em>what</em> instructions a unit gets. The driver reads them on every command. <a class="cite" href="#src-ticketroot">S12</a></p>
+<div class="callout info"><strong>How enforcement is labelled:</strong> <em>driver</em> = refused at runtime when wrong; <em>partial</em> = some fields checked; <em>none</em> = trusted as written. Each contract's note says exactly which checks exist.</div>
+<div class="tbl">
+  <p class="cap">Configuration contracts at a glance</p>
+  <table>
+    <tr><th>Contract</th><th>Schema id</th><th>Where</th><th>Written by</th><th>Read by</th><th>Enforced</th></tr>
+    <tr><td><a href="#c-project-profile">Project profile</a></td><td><code>sdlc-project-profile@1</code></td><td><code>contracts/project-profile.schema.json</code> · instance <code>sdlc.profile.json</code></td><td>You (once per project)</td><td>driver (every command), units via plan/packet</td><td>partial</td></tr>
+    <tr><td><a href="#c-adapter">Adapter (tracker · stack · surface · delivery)</a></td><td><code>sdlc-adapter@1</code></td><td><code>contracts/adapter.schema.json</code> · instances <code>adapters/&lt;kind&gt;/&lt;id&gt;.json</code></td><td>harness (bundled) or you (project-local)</td><td>units (instructions), driver (kind, drafts, allowedSurfaces)</td><td>partial</td></tr>
+    <tr><td><a href="#c-rulepack">Rulepack</a></td><td><code>sdlc-rulepack@1</code></td><td><code>contracts/rulepack.schema.json</code> · <code>rulepacks/*.json</code>, <code>rulepacks/stack/&lt;stack&gt;.json</code></td><td>harness / you</td><td>driver (selection) → units via `&lt;dispatch&gt;.rules.json`</td><td>partial</td></tr>
+    <tr><td><a href="#c-extension">Family extension</a></td><td><code>sdlc-extension@1</code></td><td><code>contracts/extension.schema.json</code> · e.g. <code>examples/wms/extensions/if-family.json</code></td><td>you (per capability family)</td><td>driver `load_graph`</td><td>partial</td></tr>
+    <tr class="hl"><td><a href="#c-graph-node">Graph node spec</a></td><td><code>— (no schema yet)</code></td><td><code>graph/lifecycle.json</code> → <code>nodes.&lt;id&gt;</code></td><td>harness</td><td>driver (trace, readiness, gate), packet</td><td>none</td></tr>
+  </table>
+</div>
+<h3 id="c-project-profile">Project profile</h3>
+<div class="card warn"><strong>Enforced: partial.</strong> <code>harness/profile.py</code> <code>validate_profile</code> checks required keys, tiers, repo fields, testcase format and that every surface has an evidence entry; it does not enforce <code>additionalProperties: false</code> or types. <a class="cite" href="#src-profile-schema">S24</a><a class="cite" href="#src-ticketroot">S12</a></div>
+<div class="tbl">
+  <p class="cap">Shape of <code>sdlc-project-profile@1</code> · <code>contracts/project-profile.schema.json</code> · instance <code>sdlc.profile.json</code></p>
+  <table>
+    <tr><th>Field</th><th>Type</th><th>Required</th><th>Meaning</th></tr>
+    <tr><td><code>schemaVersion</code></td><td><code>1</code></td><td>yes</td><td>contract version</td></tr>
+    <tr><td><code>project</code></td><td><code>{id, name, description?}</code></td><td>yes</td><td>identity</td></tr>
+    <tr><td><code>locale</code></td><td><code>{chat, artifacts, tracker, review}</code></td><td>no</td><td>language per audience</td></tr>
+    <tr><td><code>paths.ticketRoot</code></td><td><code>string</code></td><td>yes</td><td>ticket directories root, relative to the profile file</td></tr>
+    <tr><td><code>paths.branchPrefix</code></td><td><code>string</code></td><td>no</td><td>branch name prefix for worktrees</td></tr>
+    <tr><td><code>models</code></td><td><code>{routine, deep}</code></td><td>yes</td><td>model per capability tier</td></tr>
+    <tr><td><code>tracker</code></td><td><code>{adapter, config?}</code></td><td>yes</td><td>tracker adapter id/path + its config</td></tr>
+    <tr><td><code>repositories[]</code></td><td><code>{id, path, stack, surfaces[], defaultBranch?, remote?}</code></td><td>yes</td><td>each repo the harness may read/change</td></tr>
+    <tr><td><code>rulepacks[]</code></td><td><code>string</code></td><td>yes</td><td>bundled pack ids or paths; stack packs load automatically</td></tr>
+    <tr><td><code>testcase</code></td><td><code>{format, template?, helper?}</code></td><td>yes</td><td>markdown | xlsx | csv | gherkin</td></tr>
+    <tr><td><code>evidence.surfaces</code></td><td><code>map surface → {adapter, reason?, config?}</code></td><td>yes</td><td>runner per surface; adapter <code>none</code> opts out</td></tr>
+    <tr><td><code>delivery</code></td><td><code>{adapter, drafts[], receiptTtlHours?, minHoursLeft?, config?}</code></td><td>yes</td><td>drafts to write and receipt timing</td></tr>
+    <tr><td><code>families[]</code></td><td><code>{id, nodes?, rulepack?}</code></td><td>no</td><td>capability families: extension nodes + rules</td></tr>
+    <tr><td><code>gates</code></td><td><code>{loopCap?, autoSkipPlanApproval?}</code></td><td>no</td><td>loop cap (default 2), plan auto-approval</td></tr>
+    <tr><td><code>environment</code></td><td><code>{doctor[]?, sharedState[]?}</code></td><td>no</td><td>extra doctor commands; resources whose mutation needs G6</td></tr>
+  </table>
+</div>
+<h3 id="c-adapter">Adapter (tracker · stack · surface · delivery)</h3>
+<div class="card warn"><strong>Enforced: partial.</strong> The driver checks <code>kind</code>, that every profile draft has a template, and that repo surfaces are in the stack's <code>allowedSurfaces</code>. Other fields are instructions for units and are not validated. <a class="cite" href="#src-adapter-schema">S25</a></div>
+<div class="tbl">
+  <p class="cap">Shape of <code>sdlc-adapter@1</code> · <code>contracts/adapter.schema.json</code> · instances <code>adapters/&lt;kind&gt;/&lt;id&gt;.json</code></p>
+  <table>
+    <tr><th>Field</th><th>Type</th><th>Required</th><th>Meaning</th></tr>
+    <tr><td><code>kind</code></td><td><code>tracker | stack | surface | delivery</code></td><td>yes</td><td>selects the per-kind shape</td></tr>
+    <tr><td><code>id, description</code></td><td><code>string</code></td><td>yes</td><td>identity</td></tr>
+    <tr><td><code>tracker: fetch {command?, instructions}, reply, kindHints?</code></td><td><code>object</code></td><td>yes</td><td>how to pull a ticket and post a reply</td></tr>
+    <tr><td><code>stack: allowedSurfaces[], commands {doctor[], format, lint, build, unitTest}, worktree, conventions[], rulepack</code></td><td><code>object</code></td><td>yes</td><td>how to build/check code and make a worktree</td></tr>
+    <tr><td><code>surface: surface, prerequisites[], run, capture[], mutatesSharedState?, requiresG6</code></td><td><code>object</code></td><td>yes</td><td>how a test case is executed and what evidence is captured</td></tr>
+    <tr><td><code>delivery: drafts {name → {template}}, review, ship {requiresUserGo: true, steps}, reship</code></td><td><code>object</code></td><td>yes</td><td>drafts, PR review fetch, ship steps</td></tr>
+  </table>
+</div>
+<h3 id="c-rulepack">Rulepack</h3>
+<div class="card warn"><strong>Enforced: partial.</strong> <code>harness/rules.py</code> rejects duplicate ids and unknown phases; severity and pattern are not checked. <a class="cite" href="#src-rulepack-schema">S26</a></div>
+<div class="tbl">
+  <p class="cap">Shape of <code>sdlc-rulepack@1</code> · <code>contracts/rulepack.schema.json</code> · <code>rulepacks/*.json</code>, <code>rulepacks/stack/&lt;stack&gt;.json</code></p>
+  <table>
+    <tr><th>Field</th><th>Type</th><th>Required</th><th>Meaning</th></tr>
+    <tr><td><code>packId</code></td><td><code>string</code></td><td>yes</td><td>pack identity, recorded on each selected rule as <code>pack</code></td></tr>
+    <tr><td><code>rules[].id</code></td><td><code>string `^[A-Z][A-Z0-9-]+$`</code></td><td>yes</td><td>rule id cited in reviews</td></tr>
+    <tr><td><code>rules[].phase</code></td><td><code>design | code | test | evidence | delivery</code></td><td>yes</td><td>which nodes judge it (via <code>rulePhases</code>)</td></tr>
+    <tr><td><code>rules[].severity</code></td><td><code>critical | high | medium | low</code></td><td>yes</td><td>critical/high block approval</td></tr>
+    <tr><td><code>rules[].title, check</code></td><td><code>string</code></td><td>yes</td><td>what to verify, decidable from evidence</td></tr>
+    <tr><td><code>rules[].appliesTo</code></td><td><code>{kinds?, stacks?, surfaces?, families?}</code></td><td>no</td><td>filter against the ticket context</td></tr>
+  </table>
+</div>
+<h3 id="c-extension">Family extension</h3>
+<div class="card warn"><strong>Enforced: partial.</strong> The driver checks slot names exist, node ids do not collide and <code>feeds</code> targets exist; node fields are trusted. <a class="cite" href="#src-extension-schema">S27</a><a class="cite" href="#src-feeds">S5</a></div>
+<div class="tbl">
+  <p class="cap">Shape of <code>sdlc-extension@1</code> · <code>contracts/extension.schema.json</code> · e.g. <code>examples/wms/extensions/if-family.json</code></p>
+  <table>
+    <tr><th>Field</th><th>Type</th><th>Required</th><th>Meaning</th></tr>
+    <tr><td><code>slot</code></td><td><code>after-code-review | after-evidence</code></td><td>yes</td><td>where the nodes are inserted</td></tr>
+    <tr><td><code>order[]</code></td><td><code>string</code></td><td>yes</td><td>node ids in run order</td></tr>
+    <tr><td><code>nodes.&lt;id&gt;</code></td><td><code>graph-node shape (see below)</code></td><td>yes</td><td>same fields as a core node; <code>when.family</code> is added automatically</td></tr>
+    <tr><td><code>nodes.&lt;id&gt;.feeds[]</code></td><td><code>string</code></td><td>no</td><td>core nodes that must wait for this node's tokens</td></tr>
+  </table>
+</div>
+<h3 id="c-graph-node">Graph node spec</h3>
+<div class="card bad"><strong>Enforced: none.</strong> There is no JSON Schema for the graph file; a typo in a key is silently ignored. See review point R5. <a class="cite" href="#src-graph-coding">S2</a></div>
+<div class="tbl">
+  <p class="cap">Shape of <code>— (no schema yet)</code> · <code>graph/lifecycle.json</code> → <code>nodes.&lt;id&gt;</code></p>
+  <table>
+    <tr><th>Field</th><th>Type</th><th>Required</th><th>Meaning</th></tr>
+    <tr><td><code>layer</code></td><td><code>analysis | implementation | delivery | after-pr</code></td><td>yes</td><td>diagram lane</td></tr>
+    <tr><td><code>when</code></td><td><code>{kind?, family?, surface?, stack?, reviewRound?}</code></td><td>no</td><td>trace condition; list = any-of</td></tr>
+    <tr><td><code>purpose</code></td><td><code>string</code></td><td>yes</td><td>copied into the packet</td></tr>
+    <tr><td><code>requires[] / produces[]</code></td><td><code>token[]</code></td><td>yes</td><td>the node-to-node control contract</td></tr>
+    <tr><td><code>mutability</code></td><td><code>none | state | artifacts | findings-only | source</code></td><td>yes</td><td>what the node may change (documentation; not enforced)</td></tr>
+    <tr><td><code>units[]</code></td><td><code>{id, role: worker, tier: routine | deep}</code></td><td>yes</td><td>subagents to dispatch</td></tr>
+    <tr><td><code>reviewer</code></td><td><code>{tier}</code></td><td>no</td><td>adds a read-only reviewer unit</td></tr>
+    <tr><td><code>pattern</code></td><td><code>string</code></td><td>no</td><td>e.g. parallel-units-controller-judged</td></tr>
+    <tr><td><code>boundary</code></td><td><code>controller | user</code></td><td>yes</td><td>who closes G0</td></tr>
+    <tr><td><code>gates[]</code></td><td><code>G1…G7</code></td><td>yes</td><td>conditional gates that may fire</td></tr>
+    <tr><td><code>rulePhases[]</code></td><td><code>phase[]</code></td><td>no</td><td>rules selected for the packet</td></tr>
+    <tr><td><code>artifacts[] / optionalArtifacts[]</code></td><td><code>path | @delivery.drafts</code></td><td>yes</td><td>files the gate requires in the ticket dir</td></tr>
+    <tr><td><code>loopBackTo</code></td><td><code>node id</code></td><td>no</td><td>target of <code>--status needs-changes</code></td></tr>
+    <tr><td><code>subjectNode / issuesReceipts / checksReceipts / reopens</code></td><td><code>bool</code></td><td>no</td><td>gate side effects</td></tr>
+    <tr><td><code>card</code></td><td><code>path</code></td><td>yes</td><td>procedure the unit follows</td></tr>
+  </table>
+</div>
+</section>
+
+<section id="contracts-runtime">
+<h2>Contracts that record a ticket's progress (state)</h2>
+<p>These are written only by the driver, during a ticket's life. <code>state.json</code> is the current view and the only thing the driver trusts. <code>decisions.jsonl</code> is the audit trail of how it got there. <a class="cite" href="#src-save">S8</a><a class="cite" href="#src-log">S9</a> <span class="tag sure">VERIFIED</span></p>
+<pre><code>state.json
+├─ schemaVersion · graphId · profilePath · createdAt
+├─ context            → ticket-context (kind, families, surfaces, repositories[], reviewRound)
+├─ nodes
+│   └─ &lt;node-id&gt;      → node-record (status, generation, attempts, verdict, subject?, artifactDigests?)
+│       └─ units[]    → unit-record (unit, generation, model, status, result, resultDigest, verdict…)
+└─ receipts
+    └─ &lt;repo-id&gt;      → receipt (head, subject, issuedAt, expiresAt)</code></pre>
+<h3 id="c-state">Ticket state</h3>
+<div class="card ok"><strong>Written by driver only · read by driver; controller via `status` · enforced: driver-written.</strong> Only the driver writes it (atomic replace with retry). It is never validated on load, so a hand edit is trusted. <a class="cite" href="#src-state-schema">S28</a><a class="cite" href="#src-save">S8</a></div>
+<div class="tbl">
+  <p class="cap">Shape of Ticket state · <code>contracts/state.schema.json</code> · <code>&lt;ticketRoot&gt;/&lt;ticket&gt;/state.json</code></p>
+  <table>
+    <tr><th>Field</th><th>Type</th><th>Required</th><th>Meaning</th></tr>
+    <tr><td><code>schemaVersion, graphId, profilePath, createdAt</code></td><td><code>scalar</code></td><td>yes</td><td>which graph and profile this ticket is bound to</td></tr>
+    <tr><td><code>context</code></td><td><code>ticket-context</code></td><td>yes</td><td>kind, families, surfaces, repositories, reviewRound</td></tr>
+    <tr><td><code>nodes.&lt;id&gt;</code></td><td><code>node-record</code></td><td>yes</td><td>one record per node in the trace</td></tr>
+    <tr><td><code>receipts.&lt;repo&gt;</code></td><td><code>receipt</code></td><td>yes</td><td>issued at final-review</td></tr>
+  </table>
+</div>
+<h3 id="c-ticket-context">Ticket context</h3>
+<div class="card ok"><strong>Written by driver (`init`, `worktree`, `handback`) · read by trace (`when`), rules (`appliesTo`), packet · enforced: driver.</strong> Built by <code>build_context</code>: kind must be bug/feature, repos/families must exist in the profile, every surface needs an evidence entry. <a class="cite" href="#src-state-schema">S28</a></div>
+<div class="tbl">
+  <p class="cap">Shape of Ticket context · <code>state.json</code> → <code>context</code></p>
+  <table>
+    <tr><th>Field</th><th>Type</th><th>Required</th><th>Meaning</th></tr>
+    <tr><td><code>ticket</code></td><td><code>string</code></td><td>yes</td><td>ticket id</td></tr>
+    <tr><td><code>kind</code></td><td><code>bug | feature</code></td><td>yes</td><td>selects the analysis branch</td></tr>
+    <tr><td><code>maturity</code></td><td><code>new | pr_opened</code></td><td>yes</td><td>set to pr_opened by handback</td></tr>
+    <tr><td><code>reviewRound</code></td><td><code>int ≥ 0</code></td><td>yes</td><td>&gt; 0 adds the after-PR nodes</td></tr>
+    <tr><td><code>families[]</code></td><td><code>string</code></td><td>yes</td><td>enabled families</td></tr>
+    <tr><td><code>surfaces[]</code></td><td><code>string</code></td><td>yes</td><td>union of repo surfaces + <code>--surface</code></td></tr>
+    <tr><td><code>repositories[]</code></td><td><code>{id, stack, path, baseBranch, worktree?}</code></td><td>yes</td><td><code>worktree</code> set by <code>sdlc worktree</code></td></tr>
+  </table>
+</div>
+<h3 id="c-node-record">Node record</h3>
+<div class="card ok"><strong>Written by driver · read by driver (readiness, gate) · enforced: driver.</strong> Created by <code>new_node_record</code>; status moves only through record / gate / invalidate / handback. <a class="cite" href="#src-newrecord">S7</a></div>
+<div class="tbl">
+  <p class="cap">Shape of Node record · <code>state.json</code> → <code>nodes.&lt;id&gt;</code></p>
+  <table>
+    <tr><th>Field</th><th>Type</th><th>Required</th><th>Meaning</th></tr>
+    <tr><td><code>status</code></td><td><code>pending | in_progress | stale | done</code></td><td>yes</td><td>only <code>done</code> satisfies a token</td></tr>
+    <tr><td><code>generation</code></td><td><code>int ≥ 1</code></td><td>yes</td><td>+1 on every invalidate; unit records are matched per generation</td></tr>
+    <tr><td><code>attempts</code></td><td><code>int</code></td><td>yes</td><td>needs-changes rounds; G4 at the loop cap</td></tr>
+    <tr><td><code>units[]</code></td><td><code>unit-record</code></td><td>yes</td><td>append-only per generation</td></tr>
+    <tr><td><code>verdict, closedAt</code></td><td><code>string | null</code></td><td>yes</td><td>set by gate</td></tr>
+    <tr><td><code>subject</code></td><td><code>repo → {head, subject}</code></td><td>no</td><td>subject nodes only</td></tr>
+    <tr><td><code>artifactDigests</code></td><td><code>path → sha256</code></td><td>no</td><td>recorded at approval</td></tr>
+  </table>
+</div>
+<h3 id="c-unit-record">Unit record</h3>
+<div class="card ok"><strong>Written by driver `record` · read by driver `gate` · enforced: driver.</strong> Refused if the unit is not planned, the result file is missing, or the model differs from the planned tier. <a class="cite" href="#src-record">S16</a></div>
+<div class="tbl">
+  <p class="cap">Shape of Unit record · <code>state.json</code> → <code>nodes.&lt;id&gt;.units[]</code> (+ <code>decisions.jsonl</code>)</p>
+  <table>
+    <tr><th>Field</th><th>Type</th><th>Required</th><th>Meaning</th></tr>
+    <tr><td><code>unit</code></td><td><code>string</code></td><td>yes</td><td>planned unit id or <code>reviewer</code></td></tr>
+    <tr><td><code>generation</code></td><td><code>int</code></td><td>yes</td><td>the node generation it belongs to</td></tr>
+    <tr><td><code>model</code></td><td><code>string</code></td><td>yes</td><td>must equal <code>models[tier]</code></td></tr>
+    <tr><td><code>status</code></td><td><code>ok | blocked | partial</code></td><td>yes</td><td>gate needs <code>ok</code> for every planned unit</td></tr>
+    <tr><td><code>result, resultDigest</code></td><td><code>path, sha256</code></td><td>yes</td><td>pins the exact result file</td></tr>
+    <tr><td><code>tokens</code></td><td><code>int | null</code></td><td>no</td><td>usage for the progress table</td></tr>
+    <tr><td><code>verdict</code></td><td><code>PASS | FAIL | APPROVED | NEEDS CHANGES</code></td><td>no</td><td>a last reviewer FAIL blocks the gate</td></tr>
+    <tr><td><code>failureClass</code></td><td><code>record | artifact</code></td><td>no</td><td>reviewer FAIL type</td></tr>
+    <tr><td><code>at</code></td><td><code>ISO time</code></td><td>yes</td><td></td></tr>
+  </table>
+</div>
+<h3 id="c-receipt">Receipt (per repository)</h3>
+<div class="card ok"><strong>Written by driver at `final-review` approval or `receipts --reissue` · read by driver at `deliverable-ready` · enforced: driver.</strong> Subject = sha256(HEAD + <code>git diff HEAD --binary</code> + list of untracked file names). See review point R2. <a class="cite" href="#src-subject">S10</a><a class="cite" href="#src-checkreceipts">S11</a></div>
+<div class="tbl">
+  <p class="cap">Shape of Receipt (per repository) · <code>state.json</code> → <code>receipts.&lt;repo&gt;</code></p>
+  <table>
+    <tr><th>Field</th><th>Type</th><th>Required</th><th>Meaning</th></tr>
+    <tr><td><code>head</code></td><td><code>commit sha</code></td><td>yes</td><td>HEAD of the worktree</td></tr>
+    <tr><td><code>subject</code></td><td><code>sha256</code></td><td>yes</td><td>digest of what would ship</td></tr>
+    <tr><td><code>issuedAt / expiresAt</code></td><td><code>ISO time</code></td><td>yes</td><td>TTL = <code>delivery.receiptTtlHours</code> (72 h by default); ready needs ≥ <code>minHoursLeft</code> (24 h)</td></tr>
+  </table>
+</div>
+<h3 id="c-decision-event">Decision log event</h3>
+<div class="card warn"><strong>Written by driver (append-only) · read by you (audit), nothing in the driver reads it back · enforced: append-only by convention.</strong> Not hash-chained and never read back by the driver; it is an audit trail, not a source of truth. <a class="cite" href="#src-log">S9</a></div>
+<div class="tbl">
+  <p class="cap">Shape of Decision log event · <code>&lt;ticketRoot&gt;/&lt;ticket&gt;/decisions.jsonl</code> (one JSON object per line)</p>
+  <table>
+    <tr><th>Field</th><th>Type</th><th>Required</th><th>Meaning</th></tr>
+    <tr><td><code>at</code></td><td><code>ISO time</code></td><td>yes</td><td>added by <code>Ticket.log</code></td></tr>
+    <tr><td><code>event</code></td><td><code>init | record | gate | invalidate | worktree | handback | receipts-reissued</code></td><td>yes</td><td>what happened</td></tr>
+    <tr><td><code>gate event: gate, actor, node, generation, verdict, note</code></td><td><code>mixed</code></td><td>yes</td><td>who closed what, with which verdict</td></tr>
+    <tr><td><code>invalidate event: node, stale[], reason</code></td><td><code>mixed</code></td><td>yes</td><td>why work was reopened</td></tr>
+    <tr><td><code>record event: node + all unit-record fields</code></td><td><code>mixed</code></td><td>yes</td><td>mirror of the unit record</td></tr>
+    <tr><td><code>handback event: round, file, digest</code></td><td><code>mixed</code></td><td>yes</td><td>which review file started the round</td></tr>
+  </table>
+</div>
+<div class="callout warn"><strong>Note:</strong> <code>state.json</code> is never validated when it is loaded. A hand edit (for example setting a node to <code>done</code>) is trusted, and <code>decisions.jsonl</code> would not reveal it because nothing reads the log back (R8).</div>
+</section>
+
+<section id="contracts-messages">
+<h2>Contracts that carry messages (controller ↔ driver ↔ unit)</h2>
+<p>These contracts are the actual "wire" between the parts. Each dispatch produces a fixed set of three files, all named by the <strong>dispatch id</strong> <code>&lt;node&gt;.g&lt;generation&gt;.&lt;unit&gt;.r&lt;round&gt;</code>. Because the name includes the generation and the round, no message file is ever overwritten. <a class="cite" href="#src-dispatch-id">S15</a> <span class="tag sure">VERIFIED</span></p>
+<div class="grid3">
+  <div class="card"><h4>In: packet</h4><code>packets/coding.g2.worker.r1.md</code><br>rendered by the driver, pinned by sha256</div>
+  <div class="card"><h4>In: rules</h4><code>packets/coding.g2.worker.r1.rules.json</code><br>the node's selected rules</div>
+  <div class="card"><h4>Out: result</h4><code>results/coding.g2.worker.r1.md</code><br>written by the unit, digest recorded</div>
+</div>
+<h3 id="c-cli-envelope">Driver CLI output</h3>
+<div class="card ok"><strong>Written by driver · read by controller · enforced: driver.</strong> Every command prints one JSON object. Exit 0 = success; exit 2 = <code>{"error": "G&lt;n&gt;: …"}</code> fail-closed. <a class="cite" href="#src-skill-loop">S23</a></div>
+<div class="tbl">
+  <p class="cap">Shape of Driver CLI output · stdout of <code>skills/kaneki-flow/scripts/sdlc.py</code></p>
+  <table>
+    <tr><th>Part</th><th>Type</th><th>Required</th><th>Meaning</th></tr>
+    <tr><td><code>plan</code></td><td><code>{node, layer, purpose, generation, status, missing[], units[{id, role, tier, model, agentType}], pattern, boundary, gates[], artifacts[], card, ruleCount, ruleIds?, adapters, loopCap, attempts, closeWith}</code></td><td>yes</td><td>what to do for one node</td></tr>
+    <tr><td><code>packet</code></td><td><code>{path, packetDigest, agentType, model, resultPath, dispatchId}</code></td><td>yes</td><td>what to dispatch</td></tr>
+    <tr><td><code>gate</code></td><td><code>{node, verdict, nextPending, subject?, receipts?, reopened?, stale?, attempts?}</code></td><td>yes</td><td>outcome of closing</td></tr>
+    <tr><td><code>status</code></td><td><code>{ticket, kind, reviewRound, settled, traceLength, nextPending, nextMissing?, tokensTotal, nodes[]?}</code></td><td>yes</td><td>where the ticket is</td></tr>
+    <tr><td><code>error</code></td><td><code>string</code></td><td>no</td><td>the only key on failure; starts with the gate id when one applies</td></tr>
+  </table>
+</div>
+<h3 id="c-facts">Facts JSON (controller → packet)</h3>
+<div class="card bad"><strong>Written by controller · read by driver `packet` (renders into the packet) · enforced: none.</strong> Unknown keys are ignored; missing keys render as <code>- none</code>. <a class="cite" href="#src-skill-loop">S23</a></div>
+<div class="tbl">
+  <p class="cap">Shape of Facts JSON (controller → packet) · any path passed as <code>packet --facts &lt;file&gt;</code></p>
+  <table>
+    <tr><th>Part</th><th>Type</th><th>Required</th><th>Meaning</th></tr>
+    <tr><td><code>weakestClaim</code></td><td><code>string</code></td><td>no</td><td>the claim the unit must attack first</td></tr>
+    <tr><td><code>observed[]</code></td><td><code>string</code></td><td>no</td><td>facts already established</td></tr>
+    <tr><td><code>doubts[]</code></td><td><code>string</code></td><td>no</td><td>open doubts for this unit</td></tr>
+    <tr><td><code>settled[]</code></td><td><code>string</code></td><td>no</td><td>do not re-litigate</td></tr>
+    <tr><td><code>authorizedPaths[]</code></td><td><code>string</code></td><td>no</td><td>the only paths the unit may write</td></tr>
+    <tr><td><code>findingsToFix[]</code></td><td><code>string</code></td><td>no</td><td>round two only</td></tr>
+  </table>
+</div>
+<h3 id="c-packet">Dispatch packet</h3>
+<div class="card ok"><strong>Written by driver `packet` from `scripts/packet-template.md` · read by unit subagent (after checking sha256) · enforced: driver renders; agent verifies digest.</strong> Placeholders are filled from the plan, profile, adapters and facts JSON; the rules file is the node's selected rules. <a class="cite" href="#src-dispatch-id">S15</a><a class="cite" href="#src-template-return">S22</a></div>
+<div class="tbl">
+  <p class="cap">Shape of Dispatch packet · <code>packets/&lt;node&gt;.g&lt;G&gt;.&lt;unit&gt;.r&lt;R&gt;.md</code> + <code>.rules.json</code></p>
+  <table>
+    <tr><th>Part</th><th>Type</th><th>Required</th><th>Meaning</th></tr>
+    <tr><td><code>Unit contract</code></td><td><code>section</code></td><td>yes</td><td>node, unit, role, purpose, card path, artifact language</td></tr>
+    <tr><td><code>Role limits / Forbidden actions / Evidence discipline</code></td><td><code>section</code></td><td>yes</td><td>same for every dispatch</td></tr>
+    <tr><td><code>Return contract</code></td><td><code>section</code></td><td>yes</td><td>result file shape + ≤150-word reply</td></tr>
+    <tr><td><code>Dispatch facts</code></td><td><code>section</code></td><td>yes</td><td>ticket, generation, round, dispatch id, result path, artifacts, repositories, rules path, adapter files</td></tr>
+    <tr><td><code>Authorized paths · Weakest claim · Observed · Doubts · Settled · Findings to fix</code></td><td><code>sections</code></td><td>yes</td><td>from the facts JSON</td></tr>
+    <tr><td><code>&lt;dispatch&gt;.rules.json</code></td><td><code>rule[] + pack</code></td><td>yes</td><td>rules for this node's <code>rulePhases</code>, filtered by <code>appliesTo</code></td></tr>
+  </table>
+</div>
+<h3 id="c-result-file">Unit result file</h3>
+<div class="card warn"><strong>Written by unit · read by controller (verify), reviewer unit, driver (digest only) · enforced: existence + digest.</strong> The driver never parses it; the verdict is what the controller passes to <code>record --verdict</code>. <a class="cite" href="#src-template-return">S22</a></div>
+<div class="tbl">
+  <p class="cap">Shape of Unit result file · <code>results/&lt;node&gt;.g&lt;G&gt;.&lt;unit&gt;.r&lt;R&gt;.md</code></p>
+  <table>
+    <tr><th>Part</th><th>Type</th><th>Required</th><th>Meaning</th></tr>
+    <tr><td><code>worker: status · claims (OBSERVED/DERIVED/ASSUMED) · evidence pointers · artifact paths · checks · doubts (HIGH/LOW) · weakest link</code></td><td><code>markdown</code></td><td>yes</td><td></td></tr>
+    <tr><td><code>reviewer: verdict PASS/FAIL · failure class · blocking findings · uncovered rules/units · weakest link</code></td><td><code>markdown</code></td><td>yes</td><td></td></tr>
+  </table>
+</div>
+<h3 id="c-node-artifact">Node artifacts</h3>
+<div class="card bad"><strong>Written by the node&#x27;s worker unit · read by later units, reviewers, the user · enforced: existence only.</strong> Required sections are defined in each node card (e.g. <code>## Condition → negative case</code> in plan.md) but the gate checks only that the file exists. <a class="cite" href="#src-artifacts-expand">S13</a><a class="cite" href="#src-absent">S18</a></div>
+<div class="tbl">
+  <p class="cap">Shape of Node artifacts · ticket dir: <code>plan.md</code>, <code>investigation.md</code>, <code>drafts/&lt;name&gt;.md</code>…</p>
+  <table>
+    <tr><th>Part</th><th>Type</th><th>Required</th><th>Meaning</th></tr>
+    <tr><td><code>file names</code></td><td><code>from `artifacts[]`</code></td><td>yes</td><td><code>@delivery.drafts</code> expands to <code>drafts/&lt;name&gt;.md</code> per profile draft</td></tr>
+    <tr><td><code>sections</code></td><td><code>from the node card</code></td><td>yes</td><td>e.g. <code>## Confirmed cause</code> + <code>Confidence:</code> in investigation.md</td></tr>
+  </table>
+</div>
+<details class="more"><summary>Example: a facts JSON and the packet command it feeds</summary><div class="body">
+<pre><code>{
+  "weakestClaim": "The NULL check at app/Order.php:88 is the first wrong point",
+  "observed": ["Repro: `php artisan test --filter=OrderNull` fails (exit 1)"],
+  "doubts": ["Is the legacy import path also affected?"],
+  "settled": ["Cause confirmed by query on 2026-11-04"],
+  "authorizedPaths": ["app/Order.php", "tests/Feature/OrderNullTest.php"]
+}
+
+python sdlc.py packet --ticket BUG-1 --node coding --unit worker --facts facts.json
+→ {"path": ".../packets/coding.g1.worker.r1.md", "packetDigest": "…", "agentType": "kaneki-worker",
+   "model": "sonnet", "resultPath": ".../results/coding.g1.worker.r1.md", "dispatchId": "coding.g1.worker.r1"}</code></pre>
+<p>Illustrative values; the keys and output fields are the ones the driver reads and prints. <a class="cite" href="#src-dispatch-id">S15</a></p>
+</div></details>
+</section>
+
+<section id="local-files">
+<h2>Where everything lives on disk</h2>
+<p>Everything a ticket produces lives in one directory, <code>&lt;ticketRoot&gt;/&lt;ticket&gt;/</code>. <code>ticketRoot</code> comes from the profile and resolves <em>relative to the profile file</em>, not the shell's working directory. <a class="cite" href="#src-ticketroot">S12</a> <span class="tag sure">VERIFIED</span> Source code is the one exception: it changes only in a per-ticket worktree, <code>&lt;worktreeRoot&gt;/&lt;repoId&gt;-&lt;ticket&gt;/</code>, all gathered under one folder (<code>paths.worktreeRoot</code>, default <code>worktrees</code> next to the profile, never inside a repository).</p>
+<figure class="fig">
+<pre><code>my-project/
+├─ sdlc.profile.json                 ← you: the project contract
+├─ rules/project.json                ← you: optional project rulepack
+├─ extensions/&lt;family&gt;.json          ← you: optional family nodes
+└─ .sdlc/tickets/                    ← paths.ticketRoot (example value)
+   └─ BUG-1/
+      ├─ state.json                  ← driver only, atomic replace
+      ├─ decisions.jsonl             ← driver only, append-only
+      ├─ ticket.md  environment.md   ← prepare
+      ├─ investigation.md  questions.md  plan.md
+      ├─ implementation.md  code-review.md
+      ├─ testcases.md  testcase-review.md
+      ├─ run-report.md  evidence/…   final-review.md
+      ├─ drafts/commit-msg.md  drafts/pr-body.md  …
+      ├─ reviews/round-1.md          ← driver (handback)
+      ├─ review-thread.md  triage.md  review-reply.md
+      ├─ packets/
+      │   ├─ coding.g1.worker.r1.md  coding.g1.worker.r1.rules.json
+      │   └─ coding.g2.worker.r1.md  …          ← reopened: generation 2
+      ├─ results/
+      │   ├─ coding.g1.worker.r1.md
+      │   └─ coding.g2.worker.r1.md
+      └─ HANDOFF.md                  ← controller, resume aid
+
+worktrees/my-repo-BUG-1/            ← worktree (paths.worktreeRoot + stack adapter "worktree")</code></pre>
+<figcaption>A ticket directory after one code-review loop and one PR review round. Packets and results keep every generation; artifacts keep only the latest content. <a class="cite" href="#src-dispatch-id">S15</a><a class="cite" href="#src-handback">S21</a></figcaption>
+</figure>
+<div class="tbl">
+  <p class="cap">Every file or folder: who writes it, when, and how it lives</p>
+  <table>
+    <tr><th>Path</th><th>Location</th><th>Written by</th><th>When</th><th>Lifecycle</th><th>Contract</th></tr>
+    <tr><td><code>sdlc.profile.json</code></td><td>project</td><td>you</td><td>once</td><td>edited by hand; `validate` before use</td><td><code>project-profile</code></td></tr>
+    <tr><td><code>rules/*.json, extensions/*.json, adapters (optional)</code></td><td>project</td><td>you</td><td>once</td><td>referenced by relative path from the profile</td><td><code>rulepack / extension / adapter</code></td></tr>
+    <tr><td><code>&lt;worktreeRoot&gt;/&lt;repoId&gt;-&lt;ticket&gt;/</code></td><td>worktree root</td><td>prepare unit (stack adapter `worktree`)</td><td>prepare</td><td>`paths.worktreeRoot` (default `worktrees`, relative to the profile, outside every repo); bound with `sdlc worktree`, which refuses any other folder; the only place source is changed</td><td><code>receipt</code></td></tr>
+    <tr><td><code>&lt;ticketRoot&gt;/&lt;ticket&gt;/state.json</code></td><td>ticket</td><td>driver</td><td>every state-changing command</td><td>replaced atomically (`state.tmp` → `state.json`)</td><td><code>state</code></td></tr>
+    <tr><td><code>&lt;ticketRoot&gt;/&lt;ticket&gt;/decisions.jsonl</code></td><td>ticket</td><td>driver</td><td>every event</td><td>append-only, never rewritten</td><td><code>decision-event</code></td></tr>
+    <tr><td><code>ticket.md, environment.md</code></td><td>ticket</td><td>prepare unit</td><td>prepare</td><td>overwritten if prepare reruns</td><td><code>node-artifact</code></td></tr>
+    <tr class="hl"><td><code>investigation.md · requirements.md · impact.md · questions.md · plan.md</code></td><td>ticket</td><td>analysis units</td><td>layer 1</td><td>overwritten in place on rerun (no archive)</td><td><code>node-artifact</code></td></tr>
+    <tr class="hl"><td><code>implementation.md · code-review.md · testcases.md · testcase-review.md</code></td><td>ticket</td><td>layer 2 units</td><td>layer 2</td><td>overwritten in place on rerun</td><td><code>node-artifact</code></td></tr>
+    <tr class="hl"><td><code>run-report.md · evidence/** · final-review.md · drafts/&lt;name&gt;.md</code></td><td>ticket</td><td>layer 3 units</td><td>layer 3</td><td>overwritten in place on rerun</td><td><code>node-artifact</code></td></tr>
+    <tr><td><code>reviews/round-&lt;N&gt;.md</code></td><td>ticket</td><td>driver `handback`</td><td>each PR review round</td><td>one file per round, kept</td><td><code>decision-event</code></td></tr>
+    <tr><td><code>review-thread.md · triage.md · review-reply.md</code></td><td>ticket</td><td>after-PR units</td><td>layer 4</td><td>overwritten each round</td><td><code>node-artifact</code></td></tr>
+    <tr><td><code>packets/&lt;node&gt;.g&lt;G&gt;.&lt;unit&gt;.r&lt;R&gt;.md + .rules.json</code></td><td>ticket</td><td>driver `packet`</td><td>each dispatch</td><td>unique name per generation and round: never overwritten</td><td><code>packet</code></td></tr>
+    <tr><td><code>results/&lt;node&gt;.g&lt;G&gt;.&lt;unit&gt;.r&lt;R&gt;.md</code></td><td>ticket</td><td>unit</td><td>each dispatch</td><td>unique name: never overwritten; digest pinned in state</td><td><code>result-file</code></td></tr>
+    <tr><td><code>HANDOFF.md</code></td><td>ticket</td><td>controller</td><td>after code-review and execute-and-evidence</td><td>overwritten; resume aid only</td><td>—</td></tr>
+  </table>
+</div>
+
+<h3 id="file-rules">The rules files follow</h3>
+<ol class="findings">
+  <li><strong>One writer per file.</strong> <code>state.json</code> and <code>decisions.jsonl</code> are written only by the driver. Artifacts are written only by their node's worker. Units never touch state. <a class="cite" href="#src-save">S8</a><a class="cite" href="#src-log">S9</a> <span class="tag sure">VERIFIED</span></li>
+  <li><strong>Messages are immutable.</strong> Packet, rules and result names carry generation and round, so a rerun adds files and never overwrites. The unit record pins the result's sha256. <a class="cite" href="#src-dispatch-id">S15</a><a class="cite" href="#src-record">S16</a> <span class="tag sure">VERIFIED</span></li>
+  <li><strong>Artifacts are mutable.</strong> A rerun overwrites <code>plan.md</code> in place, and nothing archives the previous generation. The approved digest stays only in <code>artifactDigests</code>. <a class="cite" href="#src-gate-effects">S19</a> <span class="tag sure">VERIFIED</span></li>
+  <li><strong>Nothing is deleted.</strong> Invalidation changes records, not files; the stale artifact stays on disk until the rerun overwrites it, which is the root of R1. <a class="cite" href="#src-invalidate">S20</a> <span class="tag sure">VERIFIED</span></li>
+  <li><strong>Review inputs are copied in.</strong> <code>handback</code> copies the exported review to <code>reviews/round-N</code> and logs its digest, so the ticket does not depend on the original file. <a class="cite" href="#src-handback">S21</a> <span class="tag sure">VERIFIED</span></li>
+  <li><strong>The repository is touched only by <code>coding</code></strong> (mutability <code>source</code>). What ships from it is pinned by the subject digest and receipt. <a class="cite" href="#src-graph-coding">S2</a><a class="cite" href="#src-subject">S10</a> <span class="tag sure">VERIFIED</span></li>
+</ol>
+<div class="callout warn"><strong>Suggested fix for mutable artifacts:</strong> on <code>invalidate</code>, move each stale node's artifacts to <code>archive/g&lt;N&gt;/</code>. The rerun must then recreate them, which closes R1, and you get a readable history per generation for free.</div>
+</section>
+
+<section id="nodes-ref">
+<h2>Node reference</h2>
+<p>All 17 core nodes, generated from <code>graph/lifecycle.json</code>. A bug ticket runs 11 of them, a feature ticket 12, and a bug with one review round 14. Families add nodes at the two slots after <code>code-review</code> and after <code>execute-and-evidence</code>. <a class="cite" href="#src-graph-order">S1</a></p>
+<div class="tbl">
+  <p class="cap">Analysis · bug (investigate) or feature (requirement)</p>
+  <table>
+    <tr><th>Node</th><th>Runs when</th><th>Requires</th><th>Produces</th><th>Units (tier)</th><th>Reviewer</th><th>Boundary</th><th>Gates</th><th>Rule phases</th><th>Artifacts</th><th>Gate effects</th></tr>
+    <tr><td><code>prepare</code></td><td>always</td><td>—</td><td>context, environment, ticket-authority</td><td>worker (routine)</td><td>—</td><td>controller</td><td>G7</td><td>—</td><td><code>ticket.md</code>, <code>environment.md</code></td><td>—</td></tr>
+    <tr><td><code>investigate</code></td><td>kind=bug</td><td>environment, ticket-authority</td><td>analysis</td><td>worker (deep)</td><td>—</td><td>controller</td><td>G1 G7</td><td>—</td><td><code>investigation.md</code></td><td>—</td></tr>
+    <tr><td><code>fix-plan</code></td><td>kind=bug</td><td>analysis</td><td>approved-plan, review-scope</td><td>worker (deep)</td><td>—</td><td>user</td><td>G3</td><td>design</td><td><code>plan.md</code></td><td>—</td></tr>
+    <tr><td><code>requirement-analysis</code></td><td>kind=feature</td><td>environment, ticket-authority</td><td>analysis</td><td>worker (routine)</td><td>deep</td><td>controller</td><td>G1</td><td>—</td><td><code>requirements.md</code></td><td>—</td></tr>
+    <tr><td><code>impact-analysis</code></td><td>kind=feature</td><td>analysis</td><td>impact</td><td>worker (routine)</td><td>—</td><td>controller</td><td>—</td><td>—</td><td><code>impact.md</code></td><td>—</td></tr>
+    <tr><td><code>feature-plan</code></td><td>kind=feature</td><td>analysis, impact</td><td>approved-plan, review-scope</td><td>worker (routine)</td><td>—</td><td>user</td><td>G3</td><td>design</td><td><code>plan.md</code></td><td>—</td></tr>
+  </table>
+</div>
+<div class="tbl">
+  <p class="cap">Implementation and review</p>
+  <table>
+    <tr><th>Node</th><th>Runs when</th><th>Requires</th><th>Produces</th><th>Units (tier)</th><th>Reviewer</th><th>Boundary</th><th>Gates</th><th>Rule phases</th><th>Artifacts</th><th>Gate effects</th></tr>
+    <tr><td><code>coding</code></td><td>always</td><td>approved-plan, review-scope</td><td>source-change</td><td>worker (routine)</td><td>—</td><td>controller</td><td>G6 G7</td><td>code</td><td><code>implementation.md</code></td><td>subjectNode</td></tr>
+    <tr><td><code>code-review</code></td><td>always</td><td>source-change</td><td>code-reviewed</td><td>mechanical-review (deep), semantic-review (deep)</td><td>—</td><td>controller</td><td>G4</td><td>code</td><td><code>code-review.md</code></td><td>loopBackTo:coding</td></tr>
+    <tr><td><code>testcase</code></td><td>always</td><td>approved-plan</td><td>testcases</td><td>worker (routine)</td><td>—</td><td>controller</td><td>G5</td><td>test</td><td><code>testcases.md</code></td><td>—</td></tr>
+    <tr><td><code>testcase-review</code></td><td>always</td><td>testcases</td><td>reviewed-testcases</td><td>worker (deep)</td><td>—</td><td>controller</td><td>G4 G5</td><td>test</td><td><code>testcase-review.md</code></td><td>loopBackTo:testcase</td></tr>
+  </table>
+</div>
+<div class="tbl">
+  <p class="cap">Verification and delivery</p>
+  <table>
+    <tr><th>Node</th><th>Runs when</th><th>Requires</th><th>Produces</th><th>Units (tier)</th><th>Reviewer</th><th>Boundary</th><th>Gates</th><th>Rule phases</th><th>Artifacts</th><th>Gate effects</th></tr>
+    <tr><td><code>execute-and-evidence</code></td><td>always</td><td>source-change, reviewed-testcases, code-reviewed</td><td>evidence</td><td>worker (routine)</td><td>deep</td><td>controller</td><td>G6 G7</td><td>evidence</td><td><code>run-report.md</code></td><td>—</td></tr>
+    <tr><td><code>final-review</code></td><td>always</td><td>source-change, code-reviewed, evidence</td><td>receipts</td><td>worker (deep)</td><td>—</td><td>controller</td><td>G5</td><td>design, code, test, evidence, delivery</td><td><code>final-review.md</code></td><td>subjectNode, issuesReceipts</td></tr>
+    <tr><td><code>delivery-drafts</code></td><td>always</td><td>receipts, evidence</td><td>drafts</td><td>worker (routine)</td><td>—</td><td>controller</td><td>—</td><td>delivery</td><td><code>@delivery.drafts</code></td><td>—</td></tr>
+    <tr><td><code>deliverable-ready</code></td><td>always</td><td>drafts, receipts</td><td>release-ready</td><td>none (controller)</td><td>—</td><td>user</td><td>G7</td><td>—</td><td>—</td><td>checksReceipts</td></tr>
+  </table>
+</div>
+<div class="tbl">
+  <p class="cap">After PR · review-fix (reuses the main graph through reopen)</p>
+  <table>
+    <tr><th>Node</th><th>Runs when</th><th>Requires</th><th>Produces</th><th>Units (tier)</th><th>Reviewer</th><th>Boundary</th><th>Gates</th><th>Rule phases</th><th>Artifacts</th><th>Gate effects</th></tr>
+    <tr><td><code>read-review</code></td><td>reviewRound=True</td><td>—</td><td>review-thread</td><td>worker (routine)</td><td>—</td><td>controller</td><td>G7</td><td>—</td><td><code>review-thread.md</code></td><td>—</td></tr>
+    <tr><td><code>triage-review</code></td><td>reviewRound=True</td><td>review-thread</td><td>triage</td><td>worker (deep)</td><td>deep</td><td>user</td><td>G3</td><td>—</td><td><code>triage.md</code></td><td>reopens</td></tr>
+    <tr><td><code>respond-review</code></td><td>reviewRound=True</td><td>triage, release-ready</td><td>review-reply</td><td>worker (routine)</td><td>—</td><td>user</td><td>—</td><td>—</td><td><code>review-reply.md</code></td><td>—</td></tr>
+  </table>
+</div>
+</section>
+
+<section id="review-points">
+<h2>What to fix before relying on it</h2>
+<p>Found while reading the code for this guide on 2026-11-04. None of these is caught by the current 52 tests. <a class="cite" href="#src-test-cycle">S30</a></p>
+<div class="tbl">
+  <p class="cap">Review points, most severe first</p>
+  <table>
+    <tr><th>Id</th><th>Severity</th><th>Problem</th><th>Detail and suggested fix</th></tr>
+    <tr class="hl"><td><code>R1</code></td><td><span class="sev high">High</span></td><td><strong>A rerun node can pass with the previous generation&#x27;s artifact</strong></td><td>On a reopen, artifact files stay on disk and the gate only checks <code>is_file()</code> <a class="cite" href="#src-absent">S18</a>. <code>artifactDigests</code> is recorded but never compared with the previous generation, so a worker that forgets to rewrite <code>plan.md</code> still passes. Fix: refuse approval when a stale node's artifact digest equals its last approved digest, unless the controller passes <code>--unchanged-ok</code>.</td></tr>
+    <tr class="hl"><td><code>R2</code></td><td><span class="sev high">High</span></td><td><strong>Receipt ignores the contents of new untracked files</strong></td><td>The subject digest hashes HEAD, <code>git diff HEAD</code> and only the <strong>names</strong> of untracked files <a class="cite" href="#src-subject">S10</a>. Editing a newly created (untracked) file after final-review does not break the receipt. Fix: hash each untracked file's content, or <code>git add -N</code> the intended paths first.</td></tr>
+    <tr><td><code>R3</code></td><td><span class="sev med">Medium</span></td><td><strong>Node inputs are implicit</strong></td><td>A token says a predecessor is done, but the packet lists only the node's own outputs <a class="cite" href="#src-dispatch-id">S15</a>. A unit finds <code>plan.md</code> or <code>investigation.md</code> by convention. Fix: derive an <code>inputs</code> list per node (token → producer's artifacts, see the token table) and render it into the packet.</td></tr>
+    <tr><td><code>R4</code></td><td><span class="sev med">Medium</span></td><td><strong>Artifact shape is prose-only</strong></td><td>Required sections (<code>## Confirmed cause</code>, <code>## Condition → negative case</code>, <code>## Rule self-check</code>) live in node cards; the gate does not parse them. Fix: add <code>requiredSections</code> to node specs and check headings at the gate.</td></tr>
+    <tr><td><code>R5</code></td><td><span class="sev med">Medium</span></td><td><strong>No schema for graph/lifecycle.json, facts JSON or decision events</strong></td><td>Three of the contracts exist only as conventions; a typo in a graph key is silently ignored. Fix: add <code>graph.schema.json</code>, <code>facts.schema.json</code>, <code>decision-event.schema.json</code> and validate on load.</td></tr>
+    <tr><td><code>R6</code></td><td><span class="sev med">Medium</span></td><td><strong>Profile validation is lighter than the schema</strong></td><td>The schema says <code>additionalProperties: false</code>, but the built-in check does not enforce it <a class="cite" href="#src-profile-schema">S24</a>. Fix: validate with <code>jsonschema</code> when available, fall back to the light check.</td></tr>
+    <tr><td><code>R7</code></td><td><span class="sev low">Low</span></td><td><strong>Read commands write state</strong></td><td><code>status</code> and <code>plan</code> call <code>save()</code> <a class="cite" href="#src-plan-save">S14</a> to add records for nodes that newly entered the trace. Harmless today, but it makes a read a write. Fix: add missing records only in <code>handback</code>/<code>init</code>.</td></tr>
+    <tr><td><code>R8</code></td><td><span class="sev low">Low</span></td><td><strong>Decision log is not tamper-evident</strong></td><td><code>decisions.jsonl</code> is append-only by convention and never read back <a class="cite" href="#src-log">S9</a>. Fix: add <code>prevDigest</code> per line (hash chain) and verify it in <code>status</code>.</td></tr>
+  </table>
+</div>
+<div class="callout info"><strong>Suggested order:</strong> R1 and R2 first (they let wrong work pass a gate), then R3 and R4 (they make the node-to-node data contract explicit), then the schema work in R5–R6.</div>
+</section>
+
+<section id="glossary">
+<h2>Glossary</h2>
+<div class="tbl">
+  <p class="cap">Terms used in this guide</p>
+  <table>
+    <tr><th>Term</th><th>Meaning</th></tr>
+    <tr><td><strong>Controller</strong></td><td>The main Claude session running SKILL.md. Plans, dispatches, verifies, asks the user, closes nodes. Never does a unit's work.</td></tr>
+    <tr><td><strong>Driver</strong></td><td><code>sdlc.py</code> / <code>harness/</code>: the only writer of <code>state.json</code> and <code>decisions.jsonl</code>.</td></tr>
+    <tr><td><strong>Unit</strong></td><td>One fresh subagent run for one planned role of one node (worker or reviewer).</td></tr>
+    <tr><td><strong>Token</strong></td><td>An abstract name in <code>produces</code>/<code>requires</code> (e.g. <code>approved-plan</code>). The node-to-node control contract.</td></tr>
+    <tr><td><strong>Generation</strong></td><td>Run number of a node; +1 on every invalidate. Records of older generations no longer count.</td></tr>
+    <tr><td><strong>Dispatch id</strong></td><td><code>&lt;node&gt;.g&lt;G&gt;.&lt;unit&gt;.r&lt;R&gt;</code>: names a packet, its rules file and its result file.</td></tr>
+    <tr><td><strong>Subject digest</strong></td><td>sha256 over what would be shipped from a repo; pinned at subject nodes and in receipts.</td></tr>
+    <tr><td><strong>Receipt</strong></td><td>Per-repo proof that final-review approved this exact subject, valid for a TTL.</td></tr>
+    <tr><td><strong>Boundary</strong></td><td>Who closes a node's G0: <code>controller</code> (recorded) or <code>user</code> (asked).</td></tr>
+    <tr><td><strong>Family</strong></td><td>Optional capability (e.g. IF) that adds nodes at a slot and rules; enabled per ticket.</td></tr>
+  </table>
+</div>
+</section>
+
+<section id="sources">
+  <h2>Sources</h2>
+  <ol class="sources">
+    <li id="src-graph-order">
+      <div class="src-head"><span class="src-id">S1</span><span class="src-type">Code</span>
+        <span class="src-title">Core graph order with the extension slots</span></div>
+      <div class="src-loc"><code>kaneki-sdlc-harness/graph/lifecycle.json:11-20</code> · draft v0.1.0, read 2026-11-04</div>
+      <blockquote class="src-quote"><code>  &quot;order&quot;: [
+    &quot;prepare&quot;,
+    &quot;investigate&quot;, &quot;fix-plan&quot;,
+    &quot;requirement-analysis&quot;, &quot;impact-analysis&quot;, &quot;feature-plan&quot;,
+    &quot;coding&quot;, &quot;code-review&quot;,
+    &quot;@slot:after-code-review&quot;,
+    &quot;testcase&quot;, &quot;testcase-review&quot;,
+    &quot;execute-and-evidence&quot;,
+    &quot;@slot:after-evidence&quot;,
+    &quot;final-review&quot;, &quot;delivery-drafts&quot;, &quot;deliverable-ready&quot;,</code></blockquote>
+    </li>
+    <li id="src-graph-coding">
+      <div class="src-head"><span class="src-id">S2</span><span class="src-type">Code</span>
+        <span class="src-title">Node spec of `coding`</span></div>
+      <div class="src-loc"><code>kaneki-sdlc-harness/graph/lifecycle.json:106-120</code> · draft v0.1.0, read 2026-11-04</div>
+      <blockquote class="src-quote"><code>    &quot;coding&quot;: {
+      &quot;layer&quot;: &quot;implementation&quot;,
+      &quot;purpose&quot;: &quot;Implement the approved plan in the ticket worktree; self-check every code-phase rule bound to the touched paths.&quot;,
+      &quot;requires&quot;: [&quot;approved-plan&quot;, &quot;review-scope&quot;],
+      &quot;produces&quot;: [&quot;source-change&quot;],
+      &quot;mutability&quot;: &quot;source&quot;,
+      &quot;units&quot;: [{&quot;id&quot;: &quot;worker&quot;, &quot;role&quot;: &quot;worker&quot;, &quot;tier&quot;: &quot;routine&quot;}],
+      &quot;boundary&quot;: &quot;controller&quot;,
+      &quot;gates&quot;: [&quot;G6&quot;, &quot;G7&quot;],
+      &quot;rulePhases&quot;: [&quot;code&quot;],
+      &quot;artifacts&quot;: [&quot;implementation.md&quot;],
+      &quot;subjectNode&quot;: true,
+      &quot;card&quot;: &quot;references/nodes/coding.md&quot;
+    },
+    &quot;code-review&quot;: {</code></blockquote>
+    </li>
+    <li id="src-graph-testcase">
+      <div class="src-head"><span class="src-id">S3</span><span class="src-type">Code</span>
+        <span class="src-title">`testcase` consumes the plan, not the code</span></div>
+      <div class="src-loc"><code>kaneki-sdlc-harness/graph/lifecycle.json:138-142</code> · draft v0.1.0, read 2026-11-04</div>
+      <blockquote class="src-quote"><code>    &quot;testcase&quot;: {
+      &quot;layer&quot;: &quot;implementation&quot;,
+      &quot;purpose&quot;: &quot;Derive test cases from the approved plan (not from the code) in the profile&#x27;s testcase format.&quot;,
+      &quot;requires&quot;: [&quot;approved-plan&quot;],
+      &quot;produces&quot;: [&quot;testcases&quot;],</code></blockquote>
+    </li>
+    <li id="src-dependents">
+      <div class="src-head"><span class="src-id">S4</span><span class="src-type">Code</span>
+        <span class="src-title">harness.graph.dependents — token walk for invalidation</span></div>
+      <div class="src-loc"><code>kaneki-sdlc-harness/harness/graph.py:101-112</code> · draft v0.1.0, read 2026-11-04</div>
+      <blockquote class="src-quote"><code>def dependents(graph: dict[str, Any], order: list[str], start: str) -&gt; list[str]:
+    &quot;&quot;&quot;`start` plus every later node that (transitively) consumes a token it produces.&quot;&quot;&quot;
+    if start not in order:
+        raise HarnessError(f&quot;{start} is not in this ticket&#x27;s trace&quot;)
+    stale = [start]
+    tokens = set(graph[&quot;nodes&quot;][start].get(&quot;produces&quot;, []))
+    for node_id in order[order.index(start) + 1:]:
+        spec = graph[&quot;nodes&quot;][node_id]
+        if tokens &amp; set(spec.get(&quot;requires&quot;, [])):
+            stale.append(node_id)
+            tokens |= set(spec.get(&quot;produces&quot;, []))
+    return stale</code></blockquote>
+    </li>
+    <li id="src-feeds">
+      <div class="src-head"><span class="src-id">S5</span><span class="src-type">Code</span>
+        <span class="src-title">Extension `feeds` adds tokens to core nodes&#x27; requires</span></div>
+      <div class="src-loc"><code>kaneki-sdlc-harness/harness/graph.py:41-47</code> · draft v0.1.0, read 2026-11-04</div>
+      <blockquote class="src-quote"><code>    # `feeds`: an extension node hands its tokens to named core nodes, so they wait for it (inert when the
+    # family is off, because no node in the trace produces the token).
+    for node_id, spec in list(nodes.items()):
+        for target in spec.get(&quot;feeds&quot;, []):
+            if target not in nodes:
+                raise HarnessError(f&quot;{node_id} feeds unknown node {target}&quot;)
+            nodes[target] = {**nodes[target], &quot;requires&quot;: list(dict.fromkeys(nodes[target].get(&quot;requires&quot;, []) + spec[&quot;produces&quot;]))}</code></blockquote>
+    </li>
+    <li id="src-missing">
+      <div class="src-head"><span class="src-id">S6</span><span class="src-type">Code</span>
+        <span class="src-title">harness.state.missing_prerequisites — readiness by token</span></div>
+      <div class="src-loc"><code>kaneki-sdlc-harness/harness/state.py:82-94</code> · draft v0.1.0, read 2026-11-04</div>
+      <blockquote class="src-quote"><code>def missing_prerequisites(graph: dict[str, Any], order: list[str], state: dict[str, Any], node: str) -&gt; list[str]:
+    &quot;&quot;&quot;Readiness = every token the node requires is produced by a settled node of the trace.
+    A token no node in the trace produces is inert (e.g. a family-only token).&quot;&quot;&quot;
+    producers: dict[str, list[str]] = {}
+    for n in order:
+        for tok in graph[&quot;nodes&quot;][n].get(&quot;produces&quot;, []):
+            producers.setdefault(tok, []).append(n)
+    missing = []
+    for tok in graph[&quot;nodes&quot;][node].get(&quot;requires&quot;, []):
+        owners = [n for n in producers.get(tok, []) if n != node]
+        if owners and not any(settled(state, n) for n in owners):
+            missing.append(f&quot;{tok} (from {&#x27;, &#x27;.join(owners)})&quot;)
+    return missing</code></blockquote>
+    </li>
+    <li id="src-newrecord">
+      <div class="src-head"><span class="src-id">S7</span><span class="src-type">Code</span>
+        <span class="src-title">New node record</span></div>
+      <div class="src-loc"><code>kaneki-sdlc-harness/harness/state.py:67-68</code> · draft v0.1.0, read 2026-11-04</div>
+      <blockquote class="src-quote"><code>def new_node_record() -&gt; dict[str, Any]:
+    return {&quot;status&quot;: &quot;pending&quot;, &quot;generation&quot;: 1, &quot;attempts&quot;: 0, &quot;units&quot;: [], &quot;closedAt&quot;: None, &quot;verdict&quot;: None}</code></blockquote>
+    </li>
+    <li id="src-save">
+      <div class="src-head"><span class="src-id">S8</span><span class="src-type">Code</span>
+        <span class="src-title">Atomic state write with Windows retry</span></div>
+      <div class="src-loc"><code>kaneki-sdlc-harness/harness/state.py:46-57</code> · draft v0.1.0, read 2026-11-04</div>
+      <blockquote class="src-quote"><code>    def save(self, state: dict[str, Any]) -&gt; None:
+        self.dir.mkdir(parents=True, exist_ok=True)
+        tmp = self.state_path.with_suffix(&quot;.tmp&quot;)
+        tmp.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding=&quot;utf-8&quot;)
+        for attempt in range(20):  # Windows: AV/indexer can hold the target for a moment
+            try:
+                tmp.replace(self.state_path)
+                return
+            except PermissionError:
+                if attempt == 19:
+                    raise HarnessError(f&quot;G7: cannot replace {self.state_path} (file locked)&quot;)
+                time.sleep(0.05 * (attempt + 1))</code></blockquote>
+    </li>
+    <li id="src-log">
+      <div class="src-head"><span class="src-id">S9</span><span class="src-type">Code</span>
+        <span class="src-title">Append-only decision log</span></div>
+      <div class="src-loc"><code>kaneki-sdlc-harness/harness/state.py:59-64</code> · draft v0.1.0, read 2026-11-04</div>
+      <blockquote class="src-quote"><code>    def log(self, event: dict[str, Any]) -&gt; dict[str, Any]:
+        self.dir.mkdir(parents=True, exist_ok=True)
+        event = {&quot;at&quot;: now(), **event}
+        with self.log_path.open(&quot;a&quot;, encoding=&quot;utf-8&quot;) as fh:
+            fh.write(json.dumps(event, ensure_ascii=False) + &quot;\n&quot;)
+        return event</code></blockquote>
+    </li>
+    <li id="src-subject">
+      <div class="src-head"><span class="src-id">S10</span><span class="src-type">Code</span>
+        <span class="src-title">Subject digest of a repository</span></div>
+      <div class="src-loc"><code>kaneki-sdlc-harness/harness/state.py:107-112</code> · draft v0.1.0, read 2026-11-04</div>
+      <blockquote class="src-quote"><code>def repo_subject(path: str) -&gt; dict[str, str]:
+    &quot;&quot;&quot;Digest of what would be shipped: HEAD + uncommitted diff + untracked file list.&quot;&quot;&quot;
+    head = _git(path, &quot;rev-parse&quot;, &quot;HEAD&quot;).strip()
+    diff = _git(path, &quot;diff&quot;, &quot;HEAD&quot;, &quot;--binary&quot;)
+    untracked = _git(path, &quot;ls-files&quot;, &quot;--others&quot;, &quot;--exclude-standard&quot;)
+    return {&quot;head&quot;: head, &quot;subject&quot;: sha256_text(head + &quot;\n&quot; + diff + &quot;\n&quot; + untracked)}</code></blockquote>
+    </li>
+    <li id="src-checkreceipts">
+      <div class="src-head"><span class="src-id">S11</span><span class="src-type">Code</span>
+        <span class="src-title">Receipt check at deliverable-ready</span></div>
+      <div class="src-loc"><code>kaneki-sdlc-harness/harness/state.py:125-140</code> · draft v0.1.0, read 2026-11-04</div>
+      <blockquote class="src-quote"><code>def check_receipts(state: dict[str, Any], min_hours_left: int) -&gt; list[str]:
+    problems = []
+    receipts = state.get(&quot;receipts&quot;) or {}
+    limit = datetime.now(timezone.utc) + timedelta(hours=min_hours_left)
+    for repo in state[&quot;context&quot;][&quot;repositories&quot;]:
+        rec = receipts.get(repo[&quot;id&quot;])
+        if not rec:
+            problems.append(f&quot;{repo[&#x27;id&#x27;]}: no receipt (rerun final-review)&quot;)
+            continue
+        if datetime.fromisoformat(rec[&quot;expiresAt&quot;]) &lt; limit:
+            problems.append(f&quot;{repo[&#x27;id&#x27;]}: receipt expires {rec[&#x27;expiresAt&#x27;]} (&lt; {min_hours_left}h left) - re-issue from final-review, do not invalidate&quot;)
+            continue
+        current = repo_subject(repo.get(&quot;worktree&quot;) or repo[&quot;path&quot;])[&quot;subject&quot;]
+        if current != rec[&quot;subject&quot;]:
+            problems.append(f&quot;{repo[&#x27;id&#x27;]}: checkout changed since the receipt - invalidate the node that owns the change&quot;)
+    return problems</code></blockquote>
+    </li>
+    <li id="src-ticketroot">
+      <div class="src-head"><span class="src-id">S12</span><span class="src-type">Code</span>
+        <span class="src-title">Ticket root resolves relative to the profile file</span></div>
+      <div class="src-loc"><code>kaneki-sdlc-harness/harness/cli.py:35-37</code> · draft v0.1.0, read 2026-11-04</div>
+      <blockquote class="src-quote"><code>def ticket_root(profile: dict[str, Any], pdir: Path) -&gt; Path:
+    root = Path(profile[&quot;paths&quot;][&quot;ticketRoot&quot;])
+    return root if root.is_absolute() else (pdir / root).resolve()</code></blockquote>
+    </li>
+    <li id="src-artifacts-expand">
+      <div class="src-head"><span class="src-id">S13</span><span class="src-type">Code</span>
+        <span class="src-title">`@delivery.drafts` expands to drafts/&lt;name&gt;.md</span></div>
+      <div class="src-loc"><code>kaneki-sdlc-harness/harness/cli.py:62-69</code> · draft v0.1.0, read 2026-11-04</div>
+      <blockquote class="src-quote"><code>    def artifacts(self, node: str) -&gt; list[str]:
+        names = []
+        for name in self.spec(node).get(&quot;artifacts&quot;, []):
+            if name == &quot;@delivery.drafts&quot;:
+                names += [f&quot;drafts/{d}.md&quot; for d in self.profile[&quot;delivery&quot;].get(&quot;drafts&quot;, [])]
+            else:
+                names.append(name)
+        return names</code></blockquote>
+    </li>
+    <li id="src-plan-save">
+      <div class="src-head"><span class="src-id">S14</span><span class="src-type">Code</span>
+        <span class="src-title">`plan` saves state</span></div>
+      <div class="src-loc"><code>kaneki-sdlc-harness/harness/cli.py:160-164</code> · draft v0.1.0, read 2026-11-04</div>
+      <blockquote class="src-quote"><code>    }
+    if args.card:
+        plan = {k: v for k, v in plan.items() if v is not None}
+    s.save()
+    out(plan)</code></blockquote>
+    </li>
+    <li id="src-dispatch-id">
+      <div class="src-head"><span class="src-id">S15</span><span class="src-type">Code</span>
+        <span class="src-title">Dispatch id, rules file and result path</span></div>
+      <div class="src-loc"><code>kaneki-sdlc-harness/harness/cli.py:195-199</code> · draft v0.1.0, read 2026-11-04</div>
+      <blockquote class="src-quote"><code>    round_no = 1 + sum(1 for u in rec[&quot;units&quot;] if u[&quot;unit&quot;] == args.unit and u[&quot;generation&quot;] == rec[&quot;generation&quot;])
+    dispatch = f&quot;{args.node}.g{rec[&#x27;generation&#x27;]}.{args.unit}.r{round_no}&quot;
+    rules_path = pdir / f&quot;{dispatch}.rules.json&quot;
+    rules_path.write_text(json.dumps(rules, indent=2, ensure_ascii=False), encoding=&quot;utf-8&quot;)
+    result_path = s.ticket.dir / &quot;results&quot; / f&quot;{dispatch}.md&quot;</code></blockquote>
+    </li>
+    <li id="src-record">
+      <div class="src-head"><span class="src-id">S16</span><span class="src-type">Code</span>
+        <span class="src-title">`record` refuses a missing result or a wrong model</span></div>
+      <div class="src-loc"><code>kaneki-sdlc-harness/harness/cli.py:240-249</code> · draft v0.1.0, read 2026-11-04</div>
+      <blockquote class="src-quote"><code>    result = Path(args.result)
+    if not result.is_file():
+        raise HarnessError(f&quot;G7: result file missing: {result} (the controller never fills a missing unit)&quot;)
+    tier = next((u[&quot;tier&quot;] for u in spec.get(&quot;units&quot;, []) if u[&quot;id&quot;] == args.unit), spec.get(&quot;reviewer&quot;, {}).get(&quot;tier&quot;))
+    if args.model != s.model(tier):
+        raise HarnessError(f&quot;{args.node}/{args.unit} is planned on {s.model(tier)} ({tier}); a {args.model} record is refused&quot;)
+    entry = {&quot;unit&quot;: args.unit, &quot;generation&quot;: rec[&quot;generation&quot;], &quot;model&quot;: args.model, &quot;status&quot;: args.status,
+             &quot;result&quot;: str(result), &quot;resultDigest&quot;: sha256_file(result), &quot;tokens&quot;: args.tokens,
+             &quot;verdict&quot;: args.verdict, &quot;failureClass&quot;: args.failure_class, &quot;at&quot;: now()}
+    rec[&quot;units&quot;].append(entry)</code></blockquote>
+    </li>
+    <li id="src-gate">
+      <div class="src-head"><span class="src-id">S17</span><span class="src-type">Code</span>
+        <span class="src-title">`gate` readiness and loop cap</span></div>
+      <div class="src-loc"><code>kaneki-sdlc-harness/harness/cli.py:262-277</code> · draft v0.1.0, read 2026-11-04</div>
+      <blockquote class="src-quote"><code>        raise HarnessError(f&quot;{node} already closed at generation {rec[&#x27;generation&#x27;]} (gate calls are not re-asked)&quot;)
+    missing = missing_prerequisites(s.graph, s.order, s.state, node)
+    if missing:
+        raise HarnessError(f&quot;G7: {node} is not ready; missing {missing}&quot;)
+    cap = s.profile.get(&quot;gates&quot;, {}).get(&quot;loopCap&quot;, 2)
+    current = [u for u in rec[&quot;units&quot;] if u[&quot;generation&quot;] == rec[&quot;generation&quot;]]
+    result: dict[str, Any] = {&quot;node&quot;: node}
+
+    if args.status == &quot;needs-changes&quot;:
+        back = spec.get(&quot;loopBackTo&quot;)
+        if not back:
+            raise HarnessError(f&quot;{node} has no loop-back; use rejected + invalidate&quot;)
+        attempts = rec[&quot;attempts&quot;] + 1
+        if attempts &gt;= cap and args.actor != &quot;user&quot;:
+            raise HarnessError(f&quot;G4: {node} NEEDS CHANGES after {attempts} rounds (cap {cap}); ask the user, then repeat with --actor user&quot;)
+        stale = _invalidate(s, back, f&quot;{node} NEEDS CHANGES: {args.note or &#x27;&#x27;}&quot;.strip())</code></blockquote>
+    </li>
+    <li id="src-absent">
+      <div class="src-head"><span class="src-id">S18</span><span class="src-type">Code</span>
+        <span class="src-title">`gate` approval checks: units, reviewer, artifact existence, user boundary</span></div>
+      <div class="src-loc"><code>kaneki-sdlc-harness/harness/cli.py:280-297</code> · draft v0.1.0, read 2026-11-04</div>
+      <blockquote class="src-quote"><code>    elif args.status == &quot;approved&quot;:
+        planned = [u[&quot;id&quot;] for u in spec.get(&quot;units&quot;, [])] + ([&quot;reviewer&quot;] if spec.get(&quot;reviewer&quot;) else [])
+        done_units = {u[&quot;unit&quot;] for u in current if u[&quot;status&quot;] == &quot;ok&quot;}
+        lacking = [u for u in planned if u not in done_units]
+        if lacking:
+            raise HarnessError(f&quot;G7: {node} has no ok record for units {lacking} at generation {rec[&#x27;generation&#x27;]}&quot;)
+        if spec.get(&quot;reviewer&quot;):
+            last_rev = [u for u in current if u[&quot;unit&quot;] == &quot;reviewer&quot;][-1]
+            if last_rev.get(&quot;verdict&quot;) == &quot;FAIL&quot;:
+                raise HarnessError(f&quot;{node}: last reviewer verdict is FAIL ({last_rev.get(&#x27;failureClass&#x27;)}); fix and re-review&quot;)
+        absent = [a for a in s.artifacts(node) if not (s.ticket.dir / a).is_file()]
+        if absent:
+            raise HarnessError(f&quot;G7: {node} artifacts missing: {absent}&quot;)
+        boundary = spec[&quot;boundary&quot;]
+        if boundary == &quot;user&quot; and node in (&quot;fix-plan&quot;, &quot;feature-plan&quot;) and s.profile.get(&quot;gates&quot;, {}).get(&quot;autoSkipPlanApproval&quot;):
+            boundary = &quot;controller&quot;
+        if boundary == &quot;user&quot; and args.actor != &quot;user&quot;:
+            raise HarnessError(f&quot;G0: {node} closes on the user&#x27;s approval; ask Proceed / Re-run / Stop, then --actor user&quot;)</code></blockquote>
+    </li>
+    <li id="src-gate-effects">
+      <div class="src-head"><span class="src-id">S19</span><span class="src-type">Code</span>
+        <span class="src-title">`gate` side effects: subject, receipts, artifact digests, reopen</span></div>
+      <div class="src-loc"><code>kaneki-sdlc-harness/harness/cli.py:298-322</code> · draft v0.1.0, read 2026-11-04</div>
+      <blockquote class="src-quote"><code>        if spec.get(&quot;reopens&quot;):
+            if not args.reopen:
+                raise HarnessError(f&quot;{node}: pass --reopen &lt;earliest invalidated node&gt; or --reopen none&quot;)
+        if spec.get(&quot;subjectNode&quot;):
+            rec[&quot;subject&quot;] = {r[&quot;id&quot;]: repo_subject(r.get(&quot;worktree&quot;) or r[&quot;path&quot;]) for r in s.ctx[&quot;repositories&quot;]}
+            result[&quot;subject&quot;] = rec[&quot;subject&quot;]
+        if spec.get(&quot;issuesReceipts&quot;):
+            ttl = s.profile[&quot;delivery&quot;].get(&quot;receiptTtlHours&quot;, 72)
+            result[&quot;receipts&quot;] = issue_receipts(s.state, ttl)
+        if spec.get(&quot;checksReceipts&quot;):
+            problems = check_receipts(s.state, s.profile[&quot;delivery&quot;].get(&quot;minHoursLeft&quot;, 24))
+            if problems:
+                raise HarnessError(&quot;G7: receipts not shippable: &quot; + &quot;; &quot;.join(problems))
+        rec[&quot;artifactDigests&quot;] = {a: sha256_file(s.ticket.dir / a) for a in s.artifacts(node)}
+        rec[&quot;status&quot;] = &quot;done&quot;
+        rec[&quot;verdict&quot;] = &quot;approved&quot;
+        rec[&quot;closedAt&quot;] = now()
+        result[&quot;verdict&quot;] = &quot;approved&quot;
+        if spec.get(&quot;reopens&quot;) and args.reopen != &quot;none&quot;:
+            result[&quot;reopened&quot;] = args.reopen
+            result[&quot;stale&quot;] = _invalidate(s, args.reopen, f&quot;review round {s.ctx[&#x27;reviewRound&#x27;]}: {args.note or &#x27;&#x27;}&quot;.strip())
+    else:  # rejected / stopped
+        rec[&quot;verdict&quot;] = args.status
+        result[&quot;verdict&quot;] = args.status
+</code></blockquote>
+    </li>
+    <li id="src-invalidate">
+      <div class="src-head"><span class="src-id">S20</span><span class="src-type">Code</span>
+        <span class="src-title">_invalidate — stale, bump generation, drop receipts</span></div>
+      <div class="src-loc"><code>kaneki-sdlc-harness/harness/cli.py:330-344</code> · draft v0.1.0, read 2026-11-04</div>
+      <blockquote class="src-quote"><code>def _invalidate(s: Session, node: str, reason: str) -&gt; list[str]:
+    stale = G.dependents(s.graph, s.order, node)
+    for n in stale:
+        rec = s.state[&quot;nodes&quot;][n]
+        if rec[&quot;status&quot;] == &quot;pending&quot; and rec[&quot;generation&quot;] == 1 and not rec[&quot;units&quot;]:
+            continue  # never ran: nothing to supersede
+        rec[&quot;status&quot;] = &quot;stale&quot;
+        rec[&quot;generation&quot;] += 1
+        rec[&quot;verdict&quot;] = None
+        if n != stale[0]:
+            rec[&quot;attempts&quot;] = 0
+    if any(s.spec(n).get(&quot;issuesReceipts&quot;) for n in stale):
+        s.state[&quot;receipts&quot;] = {}
+    s.ticket.log({&quot;event&quot;: &quot;invalidate&quot;, &quot;node&quot;: node, &quot;stale&quot;: stale, &quot;reason&quot;: reason})
+    return stale</code></blockquote>
+    </li>
+    <li id="src-handback">
+      <div class="src-head"><span class="src-id">S21</span><span class="src-type">Code</span>
+        <span class="src-title">`handback` copies the review and restarts the review nodes</span></div>
+      <div class="src-loc"><code>kaneki-sdlc-harness/harness/cli.py:376-389</code> · draft v0.1.0, read 2026-11-04</div>
+      <blockquote class="src-quote"><code>    src = Path(args.review_file)
+    if not src.is_file():
+        raise HarnessError(f&quot;review file not found: {src}&quot;)
+    s.ctx[&quot;reviewRound&quot;] += 1
+    s.ctx[&quot;maturity&quot;] = &quot;pr_opened&quot;
+    rnd = s.ctx[&quot;reviewRound&quot;]
+    dest = s.ticket.dir / &quot;reviews&quot; / f&quot;round-{rnd}{src.suffix or &#x27;.md&#x27;}&quot;
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(src.read_bytes())
+    for node in (&quot;read-review&quot;, &quot;triage-review&quot;, &quot;respond-review&quot;):
+        rec = s.state[&quot;nodes&quot;].setdefault(node, new_node_record())
+        if rec[&quot;units&quot;] or rec[&quot;status&quot;] == &quot;done&quot;:
+            rec.update({&quot;status&quot;: &quot;pending&quot;, &quot;generation&quot;: rec[&quot;generation&quot;] + 1, &quot;verdict&quot;: None, &quot;attempts&quot;: 0})
+    s.save()</code></blockquote>
+    </li>
+    <li id="src-template-return">
+      <div class="src-head"><span class="src-id">S22</span><span class="src-type">Code</span>
+        <span class="src-title">Packet return contract</span></div>
+      <div class="src-loc"><code>kaneki-sdlc-harness/skills/kaneki-flow/scripts/packet-template.md:38-47</code> · draft v0.1.0, read 2026-11-04</div>
+      <blockquote class="src-quote"><code>## Return contract
+
+Write the full result to the result file, then reply in ≤ 150 words: status, result file path, its
+sha256 (`sdlc digest --path &lt;file&gt;`), one line per blocking item.
+
+- Worker result: status · claims (OBSERVED/DERIVED/ASSUMED) · evidence pointers · artifact paths ·
+  checks run with results · open doubts (HIGH/LOW) · weakest link.
+- Reviewer result: verdict PASS/FAIL · failure class · blocking findings with evidence · rules or
+  units not covered · weakest link.
+</code></blockquote>
+    </li>
+    <li id="src-skill-loop">
+      <div class="src-head"><span class="src-id">S23</span><span class="src-type">Doc</span>
+        <span class="src-title">Controller loop: dispatch and record</span></div>
+      <div class="src-loc"><code>kaneki-sdlc-harness/skills/kaneki-flow/SKILL.md:30-40</code> · draft v0.1.0, read 2026-11-04</div>
+      <blockquote class="src-quote"><code>3. **Dispatch.** Per unit, write a facts JSON (`weakestClaim`, `observed`, `doubts`, `settled`,
+   `authorizedPaths`, and `findingsToFix` on a round two), then `$SDLC packet --ticket &lt;id&gt; --node &lt;n&gt; --unit &lt;u&gt; --facts &lt;file&gt;`.
+   Dispatch each unit as its `agentType` (`kaneki-worker` / `kaneki-deep`) to a distinct fresh subagent with one line:
+   *&quot;Read the packet at `&lt;path&gt;` (sha256 `&lt;packetDigest&gt;`) and execute it.&quot;* Units with disjoint outputs go in one
+   message. The controller never fills a missing unit.
+4. **Verify, then record.** Check the result file exists and its digest; spot-check the citations the
+   gate depends on (open the cited `path:line` yourself). Then
+   `$SDLC record --ticket &lt;id&gt; --node &lt;n&gt; --unit &lt;u&gt; --result &lt;file&gt; --model &lt;model&gt; --tokens &lt;n&gt; [--verdict ...]`.
+   A model other than the planned one is refused. Then the reviewer unit, if planned, over the latest results.
+   Reviewer FAIL `record`-class → fix the record and re-record; `artifact`-class → re-dispatch the failed
+   worker (resume the same agent when the host allows) then one more reviewer round.</code></blockquote>
+    </li>
+    <li id="src-profile-schema">
+      <div class="src-head"><span class="src-id">S24</span><span class="src-type">Spec</span>
+        <span class="src-title">Project profile contract (required keys)</span></div>
+      <div class="src-loc"><code>kaneki-sdlc-harness/contracts/project-profile.schema.json:1-8</code> · draft v0.1.0, read 2026-11-04</div>
+      <blockquote class="src-quote"><code>{
+  &quot;$schema&quot;: &quot;https://json-schema.org/draft/2020-12/schema&quot;,
+  &quot;$id&quot;: &quot;sdlc-project-profile@1&quot;,
+  &quot;title&quot;: &quot;Project profile&quot;,
+  &quot;description&quot;: &quot;Everything project-specific. The graph, node cards and driver never name a stack, platform, tracker or language; this file and the adapters it selects do.&quot;,
+  &quot;type&quot;: &quot;object&quot;,
+  &quot;required&quot;: [&quot;schemaVersion&quot;, &quot;project&quot;, &quot;paths&quot;, &quot;models&quot;, &quot;tracker&quot;, &quot;repositories&quot;, &quot;rulepacks&quot;, &quot;testcase&quot;, &quot;evidence&quot;, &quot;delivery&quot;],
+  &quot;properties&quot;: {</code></blockquote>
+    </li>
+    <li id="src-adapter-schema">
+      <div class="src-head"><span class="src-id">S25</span><span class="src-type">Spec</span>
+        <span class="src-title">Adapter contract (per-kind shapes)</span></div>
+      <div class="src-loc"><code>kaneki-sdlc-harness/contracts/adapter.schema.json:1-15</code> · draft v0.1.0, read 2026-11-04</div>
+      <blockquote class="src-quote"><code>{
+  &quot;$schema&quot;: &quot;https://json-schema.org/draft/2020-12/schema&quot;,
+  &quot;$id&quot;: &quot;sdlc-adapter@1&quot;,
+  &quot;title&quot;: &quot;Adapter&quot;,
+  &quot;description&quot;: &quot;An adapter is data plus instructions a unit reads. It never runs by itself; the unit executes what it describes under the packet&#x27;s limits.&quot;,
+  &quot;type&quot;: &quot;object&quot;,
+  &quot;required&quot;: [&quot;kind&quot;, &quot;id&quot;, &quot;description&quot;],
+  &quot;properties&quot;: {
+    &quot;kind&quot;: {&quot;enum&quot;: [&quot;tracker&quot;, &quot;stack&quot;, &quot;surface&quot;, &quot;delivery&quot;]},
+    &quot;id&quot;: {&quot;type&quot;: &quot;string&quot;},
+    &quot;description&quot;: {&quot;type&quot;: &quot;string&quot;},
+    &quot;config&quot;: {&quot;type&quot;: &quot;object&quot;}
+  },
+  &quot;allOf&quot;: [
+    {&quot;if&quot;: {&quot;properties&quot;: {&quot;kind&quot;: {&quot;const&quot;: &quot;tracker&quot;}}},</code></blockquote>
+    </li>
+    <li id="src-rulepack-schema">
+      <div class="src-head"><span class="src-id">S26</span><span class="src-type">Spec</span>
+        <span class="src-title">Rulepack contract (rule fields)</span></div>
+      <div class="src-loc"><code>kaneki-sdlc-harness/contracts/rulepack.schema.json:13-22</code> · draft v0.1.0, read 2026-11-04</div>
+      <blockquote class="src-quote"><code>      &quot;items&quot;: {
+        &quot;type&quot;: &quot;object&quot;,
+        &quot;required&quot;: [&quot;id&quot;, &quot;phase&quot;, &quot;severity&quot;, &quot;title&quot;, &quot;check&quot;],
+        &quot;properties&quot;: {
+          &quot;id&quot;: {&quot;type&quot;: &quot;string&quot;, &quot;pattern&quot;: &quot;^[A-Z][A-Z0-9-]+$&quot;},
+          &quot;phase&quot;: {&quot;enum&quot;: [&quot;design&quot;, &quot;code&quot;, &quot;test&quot;, &quot;evidence&quot;, &quot;delivery&quot;]},
+          &quot;severity&quot;: {&quot;enum&quot;: [&quot;critical&quot;, &quot;high&quot;, &quot;medium&quot;, &quot;low&quot;]},
+          &quot;title&quot;: {&quot;type&quot;: &quot;string&quot;},
+          &quot;check&quot;: {&quot;type&quot;: &quot;string&quot;, &quot;description&quot;: &quot;What the reviewer verifies, phrased so PASS/FAIL is decidable from evidence.&quot;},
+          &quot;appliesTo&quot;: {</code></blockquote>
+    </li>
+    <li id="src-extension-schema">
+      <div class="src-head"><span class="src-id">S27</span><span class="src-type">Spec</span>
+        <span class="src-title">Extension contract (slot, order, nodes)</span></div>
+      <div class="src-loc"><code>kaneki-sdlc-harness/contracts/extension.schema.json:1-12</code> · draft v0.1.0, read 2026-11-04</div>
+      <blockquote class="src-quote"><code>{
+  &quot;$schema&quot;: &quot;https://json-schema.org/draft/2020-12/schema&quot;,
+  &quot;$id&quot;: &quot;sdlc-extension@1&quot;,
+  &quot;title&quot;: &quot;Family extension&quot;,
+  &quot;description&quot;: &quot;Nodes a capability family inserts at a graph slot. They run only when the ticket enables the family (--family &lt;id&gt;). Node specs use the same fields as graph/lifecycle.json nodes.&quot;,
+  &quot;type&quot;: &quot;object&quot;,
+  &quot;required&quot;: [&quot;slot&quot;, &quot;order&quot;, &quot;nodes&quot;],
+  &quot;properties&quot;: {
+    &quot;slot&quot;: {&quot;enum&quot;: [&quot;after-code-review&quot;, &quot;after-evidence&quot;]},
+    &quot;order&quot;: {&quot;type&quot;: &quot;array&quot;, &quot;items&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;minItems&quot;: 1},
+    &quot;nodes&quot;: {
+      &quot;type&quot;: &quot;object&quot;,</code></blockquote>
+    </li>
+    <li id="src-state-schema">
+      <div class="src-head"><span class="src-id">S28</span><span class="src-type">Spec</span>
+        <span class="src-title">Ticket state contract</span></div>
+      <div class="src-loc"><code>kaneki-sdlc-harness/contracts/state.schema.json:1-12</code> · draft v0.1.0, read 2026-11-04</div>
+      <blockquote class="src-quote"><code>{
+  &quot;$schema&quot;: &quot;https://json-schema.org/draft/2020-12/schema&quot;,
+  &quot;$id&quot;: &quot;sdlc-state@1&quot;,
+  &quot;title&quot;: &quot;Ticket state&quot;,
+  &quot;description&quot;: &quot;&lt;ticketRoot&gt;/&lt;ticket&gt;/state.json — written only by the driver. decisions.jsonl next to it is the append-only log of every init, record, gate, invalidate and handback.&quot;,
+  &quot;type&quot;: &quot;object&quot;,
+  &quot;required&quot;: [&quot;schemaVersion&quot;, &quot;graphId&quot;, &quot;profilePath&quot;, &quot;context&quot;, &quot;nodes&quot;, &quot;receipts&quot;],
+  &quot;properties&quot;: {
+    &quot;schemaVersion&quot;: {&quot;const&quot;: 1},
+    &quot;graphId&quot;: {&quot;type&quot;: &quot;string&quot;},
+    &quot;profilePath&quot;: {&quot;type&quot;: &quot;string&quot;},
+    &quot;context&quot;: {</code></blockquote>
+    </li>
+    <li id="src-test-inval">
+      <div class="src-head"><span class="src-id">S29</span><span class="src-type">Test</span>
+        <span class="src-title">Test: invalidating coding keeps the test cases</span></div>
+      <div class="src-loc"><code>kaneki-sdlc-harness/tests/test_lifecycle.py:93-101</code> · draft v0.1.0, read 2026-11-04</div>
+      <blockquote class="src-quote"><code>    def test_invalidate_coding_keeps_testcases(self) -&gt; None:
+        profile = load_profile(self.profile)
+        graph = G.load_graph(HOME, profile, self.tmp)
+        order = G.trace(graph, build_context(profile, &quot;T&quot;, &quot;bug&quot;, None, None, None))
+        stale = G.dependents(graph, order, &quot;coding&quot;)
+        self.assertIn(&quot;code-review&quot;, stale)
+        self.assertIn(&quot;final-review&quot;, stale)
+        self.assertNotIn(&quot;testcase&quot;, stale)  # test cases derive from the plan, not the code
+        self.assertNotIn(&quot;testcase-review&quot;, stale)</code></blockquote>
+      <div class="src-note">All 8 tests passed on 2026-11-04 (<code>python -m unittest discover -s tests</code>).</div>
+    </li>
+    <li id="src-test-cycle">
+      <div class="src-head"><span class="src-id">S30</span><span class="src-type">Test</span>
+        <span class="src-title">Test: review round reopens coding, keeps testcase</span></div>
+      <div class="src-loc"><code>kaneki-sdlc-harness/tests/test_lifecycle.py:158-168</code> · draft v0.1.0, read 2026-11-04</div>
+      <blockquote class="src-quote"><code>        # after PR: a review arrives, triage reopens coding, only the stale part reruns
+        review = self.tmp / &quot;review.md&quot;
+        review.write_text(&quot;RC-1: rename variable\n&quot;)
+        code, res = run(&quot;handback&quot;, &quot;--ticket&quot;, t, &quot;--review-file&quot;, str(review), *self.p)
+        self.assertEqual(code, 0, res)
+        self.assertEqual(res[&quot;nextPending&quot;], &quot;read-review&quot;)
+        self.complete(t, &quot;read-review&quot;)
+        res = self.complete(t, &quot;triage-review&quot;, actor=&quot;user&quot;, extra=(&quot;--reopen&quot;, &quot;coding&quot;))
+        self.assertIn(&quot;coding&quot;, res[&quot;stale&quot;])
+        self.assertNotIn(&quot;testcase&quot;, res[&quot;stale&quot;])
+        self.assertEqual(res[&quot;nextPending&quot;], &quot;coding&quot;)</code></blockquote>
+    </li>
+  </ol>
+</section>
+
+<footer class="doc-foot">Legend: <span class="tag sure">VERIFIED</span> seen directly in the cited source · <span class="tag infer">INFERRED</span> reasoned from evidence, not confirmed end-to-end · <span class="tag open">OPEN</span> unresolved, needs an answer. Press <code>/</code> to search; the ⟳ button reloads the latest version of this file.
+  <details class="more">
+    <summary>Revision history (revision 3)</summary>
+    <div class="body"><ul>
+      <li><b>Revision 3</b> · 2026-11-04 — Ticket worktrees gathered under paths.worktreeRoot (default worktrees/), enforced by sdlc worktree; 52 tests <span class="no-search">(facts@r2, layout@r2, sources@r3, sections/contracts-messages.html, sections/local-files.html)</span></li>
+      <li><b>Revision 2</b> · 2026-11-04 — Skill renamed sdlc-flow → kaneki-flow (paths in contracts and sources) <span class="no-search">(contracts@r2, sources@r2)</span></li>
+      <li><b>Revision 1</b> · 2026-11-04 — Initial version</li>
+    </ul></div>
+  </details></footer>
+<!-- ===================== DOCUMENT CONTENT END ===================== -->
+</main>
+</div>
+
+<script id="haise-shell-js">
+/* ===== haise-doc shell v2.1.0 — do not edit per document ===== */
+(function(){
+  var root=document.documentElement, body=document.body;
+  var LANG=(root.lang||'en').slice(0,2).toLowerCase();
+  var I18N={
+    en:{toc:'Contents',search:'Search this document…  ( / )',none:'No matches',nav:'Show / hide contents',
+        prev:'Previous match (Shift+Enter)',next:'Next match (Enter)',citedIn:'Cited in',
+        reload:'Reload latest version (keeps your place)',
+        theme:{auto:'Theme: auto',light:'Theme: light',dark:'Theme: dark'}},
+    vi:{toc:'Mục lục',search:'Tìm trong tài liệu…  ( / )',none:'Không có kết quả',nav:'Ẩn / hiện mục lục',
+        prev:'Kết quả trước (Shift+Enter)',next:'Kết quả sau (Enter)',citedIn:'Được dẫn ở',
+        reload:'Tải lại bản mới nhất (giữ vị trí đang đọc)',
+        theme:{auto:'Giao diện: tự động',light:'Giao diện: sáng',dark:'Giao diện: tối'}}
+  };
+  var T=I18N[LANG]||I18N.en;
+  var store={get:function(k){try{return localStorage.getItem(k);}catch(e){return null;}},
+             set:function(k,v){try{localStorage.setItem(k,v);}catch(e){}}};
+  var $=function(id){return document.getElementById(id);};
+  var main=$('content');
+
+  /* ---------- theme ---------- */
+  var themeBtn=$('haise-theme'), ICON={auto:'◐',light:'☀',dark:'☾'};
+  function applyTheme(t){
+    if(t==='light'||t==='dark') root.setAttribute('data-theme',t); else root.removeAttribute('data-theme');
+    themeBtn.textContent=ICON[t]; themeBtn.title=T.theme[t]; themeBtn.setAttribute('aria-label',T.theme[t]);
+  }
+  var theme=store.get('haise.theme'); if(theme!=='light'&&theme!=='dark') theme='auto';
+  applyTheme(theme);
+  themeBtn.addEventListener('click',function(){
+    theme=theme==='auto'?'light':theme==='light'?'dark':'auto';
+    store.set('haise.theme',theme); applyTheme(theme);
+  });
+
+  /* ---------- numbering + table of contents ---------- */
+  $('haise-toc-label').textContent=T.toc;
+  var toc=$('haise-toc'), ol=document.createElement('ol'), tocLinks=[], sections=[];
+  [].forEach.call(main.querySelectorAll('section'),function(sec,i){
+    var h2=sec.querySelector(':scope > h2'); if(!h2) return;
+    if(!sec.id) sec.id='s'+(i+1);
+    var n=String(sections.length+1);
+    sections.push(sec);
+    var num=document.createElement('span'); num.className='num'; num.textContent=n+'.'; h2.insertBefore(num,h2.firstChild);
+    var li=document.createElement('li'), a=mkLink('#'+sec.id,n+'.',h2);
+    a.dataset.sec=sec.id; li.appendChild(a); tocLinks.push({el:sec,a:a});
+    var subs=sec.querySelectorAll('h3');
+    if(subs.length){
+      var sub=document.createElement('ol');
+      [].forEach.call(subs,function(h3,j){
+        if(!h3.id) h3.id=sec.id+'-'+(j+1);
+        var m=n+'.'+(j+1);
+        var s=document.createElement('span'); s.className='num'; s.textContent=m; h3.insertBefore(s,h3.firstChild);
+        var sli=document.createElement('li'), sa=mkLink('#'+h3.id,m,h3);
+        sli.appendChild(sa); sub.appendChild(sli); tocLinks.push({el:h3,a:sa});
+      });
+      li.appendChild(sub);
+    }
+    ol.appendChild(li);
+  });
+  toc.appendChild(ol);
+  function mkLink(href,n,h){
+    var a=document.createElement('a'); a.href=href;
+    var s=document.createElement('span'); s.className='num'; s.textContent=n;
+    var t=document.createElement('span'); t.className='t';
+    var clone=h.cloneNode(true); var c=clone.querySelector('.num'); if(c) c.remove();
+    [].forEach.call(clone.querySelectorAll('a.cite,.tag'),function(x){x.remove();});
+    t.textContent=clone.textContent.trim();
+    var b=document.createElement('span'); b.className='badge';
+    a.appendChild(s); a.appendChild(t); a.appendChild(b);
+    a.addEventListener('click',function(){ if(isMobile()) body.classList.remove('nav-open'); });
+    return a;
+  }
+
+  /* ---------- sidebar toggle ---------- */
+  var navBtn=$('haise-nav-btn'); navBtn.title=T.nav; navBtn.setAttribute('aria-label',T.nav);
+  var mq=window.matchMedia('(max-width:960px)');
+  function isMobile(){return mq.matches;}
+  if(store.get('haise.nav')==='collapsed') body.classList.add('nav-collapsed');
+  navBtn.addEventListener('click',function(){
+    if(isMobile()){ body.classList.toggle('nav-open'); }
+    else{ body.classList.toggle('nav-collapsed'); store.set('haise.nav',body.classList.contains('nav-collapsed')?'collapsed':'open'); }
+  });
+  $('haise-backdrop').addEventListener('click',function(){body.classList.remove('nav-open');});
+
+  /* ---------- scroll spy + progress ---------- */
+  var ticking=false, prog=$('haise-progress');
+  function onScroll(){
+    ticking=false;
+    var y=window.scrollY, H=document.documentElement.scrollHeight-window.innerHeight;
+    prog.style.width=(H>0?Math.min(100,y/H*100):0)+'%';
+    var off=parseInt(getComputedStyle(root).getPropertyValue('--topbar-h'))+30, cur=null;
+    for(var i=0;i<tocLinks.length;i++){ if(tocLinks[i].el.getBoundingClientRect().top-off<=0) cur=tocLinks[i]; }
+    if(!cur&&tocLinks.length) cur=tocLinks[0];
+    tocLinks.forEach(function(t){t.a.classList.toggle('active',t===cur);});
+    if(cur&&!isMobile()){
+      var r=cur.a.getBoundingClientRect(), sb=$('haise-sidebar').getBoundingClientRect();
+      if(r.top<sb.top+20||r.bottom>sb.bottom-20) cur.a.scrollIntoView({block:'nearest'});
+    }
+  }
+  window.addEventListener('scroll',function(){ if(!ticking){ticking=true;requestAnimationFrame(onScroll);} },{passive:true});
+  onScroll();
+
+  /* ---------- citations: tooltips + back-references ---------- */
+  var back={};
+  [].forEach.call(main.querySelectorAll('a.cite'),function(a,i){
+    var id=(a.getAttribute('href')||'').replace(/^#/,''), src=document.getElementById(id);
+    if(!a.id) a.id='cite-'+(i+1);
+    if(!src){a.classList.add('broken');return;}
+    var t=src.querySelector('.src-title'); if(t) a.title=t.textContent.trim();
+    (back[id]=back[id]||[]).push(a);
+  });
+  Object.keys(back).forEach(function(id){
+    var src=document.getElementById(id), box=src.querySelector('.backrefs');
+    if(!box){box=document.createElement('div');box.className='backrefs';src.appendChild(box);}
+    box.textContent=T.citedIn+': ';
+    back[id].forEach(function(a){
+      var sec=a.closest('section'), n=sec?sec.querySelector(':scope > h2 .num'):null;
+      var l=document.createElement('a'); l.href='#'+a.id; l.textContent='↩ §'+(n?n.textContent.replace('.',''):'?');
+      var h=sec?sec.querySelector(':scope > h2'):null; if(h) l.title=h.textContent.trim();
+      box.appendChild(l);
+    });
+  });
+
+  /* ---------- search (case- and accent-insensitive) ---------- */
+  var q=$('haise-q'), countEl=$('haise-count'), hits=[], cur=-1, opened=[], timer=null;
+  q.placeholder=T.search; q.setAttribute('aria-label',T.search);
+  $('haise-prev').title=T.prev; $('haise-prev').setAttribute('aria-label',T.prev);
+  $('haise-next').title=T.next; $('haise-next').setAttribute('aria-label',T.next);
+  function foldChar(c){
+    if(c==='đ'||c==='Đ') return 'd';
+    return c.normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
+  }
+  function fold(s){
+    var out='', map=[];
+    for(var i=0;i<s.length;i++){ var f=foldChar(s[i]); for(var j=0;j<f.length;j++){out+=f[j];map.push(i);} }
+    return {s:out,map:map};
+  }
+  function clear(){
+    var parents=[];
+    hits.forEach(function(m){ var p=m.parentNode; if(!p) return; p.replaceChild(document.createTextNode(m.textContent),m); if(parents.indexOf(p)<0) parents.push(p); });
+    parents.forEach(function(p){p.normalize();});
+    opened.forEach(function(d){d.open=false;}); opened=[];
+    hits=[]; cur=-1;
+    tocLinks.forEach(function(t){t.a.querySelector('.badge').textContent='';});
+  }
+  function run(noJump){
+    clear();
+    var raw=q.value.trim(); if(raw.length<2){countEl.textContent='';return;}
+    var needle=fold(raw).s, nodes=[];
+    var w=document.createTreeWalker(main,NodeFilter.SHOW_TEXT,{acceptNode:function(n){
+      if(!n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+      var p=n.parentNode;
+      if(p.closest('script,style,svg,.no-search,textarea')) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;}});
+    while(w.nextNode()) nodes.push(w.currentNode);
+    for(var k=0;k<nodes.length&&hits.length<3000;k++){
+      var node=nodes[k], text=node.nodeValue, f=fold(text), idx=f.s.indexOf(needle);
+      if(idx<0) continue;
+      var frag=document.createDocumentFragment(), last=0;
+      while(idx>=0){
+        var a=f.map[idx], b=f.map[idx+needle.length-1]+1;
+        if(a>=last){
+          frag.appendChild(document.createTextNode(text.slice(last,a)));
+          var m=document.createElement('mark'); m.className='hit'; m.textContent=text.slice(a,b);
+          frag.appendChild(m); hits.push(m); last=b;
+        }
+        idx=f.s.indexOf(needle,idx+needle.length);
+      }
+      frag.appendChild(document.createTextNode(text.slice(last)));
+      node.parentNode.replaceChild(frag,node);
+    }
+    hits.forEach(function(m){
+      var d=m.parentNode.closest('details');
+      while(d){ if(!d.open){d.open=true;opened.push(d);} d=d.parentNode.closest('details'); }
+    });
+    tocLinks.forEach(function(t){
+      var scope=t.el.tagName==='SECTION'?t.el:null; if(!scope) return;
+      var n=scope.querySelectorAll('mark.hit').length;
+      t.a.querySelector('.badge').textContent=n?String(n):'';
+    });
+    if(!hits.length) countEl.textContent=T.none;
+    else if(noJump===true) countEl.textContent='– / '+hits.length;
+    else go(0);
+  }
+  function go(i){
+    if(!hits.length) return;
+    if(cur>=0&&hits[cur]) hits[cur].classList.remove('cur');
+    cur=(i+hits.length)%hits.length;
+    hits[cur].classList.add('cur');
+    hits[cur].scrollIntoView({block:'center',behavior:'smooth'});
+    countEl.textContent=(cur+1)+' / '+hits.length;
+  }
+  q.addEventListener('input',function(){clearTimeout(timer);timer=setTimeout(run,180);});
+  q.addEventListener('keydown',function(e){
+    if(e.key==='Enter'){e.preventDefault(); if(timer){clearTimeout(timer);timer=null;} if(!hits.length) run(); else go(cur+(e.shiftKey?-1:1));}
+    else if(e.key==='Escape'){q.value='';clear();countEl.textContent='';q.blur();}
+  });
+  $('haise-prev').addEventListener('click',function(){go(cur-1);});
+  $('haise-next').addEventListener('click',function(){go(cur+1);});
+
+  /* ---------- reload: re-read the file from disk, keep the reader's place ---------- */
+  var RK='haise.reload:'+location.pathname, reloadBtn=$('haise-reload');
+  reloadBtn.title=T.reload; reloadBtn.setAttribute('aria-label',T.reload);
+  function ss(k,v){try{if(v===undefined){var r=sessionStorage.getItem(k);sessionStorage.removeItem(k);return r;}sessionStorage.setItem(k,v);}catch(e){return null;}}
+  function reload(){
+    var anchor=null, top=0;
+    for(var i=tocLinks.length-1;i>=0;i--){ var r=tocLinks[i].el.getBoundingClientRect(); if(r.top<=window.innerHeight/3){anchor=tocLinks[i].el.id;top=r.top;break;} }
+    var open=[].map.call(main.querySelectorAll('details'),function(d){return d.open&&opened.indexOf(d)<0;});
+    ss(RK,JSON.stringify({y:window.scrollY,anchor:anchor,top:top,q:q.value,open:open}));
+    location.reload();
+  }
+  reloadBtn.addEventListener('click',reload);
+  (function restore(){
+    var s=ss(RK); if(!s) return;
+    try{s=JSON.parse(s);}catch(e){return;}
+    if('scrollRestoration' in history) history.scrollRestoration='manual';
+    var ds=main.querySelectorAll('details');
+    (s.open||[]).forEach(function(o,i){ if(o&&ds[i]) ds[i].open=true; });
+    if(s.q){q.value=s.q; run(true);}
+    var el=s.anchor&&document.getElementById(s.anchor);
+    var y=el?el.getBoundingClientRect().top+window.scrollY-s.top:s.y;
+    root.style.scrollBehavior='auto'; window.scrollTo(0,y); root.style.scrollBehavior='';
+    onScroll();
+  })();
+  document.addEventListener('keydown',function(e){
+    var tag=(e.target.tagName||'').toLowerCase(), typing=tag==='input'||tag==='textarea'||e.target.isContentEditable;
+    if((e.key==='/'&&!typing)||((e.ctrlKey||e.metaKey)&&(e.key==='k'||e.key==='K'))){e.preventDefault();q.focus();q.select();}
+  });
+})();
+</script>
+</body>
+</html>

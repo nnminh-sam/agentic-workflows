@@ -1,0 +1,57 @@
+{
+  "$contract": "haise-manifest@1",
+  "title": "Kaneki SDLC Harness — Review Guide",
+  "lang": "en",
+  "out": "harness-guide.html",
+  "eyebrow": "Review guide · {{ facts.graphId }} · driver v{{ facts.version }}",
+  "subtitle": "How the {{ facts.nodeCount }} nodes hand work to each other, the shape of every contract they use, and where each file lives on disk, with the gaps found while reading the code.",
+  "chips": [
+    {
+      "label": "Scope",
+      "value": "kaneki-sdlc-harness draft v{{ facts.version }}"
+    },
+    {
+      "label": "Graph",
+      "value": "{{ facts.nodeCount }} nodes · {{ facts.layerCount }} layers · {{ facts.tokenCount }} tokens"
+    },
+    {
+      "label": "Tests",
+      "value": "{{ facts.tests }} passing ({{ facts.testDate }})"
+    },
+    {
+      "label": "Audience",
+      "value": "harness reviewer"
+    }
+  ],
+  "outline": [
+    "answer",
+    "big-picture",
+    "node-handoff",
+    "node-cycle",
+    "contracts-config",
+    "contracts-runtime",
+    "contracts-messages",
+    "local-files",
+    "nodes-ref",
+    "review-points",
+    "glossary"
+  ],
+  "rev": 2,
+  "changelog": [
+    {
+      "rev": 1,
+      "date": "2026-11-04",
+      "note": "Initial version",
+      "changed": []
+    },
+    {
+      "rev": 2,
+      "date": "2026-11-04",
+      "note": "Skill renamed sdlc-flow → kaneki-flow (paths in contracts and sources)",
+      "changed": [
+        "contracts@r2",
+        "sources@r2"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,87 @@
+<h2>What happens inside one node</h2>
+<p>Every node runs the same cycle: <strong>plan → packet → dispatch → result → record → gate</strong>. Only the controller calls the driver, and only the unit does the work. A node with a reviewer runs the dispatch–record part twice: workers first, then the reviewer over their results. {{ cite('src-skill-loop') }}</p>
+<figure class="fig">
+<svg viewBox="0 0 900 500" role="img" aria-label="Sequence of one node cycle">
+  <defs><marker id="arr-cy" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink)"/></marker></defs>
+  <g font-size="13" fill="var(--ink)">
+    <rect x="50" y="14" width="140" height="34" rx="8" fill="var(--panel)" stroke="var(--line)"/><text x="120" y="36" text-anchor="middle" font-weight="600">Controller</text>
+    <rect x="290" y="14" width="140" height="34" rx="8" fill="var(--info-soft)" stroke="var(--info)"/><text x="360" y="36" text-anchor="middle" font-weight="600">Driver</text>
+    <rect x="530" y="14" width="140" height="34" rx="8" fill="var(--panel)" stroke="var(--line)"/><text x="600" y="36" text-anchor="middle" font-weight="600">Unit</text>
+    <rect x="740" y="14" width="140" height="34" rx="8" fill="var(--ok-soft)" stroke="var(--ok)"/><text x="810" y="36" text-anchor="middle" font-weight="600">Ticket dir</text>
+    <g stroke="var(--line)" stroke-dasharray="4 4"><line x1="120" y1="48" x2="120" y2="490"/><line x1="360" y1="48" x2="360" y2="490"/><line x1="600" y1="48" x2="600" y2="490"/><line x1="810" y1="48" x2="810" y2="490"/></g>
+    <g stroke-width="1.6" fill="none">
+      <line x1="120" y1="80" x2="356" y2="80" stroke="var(--ink)" marker-end="url(#arr-cy)"/>
+      <line x1="360" y1="108" x2="124" y2="108" stroke="var(--ink)" stroke-dasharray="5 3" marker-end="url(#arr-cy)"/>
+      <line x1="120" y1="140" x2="356" y2="140" stroke="var(--ink)" marker-end="url(#arr-cy)"/>
+      <line x1="360" y1="160" x2="806" y2="160" stroke="var(--ok)" marker-end="url(#arr-cy)"/>
+      <line x1="360" y1="184" x2="124" y2="184" stroke="var(--ink)" stroke-dasharray="5 3" marker-end="url(#arr-cy)"/>
+      <line x1="120" y1="216" x2="596" y2="216" stroke="var(--ink)" marker-end="url(#arr-cy)"/>
+      <line x1="600" y1="246" x2="806" y2="246" stroke="var(--ok)" marker-end="url(#arr-cy)"/>
+      <line x1="806" y1="272" x2="604" y2="272" stroke="var(--ok)" stroke-dasharray="5 3" marker-end="url(#arr-cy)"/>
+      <line x1="600" y1="300" x2="806" y2="300" stroke="var(--ok)" marker-end="url(#arr-cy)"/>
+      <line x1="600" y1="330" x2="124" y2="330" stroke="var(--ink)" stroke-dasharray="5 3" marker-end="url(#arr-cy)"/>
+      <line x1="120" y1="368" x2="356" y2="368" stroke="var(--ink)" marker-end="url(#arr-cy)"/>
+      <line x1="360" y1="390" x2="806" y2="390" stroke="var(--ok)" marker-end="url(#arr-cy)"/>
+      <line x1="120" y1="430" x2="356" y2="430" stroke="var(--accent)" marker-end="url(#arr-cy)"/>
+      <line x1="360" y1="456" x2="806" y2="456" stroke="var(--ok)" marker-end="url(#arr-cy)"/>
+    </g>
+    <g font-size="12">
+      <text x="238" y="73" text-anchor="middle">① plan --node N --card</text>
+      <text x="238" y="102" text-anchor="middle" fill="var(--muted)">plan JSON: units, gates, artifacts</text>
+      <text x="238" y="133" text-anchor="middle">② packet --unit U --facts f.json</text>
+      <text x="583" y="153" text-anchor="middle" fill="var(--ok)">packets/N.gG.U.rR.md + .rules.json</text>
+      <text x="238" y="178" text-anchor="middle" fill="var(--muted)">{path, packetDigest, resultPath}</text>
+      <text x="358" y="209" text-anchor="middle">③ "Read the packet at … (sha256 …)"</text>
+      <text x="703" y="239" text-anchor="middle" fill="var(--ok)">④ read packet + card</text>
+      <text x="703" y="266" text-anchor="middle" fill="var(--ok)">inputs: plan.md, …</text>
+      <text x="703" y="294" text-anchor="middle" fill="var(--ok)">⑤ write artifacts + result</text>
+      <text x="358" y="323" text-anchor="middle" fill="var(--muted)">⑥ reply ≤150 words: path + sha256</text>
+      <text x="238" y="361" text-anchor="middle">⑦ record --result --model</text>
+      <text x="583" y="383" text-anchor="middle" fill="var(--ok)">unit record → state.json + decisions.jsonl</text>
+      <text x="238" y="423" text-anchor="middle" fill="var(--accent)">⑧ gate --status … [--actor user]</text>
+      <text x="583" y="449" text-anchor="middle" fill="var(--ok)">node done / stale others + log event</text>
+      <text x="20" y="485" fill="var(--muted)">Between ⑦ and ⑧: verify citations, ask HIGH doubts (AskUserQuestion); reviewer units repeat ②–⑦.</text>
+    </g>
+  </g>
+</svg>
+<figcaption>The unit never calls the driver; the driver never reads the unit's reply. The only link between them is the packet path going in and the result file coming back, both pinned by sha256. {{ cite('src-dispatch-id', 'src-record', 'src-skill-loop') }}</figcaption>
+</figure>
+
+<h3 id="node-states">Node record states</h3>
+<figure class="fig">
+<svg viewBox="0 0 900 200" role="img" aria-label="Node status state machine">
+  <defs><marker id="arr-st" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker></defs>
+  <g font-size="13" fill="var(--ink)">
+    <rect x="30" y="70" width="140" height="50" rx="25" fill="var(--panel)" stroke="var(--line)"/><text x="100" y="100" text-anchor="middle" font-weight="600">pending</text>
+    <rect x="280" y="70" width="160" height="50" rx="25" fill="var(--panel)" stroke="var(--line)"/><text x="360" y="100" text-anchor="middle" font-weight="600">in_progress</text>
+    <rect x="560" y="70" width="140" height="50" rx="25" fill="var(--ok-soft)" stroke="var(--ok)"/><text x="630" y="100" text-anchor="middle" font-weight="600">done</text>
+    <rect x="740" y="70" width="140" height="50" rx="25" fill="var(--warn-soft)" stroke="var(--warn)"/><text x="810" y="100" text-anchor="middle" font-weight="600">stale (gen+1)</text>
+    <g stroke="var(--muted)" stroke-width="1.6" fill="none">
+      <line x1="170" y1="95" x2="278" y2="95" marker-end="url(#arr-st)"/>
+      <line x1="440" y1="95" x2="558" y2="95" marker-end="url(#arr-st)"/>
+      <line x1="700" y1="95" x2="738" y2="95" marker-end="url(#arr-st)"/>
+      <path d="M810,120 C810,180 360,180 360,122" marker-end="url(#arr-st)"/>
+      <path d="M100,70 C100,20 810,20 810,68" stroke-dasharray="5 4" marker-end="url(#arr-st)"/>
+    </g>
+    <g font-size="12" fill="var(--muted)">
+      <text x="224" y="87" text-anchor="middle">record</text>
+      <text x="499" y="87" text-anchor="middle">gate approved</text>
+      <text x="719" y="62" text-anchor="middle">invalidate</text>
+      <text x="585" y="172" text-anchor="middle">record (new generation)</text>
+      <text x="455" y="30" text-anchor="middle">invalidate of a node that already ran (a never-run pending node is skipped)</text>
+    </g>
+  </g>
+</svg>
+<figcaption>Only <code>done</code> satisfies a token. <code>needs-changes</code> stales the loop-back node and its dependents (including the review node itself) and counts an attempt; <code>rejected</code>/<code>stopped</code> set the verdict but leave the status. {{ cite('src-newrecord', 'src-invalidate', 'src-gate') }}</figcaption>
+</figure>
+
+<h3 id="gate-checks">What the gate checks before a node is done</h3>
+<ol class="steps">
+  <li><strong>Not already closed</strong> and <strong>ready</strong>: every required token has a done producer, otherwise <code>G7 … not ready</code>. {{ cite('src-gate') }}</li>
+  <li><strong>Every planned unit has an <code>ok</code> record in the current generation</strong>; records from older generations do not count. {{ cite('src-absent') }}</li>
+  <li><strong>The last reviewer verdict is not <code>FAIL</code></strong> (nodes with a reviewer). {{ cite('src-absent') }}</li>
+  <li class="bad"><strong>Every artifact file exists</strong>. This is an existence check only: content and freshness are not checked (R1). {{ cite('src-absent') }}</li>
+  <li><strong>User boundary</strong>: <code>--actor user</code> is required on user-boundary nodes; <code>autoSkipPlanApproval</code> relaxes it only on the two plan nodes. {{ cite('src-absent') }}</li>
+  <li><strong>Side effects</strong>: pin the subject digest (subject nodes), issue receipts (<code>final-review</code>), verify receipts (<code>deliverable-ready</code>), record artifact digests, and apply <code>--reopen</code> (<code>triage-review</code>). {{ cite('src-gate-effects') }}</li>
+  <li><strong>Loop cap</strong>: <code>needs-changes</code> at attempt ≥ {{ facts.loopCap }} raises <code>G4</code> unless <code>--actor user</code>. {{ cite('src-gate') }}</li>
+</ol>

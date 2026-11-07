@@ -1,0 +1,11 @@
+{
+  "kind": "surface",
+  "id": "cli",
+  "surface": "cli",
+  "description": "Command-line tool, batch job or script run locally.",
+  "prerequisites": ["the built binary or entry point from the stack adapter"],
+  "run": "Run the command for each case with its inputs; record argv (redacted), exit code, stdout/stderr excerpt, and produced files.",
+  "capture": ["transcript (command, exit, output excerpt)", "produced files with sha256", "DB rows before/after for jobs that write"],
+  "mutatesSharedState": "for jobs pointed at shared data",
+  "requiresG6": false
+}

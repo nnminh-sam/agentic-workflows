@@ -1,0 +1,11 @@
+{
+  "kind": "tracker",
+  "id": "jira",
+  "description": "Tickets are Jira issues (via the Atlassian MCP connector or the REST API).",
+  "config": {"site": "https://<site>.atlassian.net", "project": "KEY"},
+  "fetch": {
+    "instructions": "Use the Atlassian connector (getJiraIssue) or GET /rest/api/3/issue/{ticket}?expand=renderedFields. Save summary, description, acceptance criteria, issue type, priority, linked issues and every comment verbatim to ticket.md. Never store the API token."
+  },
+  "kindHints": {"bug": ["Bug"], "feature": ["Story", "Task", "Improvement"]},
+  "reply": {"draft": "tracker-reply", "format": "Jira wiki/ADF-compatible markdown", "post": "manual or connector, only on the user's explicit go"}
+}

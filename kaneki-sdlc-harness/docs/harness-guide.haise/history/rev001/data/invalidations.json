@@ -1,0 +1,50 @@
+{
+  "$contract": "invalidations@1",
+  "rev": 1,
+  "updated": "2026-11-04",
+  "description": "Real output of harness.graph.dependents() on the bug trace",
+  "data": [
+    {
+      "start": "coding",
+      "stale": [
+        "coding",
+        "code-review",
+        "execute-and-evidence",
+        "final-review",
+        "delivery-drafts",
+        "deliverable-ready"
+      ],
+      "kept": [
+        "testcase",
+        "testcase-review"
+      ]
+    },
+    {
+      "start": "testcase",
+      "stale": [
+        "testcase",
+        "testcase-review",
+        "execute-and-evidence",
+        "final-review",
+        "delivery-drafts",
+        "deliverable-ready"
+      ],
+      "kept": []
+    },
+    {
+      "start": "fix-plan",
+      "stale": [
+        "fix-plan",
+        "coding",
+        "code-review",
+        "testcase",
+        "testcase-review",
+        "execute-and-evidence",
+        "final-review",
+        "delivery-drafts",
+        "deliverable-ready"
+      ],
+      "kept": []
+    }
+  ]
+}

@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "nodes@1",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": [
+      "id",
+      "layer",
+      "when",
+      "requires",
+      "produces",
+      "units",
+      "reviewer",
+      "boundary",
+      "gates",
+      "rulePhases",
+      "artifacts",
+      "mutability",
+      "flags",
+      "inBug",
+      "inFeature"
+    ],
+    "additionalProperties": false,
+    "properties": {
+      "id": {
+        "type": "string"
+      },
+      "layer": {
+        "enum": [
+          "analysis",
+          "implementation",
+          "delivery",
+          "after-pr"
+        ]
+      },
+      "when": {
+        "type": "string"
+      },
+      "requires": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "produces": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "units": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "reviewer": {
+        "type": "string"
+      },
+      "boundary": {
+        "enum": [
+          "controller",
+          "user"
+        ]
+      },
+      "gates": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "rulePhases": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "artifacts": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "mutability": {
+        "type": "string"
+      },
+      "flags": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "inBug": {
+        "type": "boolean"
+      },
+      "inFeature": {
+        "type": "boolean"
+      }
+    }
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "tokens@1",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": [
+      "token",
+      "producers",
+      "consumers",
+      "files"
+    ],
+    "additionalProperties": false,
+    "properties": {
+      "token": {
+        "type": "string"
+      },
+      "producers": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "consumers": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "files": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

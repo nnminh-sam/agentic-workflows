@@ -1,0 +1,687 @@
+{
+  "schemaVersion": 1,
+  "graphId": "sdlc-lifecycle@1",
+  "description": "Generic ticket lifecycle. Layers 1-2 (analysis, implementation) port wms-flow almost 1:1; layers 3-4 keep only the generic delivery and after-PR nodes. Project specifics come from the project profile and adapters, never from this file. Each node's `checks` names the sections and parsers its gate verifies on the live text of each artifact.",
+  "layers": [
+    {
+      "id": "analysis",
+      "label": "Analysis · bug (investigate) or feature (requirement)"
+    },
+    {
+      "id": "implementation",
+      "label": "Implementation and review"
+    },
+    {
+      "id": "delivery",
+      "label": "Verification and delivery"
+    },
+    {
+      "id": "after-pr",
+      "label": "After PR · review-fix (reuses the main graph through reopen)"
+    }
+  ],
+  "order": [
+    "prepare",
+    "investigate",
+    "fix-plan",
+    "requirement-analysis",
+    "impact-analysis",
+    "feature-plan",
+    "coding",
+    "code-review",
+    "@slot:after-code-review",
+    "testcase",
+    "testcase-review",
+    "execute-and-evidence",
+    "@slot:after-evidence",
+    "final-review",
+    "delivery-drafts",
+    "deliverable-ready",
+    "read-review",
+    "triage-review",
+    "respond-review"
+  ],
+  "nodes": {
+    "prepare": {
+      "layer": "analysis",
+      "purpose": "Fetch the ticket through the tracker adapter, resolve repositories, stacks and surfaces from the profile, create the worktree, run the environment doctor.",
+      "requires": [],
+      "produces": [
+        "context",
+        "environment",
+        "ticket-authority"
+      ],
+      "mutability": "state",
+      "units": [
+        {
+          "id": "worker",
+          "role": "worker",
+          "tier": "routine"
+        }
+      ],
+      "boundary": "controller",
+      "gates": [
+        "G7"
+      ],
+      "artifacts": [
+        "ticket.md",
+        "environment.md"
+      ],
+      "card": "references/nodes/prepare.md",
+      "checks": {
+        "environment.md": {
+          "sections": [
+            "## Repositories",
+            "## Doctor",
+            "## Surfaces"
+          ]
+        }
+      }
+    },
+    "investigate": {
+      "layer": "analysis",
+      "when": {
+        "kind": "bug"
+      },
+      "purpose": "Reproduce the defect and prove the root cause with executed evidence; record confidence and open questions.",
+      "requires": [
+        "environment",
+        "ticket-authority"
+      ],
+      "produces": [
+        "analysis"
+      ],
+      "mutability": "artifacts",
+      "units": [
+        {
+          "id": "worker",
+          "role": "worker",
+          "tier": "deep"
+        }
+      ],
+      "boundary": "controller",
+      "gates": [
+        "G1",
+        "G7"
+      ],
+      "artifacts": [
+        "investigation.md"
+      ],
+      "optionalArtifacts": [
+        "questions.md"
+      ],
+      "card": "references/nodes/investigate.md",
+      "checks": {
+        "investigation.md": {
+          "sections": [
+            "## Confirmed cause"
+          ],
+          "parsers": [
+            "confidence"
+          ]
+        }
+      }
+    },
+    "fix-plan": {
+      "layer": "analysis",
+      "when": {
+        "kind": "bug"
+      },
+      "purpose": "Smallest fix that removes the proven cause; every changed condition gets a negative case; design-phase rules judged on the plan.",
+      "requires": [
+        "analysis"
+      ],
+      "produces": [
+        "approved-plan",
+        "review-scope"
+      ],
+      "mutability": "artifacts",
+      "units": [
+        {
+          "id": "worker",
+          "role": "worker",
+          "tier": "deep"
+        }
+      ],
+      "boundary": "user",
+      "gates": [
+        "G3"
+      ],
+      "rulePhases": [
+        "design"
+      ],
+      "artifacts": [
+        "plan.md"
+      ],
+      "card": "references/nodes/fix-plan.md",
+      "checks": {
+        "plan.md": {
+          "sections": [
+            "## Change",
+            "## Condition → negative case",
+            "## Data access & side effects",
+            "## Test intent",
+            "## Design rules"
+          ],
+          "parsers": [
+            "conditions",
+            "design-rules"
+          ]
+        }
+      }
+    },
+    "requirement-analysis": {
+      "layer": "analysis",
+      "when": {
+        "kind": "feature"
+      },
+      "purpose": "Read every requirement source, list conflicts and gaps, resolve them with the user before design.",
+      "requires": [
+        "environment",
+        "ticket-authority"
+      ],
+      "produces": [
+        "analysis"
+      ],
+      "mutability": "artifacts",
+      "units": [
+        {
+          "id": "worker",
+          "role": "worker",
+          "tier": "routine"
+        }
+      ],
+      "reviewer": {
+        "tier": "deep"
+      },
+      "boundary": "controller",
+      "gates": [
+        "G1"
+      ],
+      "artifacts": [
+        "requirements.md"
+      ],
+      "optionalArtifacts": [
+        "questions.md"
+      ],
+      "card": "references/nodes/requirement-analysis.md"
+    },
+    "impact-analysis": {
+      "layer": "analysis",
+      "when": {
+        "kind": "feature"
+      },
+      "purpose": "Map every caller, data flow, surface and shared resource the change touches.",
+      "requires": [
+        "analysis"
+      ],
+      "produces": [
+        "impact"
+      ],
+      "mutability": "artifacts",
+      "units": [
+        {
+          "id": "worker",
+          "role": "worker",
+          "tier": "routine"
+        }
+      ],
+      "boundary": "controller",
+      "gates": [],
+      "artifacts": [
+        "impact.md"
+      ],
+      "card": "references/nodes/impact-analysis.md",
+      "checks": {
+        "impact.md": {
+          "sections": [
+            "## Risk",
+            "## Out of scope"
+          ]
+        }
+      }
+    },
+    "feature-plan": {
+      "layer": "analysis",
+      "when": {
+        "kind": "feature"
+      },
+      "purpose": "Design and task plan the user approves; design-phase rules judged on the plan.",
+      "requires": [
+        "analysis",
+        "impact"
+      ],
+      "produces": [
+        "approved-plan",
+        "review-scope"
+      ],
+      "mutability": "artifacts",
+      "units": [
+        {
+          "id": "worker",
+          "role": "worker",
+          "tier": "routine"
+        }
+      ],
+      "boundary": "user",
+      "gates": [
+        "G3"
+      ],
+      "rulePhases": [
+        "design"
+      ],
+      "artifacts": [
+        "plan.md"
+      ],
+      "card": "references/nodes/feature-plan.md",
+      "checks": {
+        "plan.md": {
+          "sections": [
+            "## Design",
+            "## Tasks",
+            "## Condition → negative case",
+            "## Data access & side effects",
+            "## Test intent",
+            "## Design rules"
+          ],
+          "parsers": [
+            "conditions",
+            "design-rules"
+          ]
+        }
+      }
+    },
+    "coding": {
+      "layer": "implementation",
+      "purpose": "Implement the approved plan in the ticket worktree; self-check every code-phase rule bound to the touched paths.",
+      "requires": [
+        "approved-plan",
+        "review-scope"
+      ],
+      "produces": [
+        "source-change"
+      ],
+      "mutability": "source",
+      "units": [
+        {
+          "id": "worker",
+          "role": "worker",
+          "tier": "routine"
+        }
+      ],
+      "boundary": "controller",
+      "gates": [
+        "G6",
+        "G7"
+      ],
+      "rulePhases": [
+        "code"
+      ],
+      "artifacts": [
+        "implementation.md"
+      ],
+      "subjectNode": true,
+      "card": "references/nodes/coding.md",
+      "checks": {
+        "implementation.md": {
+          "sections": [
+            "## Changes",
+            "## Checks",
+            "## Rule self-check"
+          ],
+          "parsers": [
+            "rule-self-check"
+          ]
+        }
+      }
+    },
+    "code-review": {
+      "layer": "implementation",
+      "purpose": "Two independent deep reviewers (mechanical rules, semantic correctness) over the real diff; controller judges. NEEDS CHANGES reopens coding; round two reviews only the fix.",
+      "requires": [
+        "source-change"
+      ],
+      "produces": [
+        "code-reviewed"
+      ],
+      "mutability": "findings-only",
+      "units": [
+        {
+          "id": "mechanical-review",
+          "role": "worker",
+          "tier": "deep"
+        },
+        {
+          "id": "semantic-review",
+          "role": "worker",
+          "tier": "deep"
+        }
+      ],
+      "pattern": "parallel-units-controller-judged",
+      "boundary": "controller",
+      "gates": [
+        "G4"
+      ],
+      "loopBackTo": "coding",
+      "rulePhases": [
+        "code"
+      ],
+      "artifacts": [
+        "code-review.md"
+      ],
+      "card": "references/nodes/code-review.md",
+      "checks": {
+        "code-review.md": {
+          "parsers": [
+            "verdict"
+          ]
+        }
+      }
+    },
+    "testcase": {
+      "layer": "implementation",
+      "purpose": "Derive test cases from the approved plan (not from the code) in the profile's testcase format.",
+      "requires": [
+        "approved-plan"
+      ],
+      "produces": [
+        "testcases"
+      ],
+      "mutability": "artifacts",
+      "units": [
+        {
+          "id": "worker",
+          "role": "worker",
+          "tier": "routine"
+        }
+      ],
+      "boundary": "controller",
+      "gates": [
+        "G5"
+      ],
+      "rulePhases": [
+        "test"
+      ],
+      "artifacts": [
+        "testcases.md"
+      ],
+      "card": "references/nodes/testcase.md",
+      "checks": {
+        "testcases.md": {
+          "sections": [
+            "## Coverage matrix"
+          ]
+        }
+      }
+    },
+    "testcase-review": {
+      "layer": "implementation",
+      "purpose": "Coverage of every plan condition and every expected value; NEEDS CHANGES reopens testcase.",
+      "requires": [
+        "testcases"
+      ],
+      "produces": [
+        "reviewed-testcases"
+      ],
+      "mutability": "findings-only",
+      "units": [
+        {
+          "id": "worker",
+          "role": "worker",
+          "tier": "deep"
+        }
+      ],
+      "boundary": "controller",
+      "gates": [
+        "G4",
+        "G5"
+      ],
+      "loopBackTo": "testcase",
+      "rulePhases": [
+        "test"
+      ],
+      "artifacts": [
+        "testcase-review.md"
+      ],
+      "card": "references/nodes/testcase-review.md",
+      "checks": {
+        "testcase-review.md": {
+          "parsers": [
+            "verdict"
+          ]
+        }
+      }
+    },
+    "execute-and-evidence": {
+      "layer": "delivery",
+      "purpose": "Run every in-scope case on its real surface through the surface adapter; capture before/after state; audit the evidence.",
+      "requires": [
+        "source-change",
+        "reviewed-testcases",
+        "code-reviewed"
+      ],
+      "produces": [
+        "evidence"
+      ],
+      "mutability": "artifacts",
+      "units": [
+        {
+          "id": "worker",
+          "role": "worker",
+          "tier": "routine"
+        }
+      ],
+      "reviewer": {
+        "tier": "deep"
+      },
+      "boundary": "controller",
+      "gates": [
+        "G6",
+        "G7"
+      ],
+      "rulePhases": [
+        "evidence"
+      ],
+      "artifacts": [
+        "run-report.md"
+      ],
+      "card": "references/nodes/execute-and-evidence.md"
+    },
+    "final-review": {
+      "layer": "delivery",
+      "purpose": "Full rulepack over the final subject, reusing verdicts already PASS at code-review; controller issues one receipt per repository.",
+      "requires": [
+        "source-change",
+        "code-reviewed",
+        "evidence"
+      ],
+      "produces": [
+        "receipts"
+      ],
+      "mutability": "findings-only",
+      "units": [
+        {
+          "id": "worker",
+          "role": "worker",
+          "tier": "deep"
+        }
+      ],
+      "boundary": "controller",
+      "gates": [
+        "G5"
+      ],
+      "rulePhases": [
+        "design",
+        "code",
+        "test",
+        "evidence",
+        "delivery"
+      ],
+      "artifacts": [
+        "final-review.md"
+      ],
+      "subjectNode": true,
+      "issuesReceipts": true,
+      "card": "references/nodes/final-review.md",
+      "checks": {
+        "final-review.md": {
+          "parsers": [
+            "rule-verdicts"
+          ]
+        }
+      }
+    },
+    "delivery-drafts": {
+      "layer": "delivery",
+      "purpose": "Write the drafts the delivery adapter lists (commit message, PR body, tracker reply, ...).",
+      "requires": [
+        "receipts",
+        "evidence"
+      ],
+      "produces": [
+        "drafts"
+      ],
+      "mutability": "artifacts",
+      "units": [
+        {
+          "id": "worker",
+          "role": "worker",
+          "tier": "routine"
+        }
+      ],
+      "boundary": "controller",
+      "gates": [],
+      "rulePhases": [
+        "delivery"
+      ],
+      "artifacts": [
+        "@delivery.drafts"
+      ],
+      "card": "references/nodes/delivery-drafts.md"
+    },
+    "deliverable-ready": {
+      "layer": "delivery",
+      "purpose": "No dispatch. Receipts still valid and still match the checkouts; the user approves the drafts; hand off to the delivery adapter.",
+      "requires": [
+        "drafts",
+        "receipts"
+      ],
+      "produces": [
+        "release-ready"
+      ],
+      "mutability": "none",
+      "units": [],
+      "boundary": "user",
+      "gates": [
+        "G7"
+      ],
+      "checksReceipts": true,
+      "artifacts": [],
+      "card": "references/nodes/deliverable-ready.md"
+    },
+    "read-review": {
+      "layer": "after-pr",
+      "when": {
+        "reviewRound": true
+      },
+      "purpose": "Load the complete external review thread through the delivery adapter; drop comments made on an older head.",
+      "requires": [],
+      "produces": [
+        "review-thread"
+      ],
+      "mutability": "state",
+      "units": [
+        {
+          "id": "worker",
+          "role": "worker",
+          "tier": "routine"
+        }
+      ],
+      "boundary": "controller",
+      "gates": [
+        "G7"
+      ],
+      "artifacts": [
+        "review-thread.md"
+      ],
+      "card": "references/nodes/read-review.md"
+    },
+    "triage-review": {
+      "layer": "after-pr",
+      "when": {
+        "reviewRound": true
+      },
+      "purpose": "Verify every claim against code and spec, decide accept/reject/clarify per comment, name the earliest node whose output the accepted findings invalidate.",
+      "requires": [
+        "review-thread"
+      ],
+      "produces": [
+        "triage"
+      ],
+      "mutability": "artifacts",
+      "units": [
+        {
+          "id": "worker",
+          "role": "worker",
+          "tier": "deep"
+        }
+      ],
+      "reviewer": {
+        "tier": "deep"
+      },
+      "boundary": "user",
+      "gates": [
+        "G3"
+      ],
+      "artifacts": [
+        "triage.md"
+      ],
+      "reopens": true,
+      "card": "references/nodes/triage-review.md",
+      "checks": {
+        "triage.md": {
+          "parsers": [
+            "reopen"
+          ]
+        }
+      }
+    },
+    "respond-review": {
+      "layer": "after-pr",
+      "when": {
+        "reviewRound": true
+      },
+      "purpose": "Draft one reply per review comment with the evidence of the fix or the reason for rejection; the delivery adapter re-ships with user approval.",
+      "requires": [
+        "triage",
+        "release-ready"
+      ],
+      "produces": [
+        "review-reply"
+      ],
+      "mutability": "artifacts",
+      "units": [
+        {
+          "id": "worker",
+          "role": "worker",
+          "tier": "routine"
+        }
+      ],
+      "boundary": "user",
+      "gates": [],
+      "artifacts": [
+        "review-reply.md"
+      ],
+      "card": "references/nodes/respond-review.md"
+    }
+  },
+  "gates": {
+    "G0": "Node boundary record. 'user' boundary nodes ask Proceed / Re-run / Stop; others are recorded by the controller.",
+    "G1": "Analysis doubt: missing authority source, unconfirmed assumptions, or cause/requirement confidence below High.",
+    "G3": "Materially different options, or a shared/standard flow is changed.",
+    "G4": "NEEDS CHANGES remains after the loop cap (profile gates.loopCap, default 2).",
+    "G5": "Test or rule applicability / expected value is ambiguous.",
+    "G6": "Shared-state mutation, real device/hardware, missing runtime config, or ambiguous result.",
+    "G7": "Missing or unsafe prerequisite: file, path, adapter, tool, permission, model, or supervision evidence."
+  }
+}

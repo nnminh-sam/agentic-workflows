@@ -1,0 +1,11 @@
+{
+  "kind": "surface",
+  "id": "mobile-flutter",
+  "surface": "mobile",
+  "description": "Flutter app on an emulator/simulator via integration_test or a driver.",
+  "prerequisites": ["emulator or simulator booted", "app built against the target environment"],
+  "run": "Run integration tests or scripted steps per case; capture screen and app state.",
+  "capture": ["screenshot per state change", "integration_test log", "backend DB/API state before/after"],
+  "mutatesSharedState": "when the app points at a shared backend",
+  "requiresG6": false
+}

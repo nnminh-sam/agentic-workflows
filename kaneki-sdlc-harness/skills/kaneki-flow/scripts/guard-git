@@ -1,0 +1,11 @@
+#!/bin/sh
+# OS-agnostic launcher for the kaneki-flow git guard hook (stdin = hook JSON). Same Python selection as `sdlc`.
+here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+ok() { "$@" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)' >/dev/null 2>&1; }
+if [ -n "$SDLC_PYTHON" ] && ok $SDLC_PYTHON; then exec $SDLC_PYTHON "$here/guard_git.py"; fi
+for py in python3 python; do
+  if command -v "$py" >/dev/null 2>&1 && ok "$py"; then exec "$py" "$here/guard_git.py"; fi
+done
+if command -v py >/dev/null 2>&1 && ok py -3; then exec py -3 "$here/guard_git.py"; fi
+echo "Blocked by kaneki-flow guard: Python 3.9+ not found, so git commands cannot be checked." >&2
+exit 2
