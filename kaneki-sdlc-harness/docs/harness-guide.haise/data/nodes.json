@@ -1,0 +1,509 @@
+{
+  "$contract": "nodes@1",
+  "rev": 1,
+  "updated": "2026-11-04",
+  "description": "Every node of graph/lifecycle.json as the driver loads it",
+  "data": [
+    {
+      "id": "prepare",
+      "layer": "analysis",
+      "when": "always",
+      "requires": [],
+      "produces": [
+        "context",
+        "environment",
+        "ticket-authority"
+      ],
+      "units": [
+        "worker (routine)"
+      ],
+      "reviewer": "",
+      "boundary": "controller",
+      "gates": [
+        "G7"
+      ],
+      "rulePhases": [],
+      "artifacts": [
+        "ticket.md",
+        "environment.md"
+      ],
+      "mutability": "state",
+      "flags": [],
+      "inBug": true,
+      "inFeature": true
+    },
+    {
+      "id": "investigate",
+      "layer": "analysis",
+      "when": "kind=bug",
+      "requires": [
+        "environment",
+        "ticket-authority"
+      ],
+      "produces": [
+        "analysis"
+      ],
+      "units": [
+        "worker (deep)"
+      ],
+      "reviewer": "",
+      "boundary": "controller",
+      "gates": [
+        "G1",
+        "G7"
+      ],
+      "rulePhases": [],
+      "artifacts": [
+        "investigation.md"
+      ],
+      "mutability": "artifacts",
+      "flags": [],
+      "inBug": true,
+      "inFeature": false
+    },
+    {
+      "id": "fix-plan",
+      "layer": "analysis",
+      "when": "kind=bug",
+      "requires": [
+        "analysis"
+      ],
+      "produces": [
+        "approved-plan",
+        "review-scope"
+      ],
+      "units": [
+        "worker (deep)"
+      ],
+      "reviewer": "",
+      "boundary": "user",
+      "gates": [
+        "G3"
+      ],
+      "rulePhases": [
+        "design"
+      ],
+      "artifacts": [
+        "plan.md"
+      ],
+      "mutability": "artifacts",
+      "flags": [],
+      "inBug": true,
+      "inFeature": false
+    },
+    {
+      "id": "requirement-analysis",
+      "layer": "analysis",
+      "when": "kind=feature",
+      "requires": [
+        "environment",
+        "ticket-authority"
+      ],
+      "produces": [
+        "analysis"
+      ],
+      "units": [
+        "worker (routine)"
+      ],
+      "reviewer": "deep",
+      "boundary": "controller",
+      "gates": [
+        "G1"
+      ],
+      "rulePhases": [],
+      "artifacts": [
+        "requirements.md"
+      ],
+      "mutability": "artifacts",
+      "flags": [],
+      "inBug": false,
+      "inFeature": true
+    },
+    {
+      "id": "impact-analysis",
+      "layer": "analysis",
+      "when": "kind=feature",
+      "requires": [
+        "analysis"
+      ],
+      "produces": [
+        "impact"
+      ],
+      "units": [
+        "worker (routine)"
+      ],
+      "reviewer": "",
+      "boundary": "controller",
+      "gates": [],
+      "rulePhases": [],
+      "artifacts": [
+        "impact.md"
+      ],
+      "mutability": "artifacts",
+      "flags": [],
+      "inBug": false,
+      "inFeature": true
+    },
+    {
+      "id": "feature-plan",
+      "layer": "analysis",
+      "when": "kind=feature",
+      "requires": [
+        "analysis",
+        "impact"
+      ],
+      "produces": [
+        "approved-plan",
+        "review-scope"
+      ],
+      "units": [
+        "worker (routine)"
+      ],
+      "reviewer": "",
+      "boundary": "user",
+      "gates": [
+        "G3"
+      ],
+      "rulePhases": [
+        "design"
+      ],
+      "artifacts": [
+        "plan.md"
+      ],
+      "mutability": "artifacts",
+      "flags": [],
+      "inBug": false,
+      "inFeature": true
+    },
+    {
+      "id": "coding",
+      "layer": "implementation",
+      "when": "always",
+      "requires": [
+        "approved-plan",
+        "review-scope"
+      ],
+      "produces": [
+        "source-change"
+      ],
+      "units": [
+        "worker (routine)"
+      ],
+      "reviewer": "",
+      "boundary": "controller",
+      "gates": [
+        "G6",
+        "G7"
+      ],
+      "rulePhases": [
+        "code"
+      ],
+      "artifacts": [
+        "implementation.md"
+      ],
+      "mutability": "source",
+      "flags": [
+        "subjectNode"
+      ],
+      "inBug": true,
+      "inFeature": true
+    },
+    {
+      "id": "code-review",
+      "layer": "implementation",
+      "when": "always",
+      "requires": [
+        "source-change"
+      ],
+      "produces": [
+        "code-reviewed"
+      ],
+      "units": [
+        "mechanical-review (deep)",
+        "semantic-review (deep)"
+      ],
+      "reviewer": "",
+      "boundary": "controller",
+      "gates": [
+        "G4"
+      ],
+      "rulePhases": [
+        "code"
+      ],
+      "artifacts": [
+        "code-review.md"
+      ],
+      "mutability": "findings-only",
+      "flags": [
+        "loopBackTo:coding"
+      ],
+      "inBug": true,
+      "inFeature": true
+    },
+    {
+      "id": "testcase",
+      "layer": "implementation",
+      "when": "always",
+      "requires": [
+        "approved-plan"
+      ],
+      "produces": [
+        "testcases"
+      ],
+      "units": [
+        "worker (routine)"
+      ],
+      "reviewer": "",
+      "boundary": "controller",
+      "gates": [
+        "G5"
+      ],
+      "rulePhases": [
+        "test"
+      ],
+      "artifacts": [
+        "testcases.md"
+      ],
+      "mutability": "artifacts",
+      "flags": [],
+      "inBug": true,
+      "inFeature": true
+    },
+    {
+      "id": "testcase-review",
+      "layer": "implementation",
+      "when": "always",
+      "requires": [
+        "testcases"
+      ],
+      "produces": [
+        "reviewed-testcases"
+      ],
+      "units": [
+        "worker (deep)"
+      ],
+      "reviewer": "",
+      "boundary": "controller",
+      "gates": [
+        "G4",
+        "G5"
+      ],
+      "rulePhases": [
+        "test"
+      ],
+      "artifacts": [
+        "testcase-review.md"
+      ],
+      "mutability": "findings-only",
+      "flags": [
+        "loopBackTo:testcase"
+      ],
+      "inBug": true,
+      "inFeature": true
+    },
+    {
+      "id": "execute-and-evidence",
+      "layer": "delivery",
+      "when": "always",
+      "requires": [
+        "source-change",
+        "reviewed-testcases",
+        "code-reviewed"
+      ],
+      "produces": [
+        "evidence"
+      ],
+      "units": [
+        "worker (routine)"
+      ],
+      "reviewer": "deep",
+      "boundary": "controller",
+      "gates": [
+        "G6",
+        "G7"
+      ],
+      "rulePhases": [
+        "evidence"
+      ],
+      "artifacts": [
+        "run-report.md"
+      ],
+      "mutability": "artifacts",
+      "flags": [],
+      "inBug": true,
+      "inFeature": true
+    },
+    {
+      "id": "final-review",
+      "layer": "delivery",
+      "when": "always",
+      "requires": [
+        "source-change",
+        "code-reviewed",
+        "evidence"
+      ],
+      "produces": [
+        "receipts"
+      ],
+      "units": [
+        "worker (deep)"
+      ],
+      "reviewer": "",
+      "boundary": "controller",
+      "gates": [
+        "G5"
+      ],
+      "rulePhases": [
+        "design",
+        "code",
+        "test",
+        "evidence",
+        "delivery"
+      ],
+      "artifacts": [
+        "final-review.md"
+      ],
+      "mutability": "findings-only",
+      "flags": [
+        "subjectNode",
+        "issuesReceipts"
+      ],
+      "inBug": true,
+      "inFeature": true
+    },
+    {
+      "id": "delivery-drafts",
+      "layer": "delivery",
+      "when": "always",
+      "requires": [
+        "receipts",
+        "evidence"
+      ],
+      "produces": [
+        "drafts"
+      ],
+      "units": [
+        "worker (routine)"
+      ],
+      "reviewer": "",
+      "boundary": "controller",
+      "gates": [],
+      "rulePhases": [
+        "delivery"
+      ],
+      "artifacts": [
+        "@delivery.drafts"
+      ],
+      "mutability": "artifacts",
+      "flags": [],
+      "inBug": true,
+      "inFeature": true
+    },
+    {
+      "id": "deliverable-ready",
+      "layer": "delivery",
+      "when": "always",
+      "requires": [
+        "drafts",
+        "receipts"
+      ],
+      "produces": [
+        "release-ready"
+      ],
+      "units": [],
+      "reviewer": "",
+      "boundary": "user",
+      "gates": [
+        "G7"
+      ],
+      "rulePhases": [],
+      "artifacts": [],
+      "mutability": "none",
+      "flags": [
+        "checksReceipts"
+      ],
+      "inBug": true,
+      "inFeature": true
+    },
+    {
+      "id": "read-review",
+      "layer": "after-pr",
+      "when": "reviewRound=True",
+      "requires": [],
+      "produces": [
+        "review-thread"
+      ],
+      "units": [
+        "worker (routine)"
+      ],
+      "reviewer": "",
+      "boundary": "controller",
+      "gates": [
+        "G7"
+      ],
+      "rulePhases": [],
+      "artifacts": [
+        "review-thread.md"
+      ],
+      "mutability": "state",
+      "flags": [],
+      "inBug": false,
+      "inFeature": false
+    },
+    {
+      "id": "triage-review",
+      "layer": "after-pr",
+      "when": "reviewRound=True",
+      "requires": [
+        "review-thread"
+      ],
+      "produces": [
+        "triage"
+      ],
+      "units": [
+        "worker (deep)"
+      ],
+      "reviewer": "deep",
+      "boundary": "user",
+      "gates": [
+        "G3"
+      ],
+      "rulePhases": [],
+      "artifacts": [
+        "triage.md"
+      ],
+      "mutability": "artifacts",
+      "flags": [
+        "reopens"
+      ],
+      "inBug": false,
+      "inFeature": false
+    },
+    {
+      "id": "respond-review",
+      "layer": "after-pr",
+      "when": "reviewRound=True",
+      "requires": [
+        "triage",
+        "release-ready"
+      ],
+      "produces": [
+        "review-reply"
+      ],
+      "units": [
+        "worker (routine)"
+      ],
+      "reviewer": "",
+      "boundary": "user",
+      "gates": [],
+      "rulePhases": [],
+      "artifacts": [
+        "review-reply.md"
+      ],
+      "mutability": "artifacts",
+      "flags": [],
+      "inBug": false,
+      "inFeature": false
+    }
+  ]
+}

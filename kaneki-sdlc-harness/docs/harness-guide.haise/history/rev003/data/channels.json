@@ -1,0 +1,107 @@
+{
+  "$contract": "channels@1",
+  "rev": 1,
+  "updated": "2026-11-04",
+  "description": "Every channel through which information moves between parts of the harness",
+  "data": [
+    {
+      "id": "C1",
+      "from": "Earlier node",
+      "to": "Later node",
+      "carrier": "tokens in `state.json` (`requires` / `produces`)",
+      "contract": "graph-node",
+      "carries": "control: may this node run? must it rerun?",
+      "enforced": "driver"
+    },
+    {
+      "id": "C2",
+      "from": "Earlier node's unit",
+      "to": "Later node's unit",
+      "carrier": "artifact files in the ticket directory (`plan.md`, `investigation.md`…)",
+      "contract": "node-artifact",
+      "carries": "data: the actual analysis, plan, cases, evidence",
+      "enforced": "existence only"
+    },
+    {
+      "id": "C3",
+      "from": "Controller",
+      "to": "Driver",
+      "carrier": "`sdlc <command> --ticket …` arguments",
+      "contract": "cli-envelope",
+      "carries": "commands and decisions (record, gate, invalidate)",
+      "enforced": "driver"
+    },
+    {
+      "id": "C4",
+      "from": "Driver",
+      "to": "Controller",
+      "carrier": "one JSON line on stdout, exit 0 or 2",
+      "contract": "cli-envelope",
+      "carries": "plan, packet path + sha256, next pending, errors with gate id",
+      "enforced": "driver"
+    },
+    {
+      "id": "C5",
+      "from": "Controller",
+      "to": "Unit (subagent)",
+      "carrier": "one-line prompt → packet `.md` + `.rules.json`",
+      "contract": "packet",
+      "carries": "purpose, card, artifacts to write, rules, facts, write limits",
+      "enforced": "driver renders, agent checks sha256"
+    },
+    {
+      "id": "C6",
+      "from": "Controller",
+      "to": "Packet",
+      "carrier": "facts JSON file (`--facts`)",
+      "contract": "facts",
+      "carries": "weakest claim, observed, doubts, settled, authorized paths, findings to fix",
+      "enforced": "none (free JSON)"
+    },
+    {
+      "id": "C7",
+      "from": "Unit",
+      "to": "Controller",
+      "carrier": "result file `results/<dispatch>.md` + ≤150-word reply",
+      "contract": "result-file",
+      "carries": "status, claims, evidence, doubts, verdict",
+      "enforced": "existence + digest"
+    },
+    {
+      "id": "C8",
+      "from": "Unit (coding only)",
+      "to": "Repository",
+      "carrier": "source edits in the ticket worktree",
+      "contract": "receipt",
+      "carries": "the change itself",
+      "enforced": "subject digest at gate"
+    },
+    {
+      "id": "C9",
+      "from": "User",
+      "to": "Driver",
+      "carrier": "AskUserQuestion → `gate --actor user`",
+      "contract": "decision-event",
+      "carries": "plan approval, G4 override, triage reopen, draft approval",
+      "enforced": "driver (boundary: user)"
+    },
+    {
+      "id": "C10",
+      "from": "External PR review",
+      "to": "after-PR nodes",
+      "carrier": "exported file → `handback` → `reviews/round-N.md`",
+      "contract": "decision-event",
+      "carries": "review comments",
+      "enforced": "driver copies + digests"
+    },
+    {
+      "id": "C11",
+      "from": "Profile + adapters",
+      "to": "Driver and units",
+      "carrier": "`sdlc.profile.json`, `adapters/*/*.json`, rulepacks",
+      "contract": "project-profile",
+      "carries": "everything project-specific",
+      "enforced": "light check (`validate`)"
+    }
+  ]
+}

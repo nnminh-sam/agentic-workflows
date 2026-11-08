@@ -1,0 +1,11 @@
+{
+  "kind": "surface",
+  "id": "device-manual",
+  "surface": "device",
+  "description": "Real hardware (handheld, scanner, printer, kiosk) operated by a person; the unit prepares the script and records the operator's results.",
+  "prerequisites": ["device available and assigned", "operator named by the user"],
+  "run": "Write a step-by-step operator script per case; the controller asks the user (G6) to run it and report results/photos; record them verbatim.",
+  "capture": ["operator result per step", "photo/screen capture supplied by the operator", "backend state before/after"],
+  "mutatesSharedState": "always assumed",
+  "requiresG6": true
+}

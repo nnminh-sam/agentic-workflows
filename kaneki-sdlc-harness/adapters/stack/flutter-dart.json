@@ -1,0 +1,20 @@
+{
+  "kind": "stack",
+  "id": "flutter-dart",
+  "description": "Flutter / Dart mobile or handheld app.",
+  "allowedSurfaces": ["mobile", "device", "api", "file"],
+  "filePatterns": ["lib/**/*.dart", "test/**/*.dart", "pubspec.yaml"],
+  "commands": {
+    "doctor": ["flutter --version", "flutter doctor -v"],
+    "format": "dart format --output=none --set-exit-if-changed {paths}",
+    "lint": "flutter analyze {paths}",
+    "build": null,
+    "unitTest": "flutter test {testPaths}"
+  },
+  "worktree": "{git} worktree add {worktreeRoot}/{repoId}-{ticket} -b {branchPrefix}{ticket} {base}",
+  "conventions": [
+    "No business logic in widgets; keep it in the state/service layer.",
+    "Every async call shows loading and error states."
+  ],
+  "rulepack": "stack:flutter-dart"
+}

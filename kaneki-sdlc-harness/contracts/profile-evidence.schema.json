@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sdlc-profile-evidence@1",
+  "title": "Profile evidence sidecar",
+  "description": "sdlc.profile.evidence.json, written by kaneki-onboarding next to the profile. One entry per profile field (flat path, repositories keyed by id). A refresh treats a field as yours when its status is 'user', when it has no entry, or when the profile value differs from the recorded `value`; yours is never overwritten.",
+  "type": "object",
+  "required": ["schemaVersion", "generator", "writtenAt", "profile", "fields", "verification", "files", "gaps", "diff", "open"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "generator": {"type": "string"},
+    "writtenAt": {"type": "string"},
+    "profile": {"type": "string"},
+    "fields": {
+      "type": "object",
+      "description": "Keys: flat paths such as `project.name`, `repositories.api.stack`, `evidence.surfaces.web`.",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["confidence", "evidence", "status", "value"],
+        "properties": {
+          "confidence": {"enum": ["high", "medium", "low"]},
+          "evidence": {"type": "array", "items": {"type": "string"}, "description": "path:line, a command, or 'answered by you'"},
+          "status": {"enum": ["detected", "default", "user"]},
+          "value": {"description": "The value onboarding wrote; a different profile value means you edited it."}
+        }
+      }
+    },
+    "verification": {
+      "type": "array",
+      "items": {
+        "type": "object", "required": ["repo", "cmd", "role", "ran"],
+        "properties": {"repo": {"type": "string"}, "cmd": {"type": "string"}, "role": {"type": "string"}, "evidence": {"type": "string"},
+                       "ran": {"type": "boolean"}, "exit": {"type": ["integer", "null"]}, "ok": {"type": "boolean"},
+                       "tail": {"type": "array", "items": {"type": "string"}}, "reason": {"type": "string"}, "at": {"type": "string"}}
+      }
+    },
+    "files": {"type": "object", "additionalProperties": {"type": "string"}, "description": "Generated adapter path → sha256 when written; a different digest means you edited it."},
+    "gaps": {"type": "array", "items": {"type": "string"}},
+    "diff": {"type": "array", "items": {"type": "object", "required": ["field", "action"], "properties": {"field": {"type": "string"}, "action": {"enum": ["added", "updated", "kept-yours", "no-longer-detected", "removed"]}}}},
+    "open": {"type": "array", "items": {"type": "string"}, "description": "Fields still at a default or low confidence."}
+  }
+}

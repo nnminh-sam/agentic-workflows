@@ -1,0 +1,120 @@
+{
+  "$contract": "layout@1",
+  "rev": 2,
+  "updated": "2026-11-04",
+  "description": "Every file and folder the harness creates or reads, and how it lives",
+  "data": [
+    {
+      "path": "sdlc.profile.json",
+      "where": "project",
+      "writer": "you",
+      "when": "once",
+      "lifecycle": "edited by hand; `validate` before use",
+      "contract": "project-profile"
+    },
+    {
+      "path": "rules/*.json, extensions/*.json, adapters (optional)",
+      "where": "project",
+      "writer": "you",
+      "when": "once",
+      "lifecycle": "referenced by relative path from the profile",
+      "contract": "rulepack / extension / adapter"
+    },
+    {
+      "path": "<worktreeRoot>/<repoId>-<ticket>/",
+      "where": "worktree root",
+      "writer": "prepare unit (stack adapter `worktree`)",
+      "when": "prepare",
+      "lifecycle": "`paths.worktreeRoot` (default `worktrees`, relative to the profile, outside every repo); bound with `sdlc worktree`, which refuses any other folder; the only place source is changed",
+      "contract": "receipt"
+    },
+    {
+      "path": "<ticketRoot>/<ticket>/state.json",
+      "where": "ticket",
+      "writer": "driver",
+      "when": "every state-changing command",
+      "lifecycle": "replaced atomically (`state.tmp` → `state.json`)",
+      "contract": "state"
+    },
+    {
+      "path": "<ticketRoot>/<ticket>/decisions.jsonl",
+      "where": "ticket",
+      "writer": "driver",
+      "when": "every event",
+      "lifecycle": "append-only, never rewritten",
+      "contract": "decision-event"
+    },
+    {
+      "path": "ticket.md, environment.md",
+      "where": "ticket",
+      "writer": "prepare unit",
+      "when": "prepare",
+      "lifecycle": "overwritten if prepare reruns",
+      "contract": "node-artifact"
+    },
+    {
+      "path": "investigation.md · requirements.md · impact.md · questions.md · plan.md",
+      "where": "ticket",
+      "writer": "analysis units",
+      "when": "layer 1",
+      "lifecycle": "overwritten in place on rerun (no archive)",
+      "contract": "node-artifact"
+    },
+    {
+      "path": "implementation.md · code-review.md · testcases.md · testcase-review.md",
+      "where": "ticket",
+      "writer": "layer 2 units",
+      "when": "layer 2",
+      "lifecycle": "overwritten in place on rerun",
+      "contract": "node-artifact"
+    },
+    {
+      "path": "run-report.md · evidence/** · final-review.md · drafts/<name>.md",
+      "where": "ticket",
+      "writer": "layer 3 units",
+      "when": "layer 3",
+      "lifecycle": "overwritten in place on rerun",
+      "contract": "node-artifact"
+    },
+    {
+      "path": "reviews/round-<N>.md",
+      "where": "ticket",
+      "writer": "driver `handback`",
+      "when": "each PR review round",
+      "lifecycle": "one file per round, kept",
+      "contract": "decision-event"
+    },
+    {
+      "path": "review-thread.md · triage.md · review-reply.md",
+      "where": "ticket",
+      "writer": "after-PR units",
+      "when": "layer 4",
+      "lifecycle": "overwritten each round",
+      "contract": "node-artifact"
+    },
+    {
+      "path": "packets/<node>.g<G>.<unit>.r<R>.md + .rules.json",
+      "where": "ticket",
+      "writer": "driver `packet`",
+      "when": "each dispatch",
+      "lifecycle": "unique name per generation and round: never overwritten",
+      "contract": "packet"
+    },
+    {
+      "path": "results/<node>.g<G>.<unit>.r<R>.md",
+      "where": "ticket",
+      "writer": "unit",
+      "when": "each dispatch",
+      "lifecycle": "unique name: never overwritten; digest pinned in state",
+      "contract": "result-file"
+    },
+    {
+      "path": "HANDOFF.md",
+      "where": "ticket",
+      "writer": "controller",
+      "when": "after code-review and execute-and-evidence",
+      "lifecycle": "overwritten; resume aid only",
+      "contract": "—"
+    }
+  ]
+}

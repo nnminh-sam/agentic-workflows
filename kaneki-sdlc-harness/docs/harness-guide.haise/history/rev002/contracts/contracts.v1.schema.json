@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts@1",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": [
+      "id",
+      "name",
+      "schemaId",
+      "file",
+      "writer",
+      "reader",
+      "enforced",
+      "enforcedNote",
+      "fields",
+      "cites"
+    ],
+    "additionalProperties": false,
+    "properties": {
+      "id": {
+        "type": "string"
+      },
+      "name": {
+        "type": "string"
+      },
+      "schemaId": {
+        "type": "string"
+      },
+      "file": {
+        "type": "string"
+      },
+      "writer": {
+        "type": "string"
+      },
+      "reader": {
+        "type": "string"
+      },
+      "enforced": {
+        "enum": [
+          "driver",
+          "driver-written",
+          "partial",
+          "none",
+          "existence only",
+          "existence + digest",
+          "append-only by convention",
+          "driver renders; agent verifies digest"
+        ]
+      },
+      "enforcedNote": {
+        "type": "string"
+      },
+      "fields": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "name",
+            "type",
+            "req",
+            "meaning"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string"
+            },
+            "req": {
+              "type": "boolean"
+            },
+            "meaning": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "cites": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

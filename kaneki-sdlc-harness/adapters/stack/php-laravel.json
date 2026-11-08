@@ -1,0 +1,20 @@
+{
+  "kind": "stack",
+  "id": "php-laravel",
+  "description": "PHP / Laravel web app, API and batch (the WMS backend).",
+  "allowedSurfaces": ["web", "api", "batch", "db", "file", "report_pdf"],
+  "filePatterns": ["app/**/*.php", "routes/**/*.php", "database/**/*.php", "resources/views/**/*.blade.php"],
+  "commands": {
+    "doctor": ["php --version", "composer --version", "php artisan --version"],
+    "format": "vendor/bin/pint --test {paths}",
+    "lint": "vendor/bin/phpstan analyse {paths} --no-progress",
+    "build": null,
+    "unitTest": "php artisan test {testPaths}"
+  },
+  "worktree": "{git} worktree add {worktreeRoot}/{repoId}-{ticket} -b {branchPrefix}{ticket} {base}",
+  "conventions": [
+    "Query builder/Eloquent bindings only; raw SQL must bind every value.",
+    "Transactions around multi-table writes; lock rows you read-then-write."
+  ],
+  "rulepack": "stack:php-laravel"
+}

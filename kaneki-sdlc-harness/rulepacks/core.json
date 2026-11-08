@@ -1,0 +1,478 @@
+{
+  "packId": "core@2",
+  "description": "Generic software-development rules for front end and back end. Rules without `appliesTo` apply to every ticket; front-end rules apply when the ticket touches a web or mobile surface, back-end rules when it touches api, db, batch or cli. Severity: critical and high are blocking findings, medium and low are actions.",
+  "rules": [
+    {
+      "id": "REQ-01",
+      "phase": "design",
+      "severity": "high",
+      "title": "Every change traces to the cause or a requirement",
+      "check": "Each planned change cites the confirmed root cause (bug) or a requirement (feature); nothing unrelated is planned."
+    },
+    {
+      "id": "REQ-02",
+      "phase": "design",
+      "severity": "high",
+      "title": "Fixed values trace to an authoritative source",
+      "check": "Every fixed value, format, limit and field size the change introduces or relies on traces to a named requirement, spec or existing contract location; anything without an authority is listed as an open question, not guessed."
+    },
+    {
+      "id": "REQ-03",
+      "phase": "design",
+      "severity": "medium",
+      "title": "Documented vs actual behaviour is recorded",
+      "check": "Where the current behaviour differs from the documentation or spec, the plan records the difference and the decision (follow the spec, keep the behaviour, or ask)."
+    },
+    {
+      "id": "REQ-04",
+      "phase": "design",
+      "severity": "medium",
+      "title": "Related work is checked",
+      "check": "Open issues, pull requests and recent changes touching the same area are checked for the same defect or overlapping work; the result is reported, also when nothing is found."
+    },
+    {
+      "id": "DES-01",
+      "phase": "design",
+      "severity": "high",
+      "title": "Every changed condition has a negative case",
+      "check": "The Condition → negative case table covers every predicate, branch, filter and query condition the plan adds or changes."
+    },
+    {
+      "id": "DES-02",
+      "phase": "design",
+      "severity": "high",
+      "title": "Side effects and failure behaviour are declared",
+      "check": "Writes, transactions, locking, migrations, external calls, emitted events and cache invalidations are listed, each with what happens when it fails."
+    },
+    {
+      "id": "DES-03",
+      "phase": "design",
+      "severity": "high",
+      "title": "Backward compatibility is kept or planned",
+      "check": "Changed public interfaces (API endpoints, events, data formats, config keys, routes, component props) keep existing consumers working, or the plan names the migration and every consumer to update."
+    },
+    {
+      "id": "DES-04",
+      "phase": "design",
+      "severity": "medium",
+      "title": "Established patterns are reused",
+      "check": "The plan compares sibling implementations and uses the project's standard mechanism (framework feature, shared module, design-system component); a new mechanism is justified with evidence."
+    },
+    {
+      "id": "DES-05",
+      "phase": "design",
+      "severity": "high",
+      "title": "Schema changes are reversible and rolled out safely",
+      "check": "Every schema or data migration has a working rollback (or a stated reason why not), is safe against the data already deployed, and the deploy order with the code is stated.",
+      "appliesTo": {
+        "surfaces": [
+          "db",
+          "api",
+          "batch"
+        ]
+      }
+    },
+    {
+      "id": "SCOPE-01",
+      "phase": "code",
+      "severity": "high",
+      "title": "The diff matches the plan",
+      "check": "Every hunk maps to a plan item; no unplanned behaviour change and no drive-by refactor."
+    },
+    {
+      "id": "SCOPE-02",
+      "phase": "code",
+      "severity": "high",
+      "title": "Only required schema and data changes ship",
+      "check": "Every schema, migration or seed change is required by the ticket; changes that were tried and withdrawn are not left in the deliverable.",
+      "appliesTo": {
+        "surfaces": [
+          "db",
+          "api",
+          "batch"
+        ]
+      }
+    },
+    {
+      "id": "SCOPE-03",
+      "phase": "code",
+      "severity": "high",
+      "title": "Shared components change only with all consumers checked",
+      "check": "Shared or base code (libraries, base classes, shared UI components, global styles, common config) is changed only when needed; every consumer is found and verified."
+    },
+    {
+      "id": "CODE-01",
+      "phase": "code",
+      "severity": "medium",
+      "title": "Names describe responsibility",
+      "check": "New and changed names (functions, classes, components, endpoints, files) describe what they do, consistently with their counterparts (interface/implementation, request/response, component/props)."
+    },
+    {
+      "id": "CODE-02",
+      "phase": "code",
+      "severity": "high",
+      "title": "Assumptions are enforced where they are relied on",
+      "check": "Inputs, nullability, ordering, uniqueness and shape that the code relies on are validated at the boundary where they enter (request, form, message, file, props), not assumed."
+    },
+    {
+      "id": "CODE-03",
+      "phase": "code",
+      "severity": "medium",
+      "title": "Dependencies are wired the project's way",
+      "check": "New services, providers, stores or components are registered and injected through the project's standard mechanism, and the wiring is verified by a run or test."
+    },
+    {
+      "id": "CODE-04",
+      "phase": "code",
+      "severity": "high",
+      "title": "Configuration fails closed",
+      "check": "No environment-specific values are hard-coded; a missing required setting fails clearly instead of falling back to a default that silently selects something else; a renamed key is updated in every consumer."
+    },
+    {
+      "id": "CODE-05",
+      "phase": "code",
+      "severity": "medium",
+      "title": "Repository conventions pass",
+      "check": "The formatter, linter and type checker of the stack pass on the touched files, and new findings are told apart from findings that already existed."
+    },
+    {
+      "id": "ERR-01",
+      "phase": "code",
+      "severity": "high",
+      "title": "Errors are handled, not swallowed",
+      "check": "New failure paths are handled or propagated with context; no empty catch, no ignored result of a fallible call, no unhandled promise rejection."
+    },
+    {
+      "id": "ERR-02",
+      "phase": "code",
+      "severity": "high",
+      "title": "Ambiguity fails without partial changes",
+      "check": "When the target of an operation is ambiguous or duplicated, the operation fails before changing anything; duplicates are never collapsed silently."
+    },
+    {
+      "id": "SEC-01",
+      "phase": "code",
+      "severity": "critical",
+      "title": "No secrets or personal data in code",
+      "check": "No keys, tokens, passwords, connection strings or personal data in source, tests, fixtures, client bundles or logs."
+    },
+    {
+      "id": "SEC-02",
+      "phase": "code",
+      "severity": "critical",
+      "title": "Data access and commands are injection-safe",
+      "check": "Queries, shell commands and templates built from input use parameter binding or escaping provided by the stack; no string concatenation with untrusted input.",
+      "appliesTo": {
+        "surfaces": [
+          "api",
+          "db",
+          "batch",
+          "cli"
+        ]
+      }
+    },
+    {
+      "id": "SEC-03",
+      "phase": "code",
+      "severity": "critical",
+      "title": "Authorization is enforced on the server",
+      "check": "New or changed endpoints, jobs and handlers enforce the intended permission checks server-side; tenant and ownership boundaries are checked on every read and write.",
+      "appliesTo": {
+        "surfaces": [
+          "api",
+          "db",
+          "batch",
+          "cli"
+        ]
+      }
+    },
+    {
+      "id": "SEC-04",
+      "phase": "code",
+      "severity": "critical",
+      "title": "Untrusted content is rendered safely",
+      "check": "Untrusted data is rendered through safe bindings (no raw HTML injection without sanitising); client-side checks are treated as UX only; tokens are stored and sent per the project's auth pattern.",
+      "appliesTo": {
+        "surfaces": [
+          "web",
+          "mobile"
+        ]
+      }
+    },
+    {
+      "id": "DATA-01",
+      "phase": "code",
+      "severity": "high",
+      "title": "Multi-step writes are atomic and concurrency-safe",
+      "check": "Writes that must succeed together run in one transaction; read-then-write sequences on shared data use a lock or a conditional update on the narrowest stable key.",
+      "appliesTo": {
+        "surfaces": [
+          "api",
+          "db",
+          "batch",
+          "cli"
+        ]
+      }
+    },
+    {
+      "id": "DATA-02",
+      "phase": "code",
+      "severity": "high",
+      "title": "Side effects happen after the commit",
+      "check": "Events, messages, notifications, cache updates and calls to other systems are emitted only after the data they describe is durably committed.",
+      "appliesTo": {
+        "surfaces": [
+          "api",
+          "db",
+          "batch",
+          "cli"
+        ]
+      }
+    },
+    {
+      "id": "DATA-03",
+      "phase": "code",
+      "severity": "high",
+      "title": "Repeated runs are safe",
+      "check": "Jobs, imports, retries, webhooks and data scripts are idempotent: they use natural keys, handle soft-deleted rows and reject key collisions, so running them twice gives the same result.",
+      "appliesTo": {
+        "surfaces": [
+          "api",
+          "db",
+          "batch",
+          "cli"
+        ]
+      }
+    },
+    {
+      "id": "DATA-04",
+      "phase": "code",
+      "severity": "medium",
+      "title": "Audit fields are always populated",
+      "check": "Created/updated-by and similar audit fields are set explicitly when there is no authenticated user (jobs, scripts, system calls).",
+      "appliesTo": {
+        "surfaces": [
+          "api",
+          "db",
+          "batch",
+          "cli"
+        ]
+      }
+    },
+    {
+      "id": "API-01",
+      "phase": "code",
+      "severity": "high",
+      "title": "API contracts stay consistent",
+      "check": "Request and response shapes, status codes, error format, pagination and naming follow the existing API conventions; the contract (OpenAPI, types, docs) is updated with the change.",
+      "appliesTo": {
+        "surfaces": [
+          "api"
+        ]
+      }
+    },
+    {
+      "id": "UI-01",
+      "phase": "code",
+      "severity": "high",
+      "title": "Every async view handles all states",
+      "check": "Screens and components that load or submit data handle loading, empty, error and success states, and disable or guard repeated submits.",
+      "appliesTo": {
+        "surfaces": [
+          "web",
+          "mobile"
+        ]
+      }
+    },
+    {
+      "id": "UI-02",
+      "phase": "code",
+      "severity": "high",
+      "title": "Accessible by keyboard and assistive technology",
+      "check": "Semantic elements, labels for every input, keyboard operation, visible focus and focus management on dialogs and route changes; images have text alternatives.",
+      "appliesTo": {
+        "surfaces": [
+          "web"
+        ]
+      }
+    },
+    {
+      "id": "UI-03",
+      "phase": "code",
+      "severity": "medium",
+      "title": "User-facing text goes through the project's text mechanism",
+      "check": "Visible strings, dates, numbers and currencies use the project's i18n / formatting mechanism where it exists; no hard-coded copy or locale-specific formats in components.",
+      "appliesTo": {
+        "surfaces": [
+          "web",
+          "mobile"
+        ]
+      }
+    },
+    {
+      "id": "UI-04",
+      "phase": "code",
+      "severity": "medium",
+      "title": "Layout follows the design system and supported sizes",
+      "check": "Uses the project's design-system components and tokens instead of one-off styles, and works at the supported viewports / devices and orientations.",
+      "appliesTo": {
+        "surfaces": [
+          "web",
+          "mobile"
+        ]
+      }
+    },
+    {
+      "id": "UI-05",
+      "phase": "code",
+      "severity": "medium",
+      "title": "Client state has one source of truth",
+      "check": "Server data is cached and invalidated through the project's data layer after mutations; no duplicated copies of server state drifting in local component state.",
+      "appliesTo": {
+        "surfaces": [
+          "web",
+          "mobile"
+        ]
+      }
+    },
+    {
+      "id": "PERF-01",
+      "phase": "code",
+      "severity": "medium",
+      "title": "No avoidable performance regressions",
+      "check": "Back end: no N+1 queries, unbounded loops or unpaginated result sets. Front end: no unnecessary re-renders, oversized bundles or blocking work on the main thread. Hot paths are measured when changed."
+    },
+    {
+      "id": "OBS-01",
+      "phase": "code",
+      "severity": "medium",
+      "title": "Logs are actionable and safe",
+      "check": "Logged events are actionable, at the right level, without noise in high-frequency paths, and never contain secrets or personal data; errors carry enough context to diagnose."
+    },
+    {
+      "id": "DOC-01",
+      "phase": "code",
+      "severity": "medium",
+      "title": "Comments and docs match the new behaviour",
+      "check": "Comments, docstrings, READMEs and test descriptions touched by the behaviour change are updated; comment density matches the surrounding code."
+    },
+    {
+      "id": "TEST-01",
+      "phase": "code",
+      "severity": "medium",
+      "title": "Logic changes come with automated tests",
+      "check": "New or changed logic has unit or component tests where the stack has a runner, or the plan says why not; tests fail without the fix."
+    },
+    {
+      "id": "TEST-02",
+      "phase": "test",
+      "severity": "high",
+      "title": "Every plan condition is covered",
+      "check": "Every Condition → negative case row has at least one positive and one negative test case."
+    },
+    {
+      "id": "TEST-03",
+      "phase": "test",
+      "severity": "high",
+      "title": "Expected results are concrete",
+      "check": "Each case states a concrete, checkable expected result (value, state, message, screen), never 'works correctly'."
+    },
+    {
+      "id": "TEST-04",
+      "phase": "test",
+      "severity": "medium",
+      "title": "Known callers get regression cases",
+      "check": "Callers and screens named in the impact or investigation have at least one regression case."
+    },
+    {
+      "id": "TEST-05",
+      "phase": "test",
+      "severity": "medium",
+      "title": "UI cases cover the supported targets",
+      "check": "UI cases name the browsers / devices / viewports they run on and include keyboard and error-state paths.",
+      "appliesTo": {
+        "surfaces": [
+          "web",
+          "mobile"
+        ]
+      }
+    },
+    {
+      "id": "EVD-01",
+      "phase": "evidence",
+      "severity": "high",
+      "title": "Cases were really executed",
+      "check": "Every case marked OK was executed on its declared surface; the command, trace or recording is attached."
+    },
+    {
+      "id": "EVD-02",
+      "phase": "evidence",
+      "severity": "high",
+      "title": "Evidence proves the expected state",
+      "check": "Each OK case has before/after state (data, response, screen) that proves its expected result and is reproducibly tied to the action that produced it; a screenshot alone is not enough."
+    },
+    {
+      "id": "EVD-03",
+      "phase": "evidence",
+      "severity": "high",
+      "title": "Evidence comes from a controlled environment",
+      "check": "Cases run in an isolated, known environment; stale workers, caches, queues and locks are cleared before the run."
+    },
+    {
+      "id": "EVD-04",
+      "phase": "evidence",
+      "severity": "high",
+      "title": "Evidence is regenerated after behaviour changes",
+      "check": "After any behaviour change, every affected evidence value, capture and expectation is re-derived from a new run."
+    },
+    {
+      "id": "EVD-05",
+      "phase": "evidence",
+      "severity": "high",
+      "title": "Shared state is restored",
+      "check": "Every mutation of shared state has a ledger entry and was restored, or the user accepted leaving it."
+    },
+    {
+      "id": "EVD-06",
+      "phase": "evidence",
+      "severity": "medium",
+      "title": "Coverage is reported exactly",
+      "check": "The run report states measurable coverage (cases planned, run, OK, NG, N/A) and references case ids exactly as in the test cases."
+    },
+    {
+      "id": "DLV-01",
+      "phase": "delivery",
+      "severity": "high",
+      "title": "Delivery text tells the truth",
+      "check": "Commit message, PR description and replies state what changed, why and how it was verified, consistent with the final review and evidence; no workflow labels."
+    },
+    {
+      "id": "DLV-02",
+      "phase": "delivery",
+      "severity": "high",
+      "title": "Only intended paths ship",
+      "check": "The change set equals the reviewed files; no stray files, logs, local config or generated artefacts."
+    },
+    {
+      "id": "DLV-03",
+      "phase": "delivery",
+      "severity": "medium",
+      "title": "Required formats are kept",
+      "check": "Deliverables keep their required format (templates, changelog, release notes); fields without a source stay empty rather than invented."
+    },
+    {
+      "id": "DLV-04",
+      "phase": "delivery",
+      "severity": "high",
+      "title": "Branch is mergeable as reviewed",
+      "check": "Every dependency of the change exists on the target branch, and concurrent branches touching the same files are checked for conflicts or incompatible changes."
+    },
+    {
+      "id": "DLV-05",
+      "phase": "delivery",
+      "severity": "medium",
+      "title": "Earlier review commitments are honoured",
+      "check": "Commitments made in earlier review replies on this or related changes are kept, and every claim in the replies is re-verified before delivery."
+    }
+  ]
+}

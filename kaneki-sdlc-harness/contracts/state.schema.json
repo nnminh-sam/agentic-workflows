@@ -1,0 +1,190 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sdlc-state@1",
+  "title": "Ticket state",
+  "description": "<ticketRoot>/<ticket>/state.json — written only by the driver. decisions.jsonl next to it is the append-only log of every init, record, gate, invalidate and handback.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "graphId",
+    "profilePath",
+    "context",
+    "nodes",
+    "receipts"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "graphId": {
+      "type": "string"
+    },
+    "profilePath": {
+      "type": "string",
+      "description": "POSIX path relative to the ticket folder (informational; the profile passed to the driver is authoritative)."
+    },
+    "context": {
+      "type": "object",
+      "required": [
+        "ticket",
+        "kind",
+        "maturity",
+        "reviewRound",
+        "families",
+        "surfaces",
+        "repositories"
+      ],
+      "properties": {
+        "ticket": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "bug",
+            "feature"
+          ]
+        },
+        "maturity": {
+          "enum": [
+            "new",
+            "pr_opened"
+          ]
+        },
+        "reviewRound": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "families": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "surfaces": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "repositories": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "stack",
+              "path",
+              "baseBranch"
+            ],
+            "description": "path/worktree are a per-machine cache: the driver re-derives path from the profile and worktree from worktreeRel on every load.",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "stack": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "worktree": {
+                "type": "string"
+              },
+              "worktreeRel": {
+                "type": "string",
+                "description": "POSIX path relative to the profile folder"
+              },
+              "stackAdapter": {
+                "type": "string"
+              },
+              "baseBranch": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "locale": {
+          "type": "object",
+          "description": "Per-ticket language overrides, set only when the user explicitly asked in the prompt (`sdlc init --lang` / `sdlc lang --set`). Wins over the profile.",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "nodes": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "status",
+          "generation",
+          "attempts",
+          "units"
+        ],
+        "properties": {
+          "status": {
+            "enum": [
+              "pending",
+              "in_progress",
+              "stale",
+              "done"
+            ]
+          },
+          "generation": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "attempts": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "verdict": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "closedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "subject": {
+            "type": "object"
+          },
+          "artifactDigests": {
+            "type": "object"
+          },
+          "units": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "unit",
+                "generation",
+                "model",
+                "status",
+                "result",
+                "resultDigest"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "receipts": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "head",
+          "subject",
+          "issuedAt",
+          "expiresAt"
+        ]
+      }
+    }
+  }
+}

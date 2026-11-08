@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sdlc-rulepack@1",
+  "title": "Rulepack",
+  "description": "Review rules as data. A node judges the rules whose phase is in its rulePhases and whose appliesTo matches the ticket.",
+  "type": "object",
+  "required": ["packId", "rules"],
+  "properties": {
+    "packId": {"type": "string"},
+    "description": {"type": "string"},
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "phase", "severity", "title", "check"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[A-Z][A-Z0-9-]+$"},
+          "phase": {"enum": ["design", "code", "test", "evidence", "delivery"]},
+          "severity": {"enum": ["critical", "high", "medium", "low"]},
+          "title": {"type": "string"},
+          "check": {"type": "string", "description": "What the reviewer verifies, phrased so PASS/FAIL is decidable from evidence."},
+          "appliesTo": {
+            "type": "object",
+            "properties": {
+              "kinds": {"type": "array", "items": {"enum": ["bug", "feature"]}},
+              "stacks": {"type": "array", "items": {"type": "string"}},
+              "surfaces": {"type": "array", "items": {"type": "string"}},
+              "families": {"type": "array", "items": {"type": "string"}}
+            }
+          },
+          "reference": {"type": "string", "description": "Link or path to the source standard."}
+        }
+      }
+    }
+  }
+}

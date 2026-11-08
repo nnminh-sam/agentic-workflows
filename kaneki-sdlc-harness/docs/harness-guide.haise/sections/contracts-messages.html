@@ -1,0 +1,35 @@
+<h2>Contracts that carry messages (controller ↔ driver ↔ unit)</h2>
+<p>These contracts are the actual "wire" between the parts. Each dispatch produces a fixed set of three files, all named by the <strong>dispatch id</strong> <code>&lt;node&gt;.g&lt;generation&gt;.&lt;unit&gt;.r&lt;round&gt;</code>. Because the name includes the generation and the round, no message file is ever overwritten. {{ cite('src-dispatch-id') }} {{ tag('sure') }}</p>
+<div class="grid3">
+  <div class="card"><h4>In: packet</h4><code>packets/coding.g2.worker.r1.md</code><br>rendered by the driver, pinned by sha256</div>
+  <div class="card"><h4>In: rules</h4><code>packets/coding.g2.worker.r1.rules.json</code><br>the node's selected rules</div>
+  <div class="card"><h4>Out: result</h4><code>results/coding.g2.worker.r1.md</code><br>written by the unit, digest recorded</div>
+</div>
+{% set ids = ['cli-envelope', 'facts', 'packet', 'result-file', 'node-artifact'] %}
+{% for id in ids %}{% set c = find(contracts, 'id', id) %}
+<h3 id="c-{{ c.id }}">{{ c.name }}</h3>
+<div class="card {{ 'ok' if c.enforced in ['driver', 'driver-written', 'driver renders; agent verifies digest'] else ('bad' if c.enforced in ['none', 'existence only'] else 'warn') }}"><strong>Written by {{ c.writer }} · read by {{ c.reader }} · enforced: {{ c.enforced }}.</strong> {{ rich(c.enforcedNote) }} {{ cite(c.cites) }}</div>
+<div class="tbl">
+  <p class="cap">Shape of {{ c.name }} · {{ rich(c.file) }}</p>
+  <table>
+    <tr><th>Part</th><th>Type</th><th>Required</th><th>Meaning</th></tr>
+    {% for f in c.fields %}
+    <tr><td><code>{{ f.name }}</code></td><td><code>{{ f.type }}</code></td><td>{{ 'yes' if f.req else 'no' }}</td><td>{{ rich(f.meaning) }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endfor %}
+<details class="more"><summary>Example: a facts JSON and the packet command it feeds</summary><div class="body">
+<pre><code>{
+  "weakestClaim": "The NULL check at app/Order.php:88 is the first wrong point",
+  "observed": ["Repro: `php artisan test --filter=OrderNull` fails (exit 1)"],
+  "doubts": ["Is the legacy import path also affected?"],
+  "settled": ["Cause confirmed by query on 2026-11-04"],
+  "authorizedPaths": ["app/Order.php", "tests/Feature/OrderNullTest.php"]
+}
+
+python sdlc.py packet --ticket BUG-1 --node coding --unit worker --facts facts.json
+→ {"path": ".../packets/coding.g1.worker.r1.md", "packetDigest": "…", "agentType": "kaneki-worker",
+   "model": "sonnet", "resultPath": ".../results/coding.g1.worker.r1.md", "dispatchId": "coding.g1.worker.r1"}</code></pre>
+<p>Illustrative values; the keys and output fields are the ones the driver reads and prints. {{ cite('src-dispatch-id') }}</p>
+</div></details>

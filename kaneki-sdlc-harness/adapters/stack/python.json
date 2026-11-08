@@ -1,0 +1,20 @@
+{
+  "kind": "stack",
+  "id": "python",
+  "description": "Python service, library or batch job.",
+  "allowedSurfaces": ["api", "cli", "batch", "db", "web"],
+  "filePatterns": ["**/*.py", "pyproject.toml", "requirements*.txt"],
+  "commands": {
+    "doctor": ["python --version", "python -m pip --version"],
+    "format": "python -m ruff format --check {paths}",
+    "lint": "python -m ruff check {paths}",
+    "build": null,
+    "unitTest": "python -m pytest -q {testPaths}"
+  },
+  "worktree": "{git} worktree add {worktreeRoot}/{repoId}-{ticket} -b {branchPrefix}{ticket} {base}",
+  "conventions": [
+    "Type hints on new public functions.",
+    "No bare except; no mutable default arguments."
+  ],
+  "rulepack": "stack:python"
+}

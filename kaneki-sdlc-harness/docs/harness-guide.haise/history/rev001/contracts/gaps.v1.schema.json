@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "gaps@1",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": [
+      "id",
+      "sev",
+      "title",
+      "detail"
+    ],
+    "additionalProperties": false,
+    "properties": {
+      "id": {
+        "type": "string",
+        "pattern": "^R[0-9]+$"
+      },
+      "sev": {
+        "enum": [
+          "high",
+          "med",
+          "low"
+        ]
+      },
+      "title": {
+        "type": "string"
+      },
+      "detail": {
+        "type": "string"
+      }
+    }
+  }
+}

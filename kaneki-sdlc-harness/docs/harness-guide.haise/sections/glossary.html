@@ -1,0 +1,10 @@
+<h2>Glossary</h2>
+<div class="tbl">
+  <p class="cap">Terms used in this guide</p>
+  <table>
+    <tr><th>Term</th><th>Meaning</th></tr>
+    {% for g in glossary %}
+    <tr><td><strong>{{ g.term }}</strong></td><td>{{ rich(g.meaning) }}</td></tr>
+    {% endfor %}
+  </table>
+</div>

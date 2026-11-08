@@ -1,0 +1,872 @@
+{
+  "$contract": "contracts@1",
+  "rev": 2,
+  "updated": "2026-11-04",
+  "description": "Every contract in the harness: shape, writer, reader, enforcement",
+  "data": [
+    {
+      "id": "project-profile",
+      "name": "Project profile",
+      "schemaId": "sdlc-project-profile@1",
+      "file": "`contracts/project-profile.schema.json` · instance `sdlc.profile.json`",
+      "writer": "You (once per project)",
+      "reader": "driver (every command), units via plan/packet",
+      "enforced": "partial",
+      "enforcedNote": "`harness/profile.py` `validate_profile` checks required keys, tiers, repo fields, testcase format and that every surface has an evidence entry; it does not enforce `additionalProperties: false` or types.",
+      "fields": [
+        {
+          "name": "schemaVersion",
+          "type": "1",
+          "req": true,
+          "meaning": "contract version"
+        },
+        {
+          "name": "project",
+          "type": "{id, name, description?}",
+          "req": true,
+          "meaning": "identity"
+        },
+        {
+          "name": "locale",
+          "type": "{chat, artifacts, tracker, review}",
+          "req": false,
+          "meaning": "language per audience"
+        },
+        {
+          "name": "paths.ticketRoot",
+          "type": "string",
+          "req": true,
+          "meaning": "ticket directories root, relative to the profile file"
+        },
+        {
+          "name": "paths.branchPrefix",
+          "type": "string",
+          "req": false,
+          "meaning": "branch name prefix for worktrees"
+        },
+        {
+          "name": "models",
+          "type": "{routine, deep}",
+          "req": true,
+          "meaning": "model per capability tier"
+        },
+        {
+          "name": "tracker",
+          "type": "{adapter, config?}",
+          "req": true,
+          "meaning": "tracker adapter id/path + its config"
+        },
+        {
+          "name": "repositories[]",
+          "type": "{id, path, stack, surfaces[], defaultBranch?, remote?}",
+          "req": true,
+          "meaning": "each repo the harness may read/change"
+        },
+        {
+          "name": "rulepacks[]",
+          "type": "string",
+          "req": true,
+          "meaning": "bundled pack ids or paths; stack packs load automatically"
+        },
+        {
+          "name": "testcase",
+          "type": "{format, template?, helper?}",
+          "req": true,
+          "meaning": "markdown | xlsx | csv | gherkin"
+        },
+        {
+          "name": "evidence.surfaces",
+          "type": "map surface → {adapter, reason?, config?}",
+          "req": true,
+          "meaning": "runner per surface; adapter `none` opts out"
+        },
+        {
+          "name": "delivery",
+          "type": "{adapter, drafts[], receiptTtlHours?, minHoursLeft?, config?}",
+          "req": true,
+          "meaning": "drafts to write and receipt timing"
+        },
+        {
+          "name": "families[]",
+          "type": "{id, nodes?, rulepack?}",
+          "req": false,
+          "meaning": "capability families: extension nodes + rules"
+        },
+        {
+          "name": "gates",
+          "type": "{loopCap?, autoSkipPlanApproval?}",
+          "req": false,
+          "meaning": "loop cap (default 2), plan auto-approval"
+        },
+        {
+          "name": "environment",
+          "type": "{doctor[]?, sharedState[]?}",
+          "req": false,
+          "meaning": "extra doctor commands; resources whose mutation needs G6"
+        }
+      ],
+      "cites": [
+        "src-profile-schema",
+        "src-ticketroot"
+      ]
+    },
+    {
+      "id": "adapter",
+      "name": "Adapter (tracker · stack · surface · delivery)",
+      "schemaId": "sdlc-adapter@1",
+      "file": "`contracts/adapter.schema.json` · instances `adapters/<kind>/<id>.json`",
+      "writer": "harness (bundled) or you (project-local)",
+      "reader": "units (instructions), driver (kind, drafts, allowedSurfaces)",
+      "enforced": "partial",
+      "enforcedNote": "The driver checks `kind`, that every profile draft has a template, and that repo surfaces are in the stack's `allowedSurfaces`. Other fields are instructions for units and are not validated.",
+      "fields": [
+        {
+          "name": "kind",
+          "type": "tracker | stack | surface | delivery",
+          "req": true,
+          "meaning": "selects the per-kind shape"
+        },
+        {
+          "name": "id, description",
+          "type": "string",
+          "req": true,
+          "meaning": "identity"
+        },
+        {
+          "name": "tracker: fetch {command?, instructions}, reply, kindHints?",
+          "type": "object",
+          "req": true,
+          "meaning": "how to pull a ticket and post a reply"
+        },
+        {
+          "name": "stack: allowedSurfaces[], commands {doctor[], format, lint, build, unitTest}, worktree, conventions[], rulepack",
+          "type": "object",
+          "req": true,
+          "meaning": "how to build/check code and make a worktree"
+        },
+        {
+          "name": "surface: surface, prerequisites[], run, capture[], mutatesSharedState?, requiresG6",
+          "type": "object",
+          "req": true,
+          "meaning": "how a test case is executed and what evidence is captured"
+        },
+        {
+          "name": "delivery: drafts {name → {template}}, review, ship {requiresUserGo: true, steps}, reship",
+          "type": "object",
+          "req": true,
+          "meaning": "drafts, PR review fetch, ship steps"
+        }
+      ],
+      "cites": [
+        "src-adapter-schema"
+      ]
+    },
+    {
+      "id": "rulepack",
+      "name": "Rulepack",
+      "schemaId": "sdlc-rulepack@1",
+      "file": "`contracts/rulepack.schema.json` · `rulepacks/*.json`, `rulepacks/stack/<stack>.json`",
+      "writer": "harness / you",
+      "reader": "driver (selection) → units via `<dispatch>.rules.json`",
+      "enforced": "partial",
+      "enforcedNote": "`harness/rules.py` rejects duplicate ids and unknown phases; severity and pattern are not checked.",
+      "fields": [
+        {
+          "name": "packId",
+          "type": "string",
+          "req": true,
+          "meaning": "pack identity, recorded on each selected rule as `pack`"
+        },
+        {
+          "name": "rules[].id",
+          "type": "string `^[A-Z][A-Z0-9-]+$`",
+          "req": true,
+          "meaning": "rule id cited in reviews"
+        },
+        {
+          "name": "rules[].phase",
+          "type": "design | code | test | evidence | delivery",
+          "req": true,
+          "meaning": "which nodes judge it (via `rulePhases`)"
+        },
+        {
+          "name": "rules[].severity",
+          "type": "critical | high | medium | low",
+          "req": true,
+          "meaning": "critical/high block approval"
+        },
+        {
+          "name": "rules[].title, check",
+          "type": "string",
+          "req": true,
+          "meaning": "what to verify, decidable from evidence"
+        },
+        {
+          "name": "rules[].appliesTo",
+          "type": "{kinds?, stacks?, surfaces?, families?}",
+          "req": false,
+          "meaning": "filter against the ticket context"
+        }
+      ],
+      "cites": [
+        "src-rulepack-schema"
+      ]
+    },
+    {
+      "id": "extension",
+      "name": "Family extension",
+      "schemaId": "sdlc-extension@1",
+      "file": "`contracts/extension.schema.json` · e.g. `examples/wms/extensions/if-family.json`",
+      "writer": "you (per capability family)",
+      "reader": "driver `load_graph`",
+      "enforced": "partial",
+      "enforcedNote": "The driver checks slot names exist, node ids do not collide and `feeds` targets exist; node fields are trusted.",
+      "fields": [
+        {
+          "name": "slot",
+          "type": "after-code-review | after-evidence",
+          "req": true,
+          "meaning": "where the nodes are inserted"
+        },
+        {
+          "name": "order[]",
+          "type": "string",
+          "req": true,
+          "meaning": "node ids in run order"
+        },
+        {
+          "name": "nodes.<id>",
+          "type": "graph-node shape (see below)",
+          "req": true,
+          "meaning": "same fields as a core node; `when.family` is added automatically"
+        },
+        {
+          "name": "nodes.<id>.feeds[]",
+          "type": "string",
+          "req": false,
+          "meaning": "core nodes that must wait for this node's tokens"
+        }
+      ],
+      "cites": [
+        "src-extension-schema",
+        "src-feeds"
+      ]
+    },
+    {
+      "id": "graph-node",
+      "name": "Graph node spec",
+      "schemaId": "— (no schema yet)",
+      "file": "`graph/lifecycle.json` → `nodes.<id>`",
+      "writer": "harness",
+      "reader": "driver (trace, readiness, gate), packet",
+      "enforced": "none",
+      "enforcedNote": "There is no JSON Schema for the graph file; a typo in a key is silently ignored. See review point R5.",
+      "fields": [
+        {
+          "name": "layer",
+          "type": "analysis | implementation | delivery | after-pr",
+          "req": true,
+          "meaning": "diagram lane"
+        },
+        {
+          "name": "when",
+          "type": "{kind?, family?, surface?, stack?, reviewRound?}",
+          "req": false,
+          "meaning": "trace condition; list = any-of"
+        },
+        {
+          "name": "purpose",
+          "type": "string",
+          "req": true,
+          "meaning": "copied into the packet"
+        },
+        {
+          "name": "requires[] / produces[]",
+          "type": "token[]",
+          "req": true,
+          "meaning": "the node-to-node control contract"
+        },
+        {
+          "name": "mutability",
+          "type": "none | state | artifacts | findings-only | source",
+          "req": true,
+          "meaning": "what the node may change (documentation; not enforced)"
+        },
+        {
+          "name": "units[]",
+          "type": "{id, role: worker, tier: routine | deep}",
+          "req": true,
+          "meaning": "subagents to dispatch"
+        },
+        {
+          "name": "reviewer",
+          "type": "{tier}",
+          "req": false,
+          "meaning": "adds a read-only reviewer unit"
+        },
+        {
+          "name": "pattern",
+          "type": "string",
+          "req": false,
+          "meaning": "e.g. parallel-units-controller-judged"
+        },
+        {
+          "name": "boundary",
+          "type": "controller | user",
+          "req": true,
+          "meaning": "who closes G0"
+        },
+        {
+          "name": "gates[]",
+          "type": "G1…G7",
+          "req": true,
+          "meaning": "conditional gates that may fire"
+        },
+        {
+          "name": "rulePhases[]",
+          "type": "phase[]",
+          "req": false,
+          "meaning": "rules selected for the packet"
+        },
+        {
+          "name": "artifacts[] / optionalArtifacts[]",
+          "type": "path | @delivery.drafts",
+          "req": true,
+          "meaning": "files the gate requires in the ticket dir"
+        },
+        {
+          "name": "loopBackTo",
+          "type": "node id",
+          "req": false,
+          "meaning": "target of `--status needs-changes`"
+        },
+        {
+          "name": "subjectNode / issuesReceipts / checksReceipts / reopens",
+          "type": "bool",
+          "req": false,
+          "meaning": "gate side effects"
+        },
+        {
+          "name": "card",
+          "type": "path",
+          "req": true,
+          "meaning": "procedure the unit follows"
+        }
+      ],
+      "cites": [
+        "src-graph-coding"
+      ]
+    },
+    {
+      "id": "state",
+      "name": "Ticket state",
+      "schemaId": "sdlc-state@1",
+      "file": "`contracts/state.schema.json` · `<ticketRoot>/<ticket>/state.json`",
+      "writer": "driver only",
+      "reader": "driver; controller via `status`",
+      "enforced": "driver-written",
+      "enforcedNote": "Only the driver writes it (atomic replace with retry). It is never validated on load, so a hand edit is trusted.",
+      "fields": [
+        {
+          "name": "schemaVersion, graphId, profilePath, createdAt",
+          "type": "scalar",
+          "req": true,
+          "meaning": "which graph and profile this ticket is bound to"
+        },
+        {
+          "name": "context",
+          "type": "ticket-context",
+          "req": true,
+          "meaning": "kind, families, surfaces, repositories, reviewRound"
+        },
+        {
+          "name": "nodes.<id>",
+          "type": "node-record",
+          "req": true,
+          "meaning": "one record per node in the trace"
+        },
+        {
+          "name": "receipts.<repo>",
+          "type": "receipt",
+          "req": true,
+          "meaning": "issued at final-review"
+        }
+      ],
+      "cites": [
+        "src-state-schema",
+        "src-save"
+      ]
+    },
+    {
+      "id": "ticket-context",
+      "name": "Ticket context",
+      "schemaId": "inside sdlc-state@1",
+      "file": "`state.json` → `context`",
+      "writer": "driver (`init`, `worktree`, `handback`)",
+      "reader": "trace (`when`), rules (`appliesTo`), packet",
+      "enforced": "driver",
+      "enforcedNote": "Built by `build_context`: kind must be bug/feature, repos/families must exist in the profile, every surface needs an evidence entry.",
+      "fields": [
+        {
+          "name": "ticket",
+          "type": "string",
+          "req": true,
+          "meaning": "ticket id"
+        },
+        {
+          "name": "kind",
+          "type": "bug | feature",
+          "req": true,
+          "meaning": "selects the analysis branch"
+        },
+        {
+          "name": "maturity",
+          "type": "new | pr_opened",
+          "req": true,
+          "meaning": "set to pr_opened by handback"
+        },
+        {
+          "name": "reviewRound",
+          "type": "int ≥ 0",
+          "req": true,
+          "meaning": "> 0 adds the after-PR nodes"
+        },
+        {
+          "name": "families[]",
+          "type": "string",
+          "req": true,
+          "meaning": "enabled families"
+        },
+        {
+          "name": "surfaces[]",
+          "type": "string",
+          "req": true,
+          "meaning": "union of repo surfaces + `--surface`"
+        },
+        {
+          "name": "repositories[]",
+          "type": "{id, stack, path, baseBranch, worktree?}",
+          "req": true,
+          "meaning": "`worktree` set by `sdlc worktree`"
+        }
+      ],
+      "cites": [
+        "src-state-schema"
+      ]
+    },
+    {
+      "id": "node-record",
+      "name": "Node record",
+      "schemaId": "inside sdlc-state@1",
+      "file": "`state.json` → `nodes.<id>`",
+      "writer": "driver",
+      "reader": "driver (readiness, gate)",
+      "enforced": "driver",
+      "enforcedNote": "Created by `new_node_record`; status moves only through record / gate / invalidate / handback.",
+      "fields": [
+        {
+          "name": "status",
+          "type": "pending | in_progress | stale | done",
+          "req": true,
+          "meaning": "only `done` satisfies a token"
+        },
+        {
+          "name": "generation",
+          "type": "int ≥ 1",
+          "req": true,
+          "meaning": "+1 on every invalidate; unit records are matched per generation"
+        },
+        {
+          "name": "attempts",
+          "type": "int",
+          "req": true,
+          "meaning": "needs-changes rounds; G4 at the loop cap"
+        },
+        {
+          "name": "units[]",
+          "type": "unit-record",
+          "req": true,
+          "meaning": "append-only per generation"
+        },
+        {
+          "name": "verdict, closedAt",
+          "type": "string | null",
+          "req": true,
+          "meaning": "set by gate"
+        },
+        {
+          "name": "subject",
+          "type": "repo → {head, subject}",
+          "req": false,
+          "meaning": "subject nodes only"
+        },
+        {
+          "name": "artifactDigests",
+          "type": "path → sha256",
+          "req": false,
+          "meaning": "recorded at approval"
+        }
+      ],
+      "cites": [
+        "src-newrecord"
+      ]
+    },
+    {
+      "id": "unit-record",
+      "name": "Unit record",
+      "schemaId": "inside sdlc-state@1",
+      "file": "`state.json` → `nodes.<id>.units[]` (+ `decisions.jsonl`)",
+      "writer": "driver `record`",
+      "reader": "driver `gate`",
+      "enforced": "driver",
+      "enforcedNote": "Refused if the unit is not planned, the result file is missing, or the model differs from the planned tier.",
+      "fields": [
+        {
+          "name": "unit",
+          "type": "string",
+          "req": true,
+          "meaning": "planned unit id or `reviewer`"
+        },
+        {
+          "name": "generation",
+          "type": "int",
+          "req": true,
+          "meaning": "the node generation it belongs to"
+        },
+        {
+          "name": "model",
+          "type": "string",
+          "req": true,
+          "meaning": "must equal `models[tier]`"
+        },
+        {
+          "name": "status",
+          "type": "ok | blocked | partial",
+          "req": true,
+          "meaning": "gate needs `ok` for every planned unit"
+        },
+        {
+          "name": "result, resultDigest",
+          "type": "path, sha256",
+          "req": true,
+          "meaning": "pins the exact result file"
+        },
+        {
+          "name": "tokens",
+          "type": "int | null",
+          "req": false,
+          "meaning": "usage for the progress table"
+        },
+        {
+          "name": "verdict",
+          "type": "PASS | FAIL | APPROVED | NEEDS CHANGES",
+          "req": false,
+          "meaning": "a last reviewer FAIL blocks the gate"
+        },
+        {
+          "name": "failureClass",
+          "type": "record | artifact",
+          "req": false,
+          "meaning": "reviewer FAIL type"
+        },
+        {
+          "name": "at",
+          "type": "ISO time",
+          "req": true,
+          "meaning": ""
+        }
+      ],
+      "cites": [
+        "src-record"
+      ]
+    },
+    {
+      "id": "receipt",
+      "name": "Receipt (per repository)",
+      "schemaId": "inside sdlc-state@1",
+      "file": "`state.json` → `receipts.<repo>`",
+      "writer": "driver at `final-review` approval or `receipts --reissue`",
+      "reader": "driver at `deliverable-ready`",
+      "enforced": "driver",
+      "enforcedNote": "Subject = sha256(HEAD + `git diff HEAD --binary` + list of untracked file names). See review point R2.",
+      "fields": [
+        {
+          "name": "head",
+          "type": "commit sha",
+          "req": true,
+          "meaning": "HEAD of the worktree"
+        },
+        {
+          "name": "subject",
+          "type": "sha256",
+          "req": true,
+          "meaning": "digest of what would ship"
+        },
+        {
+          "name": "issuedAt / expiresAt",
+          "type": "ISO time",
+          "req": true,
+          "meaning": "TTL = `delivery.receiptTtlHours` (72 h by default); ready needs ≥ `minHoursLeft` (24 h)"
+        }
+      ],
+      "cites": [
+        "src-subject",
+        "src-checkreceipts"
+      ]
+    },
+    {
+      "id": "decision-event",
+      "name": "Decision log event",
+      "schemaId": "— (no schema yet)",
+      "file": "`<ticketRoot>/<ticket>/decisions.jsonl` (one JSON object per line)",
+      "writer": "driver (append-only)",
+      "reader": "you (audit), nothing in the driver reads it back",
+      "enforced": "append-only by convention",
+      "enforcedNote": "Not hash-chained and never read back by the driver; it is an audit trail, not a source of truth.",
+      "fields": [
+        {
+          "name": "at",
+          "type": "ISO time",
+          "req": true,
+          "meaning": "added by `Ticket.log`"
+        },
+        {
+          "name": "event",
+          "type": "init | record | gate | invalidate | worktree | handback | receipts-reissued",
+          "req": true,
+          "meaning": "what happened"
+        },
+        {
+          "name": "gate event: gate, actor, node, generation, verdict, note",
+          "type": "mixed",
+          "req": true,
+          "meaning": "who closed what, with which verdict"
+        },
+        {
+          "name": "invalidate event: node, stale[], reason",
+          "type": "mixed",
+          "req": true,
+          "meaning": "why work was reopened"
+        },
+        {
+          "name": "record event: node + all unit-record fields",
+          "type": "mixed",
+          "req": true,
+          "meaning": "mirror of the unit record"
+        },
+        {
+          "name": "handback event: round, file, digest",
+          "type": "mixed",
+          "req": true,
+          "meaning": "which review file started the round"
+        }
+      ],
+      "cites": [
+        "src-log"
+      ]
+    },
+    {
+      "id": "cli-envelope",
+      "name": "Driver CLI output",
+      "schemaId": "— (convention)",
+      "file": "stdout of `skills/kaneki-flow/scripts/sdlc.py`",
+      "writer": "driver",
+      "reader": "controller",
+      "enforced": "driver",
+      "enforcedNote": "Every command prints one JSON object. Exit 0 = success; exit 2 = `{\"error\": \"G<n>: …\"}` fail-closed.",
+      "fields": [
+        {
+          "name": "plan",
+          "type": "{node, layer, purpose, generation, status, missing[], units[{id, role, tier, model, agentType}], pattern, boundary, gates[], artifacts[], card, ruleCount, ruleIds?, adapters, loopCap, attempts, closeWith}",
+          "req": true,
+          "meaning": "what to do for one node"
+        },
+        {
+          "name": "packet",
+          "type": "{path, packetDigest, agentType, model, resultPath, dispatchId}",
+          "req": true,
+          "meaning": "what to dispatch"
+        },
+        {
+          "name": "gate",
+          "type": "{node, verdict, nextPending, subject?, receipts?, reopened?, stale?, attempts?}",
+          "req": true,
+          "meaning": "outcome of closing"
+        },
+        {
+          "name": "status",
+          "type": "{ticket, kind, reviewRound, settled, traceLength, nextPending, nextMissing?, tokensTotal, nodes[]?}",
+          "req": true,
+          "meaning": "where the ticket is"
+        },
+        {
+          "name": "error",
+          "type": "string",
+          "req": false,
+          "meaning": "the only key on failure; starts with the gate id when one applies"
+        }
+      ],
+      "cites": [
+        "src-skill-loop"
+      ]
+    },
+    {
+      "id": "facts",
+      "name": "Facts JSON (controller → packet)",
+      "schemaId": "— (no schema yet)",
+      "file": "any path passed as `packet --facts <file>`",
+      "writer": "controller",
+      "reader": "driver `packet` (renders into the packet)",
+      "enforced": "none",
+      "enforcedNote": "Unknown keys are ignored; missing keys render as `- none`.",
+      "fields": [
+        {
+          "name": "weakestClaim",
+          "type": "string",
+          "req": false,
+          "meaning": "the claim the unit must attack first"
+        },
+        {
+          "name": "observed[]",
+          "type": "string",
+          "req": false,
+          "meaning": "facts already established"
+        },
+        {
+          "name": "doubts[]",
+          "type": "string",
+          "req": false,
+          "meaning": "open doubts for this unit"
+        },
+        {
+          "name": "settled[]",
+          "type": "string",
+          "req": false,
+          "meaning": "do not re-litigate"
+        },
+        {
+          "name": "authorizedPaths[]",
+          "type": "string",
+          "req": false,
+          "meaning": "the only paths the unit may write"
+        },
+        {
+          "name": "findingsToFix[]",
+          "type": "string",
+          "req": false,
+          "meaning": "round two only"
+        }
+      ],
+      "cites": [
+        "src-skill-loop"
+      ]
+    },
+    {
+      "id": "packet",
+      "name": "Dispatch packet",
+      "schemaId": "template",
+      "file": "`packets/<node>.g<G>.<unit>.r<R>.md` + `.rules.json`",
+      "writer": "driver `packet` from `scripts/packet-template.md`",
+      "reader": "unit subagent (after checking sha256)",
+      "enforced": "driver renders; agent verifies digest",
+      "enforcedNote": "Placeholders are filled from the plan, profile, adapters and facts JSON; the rules file is the node's selected rules.",
+      "fields": [
+        {
+          "name": "Unit contract",
+          "type": "section",
+          "req": true,
+          "meaning": "node, unit, role, purpose, card path, artifact language"
+        },
+        {
+          "name": "Role limits / Forbidden actions / Evidence discipline",
+          "type": "section",
+          "req": true,
+          "meaning": "same for every dispatch"
+        },
+        {
+          "name": "Return contract",
+          "type": "section",
+          "req": true,
+          "meaning": "result file shape + ≤150-word reply"
+        },
+        {
+          "name": "Dispatch facts",
+          "type": "section",
+          "req": true,
+          "meaning": "ticket, generation, round, dispatch id, result path, artifacts, repositories, rules path, adapter files"
+        },
+        {
+          "name": "Authorized paths · Weakest claim · Observed · Doubts · Settled · Findings to fix",
+          "type": "sections",
+          "req": true,
+          "meaning": "from the facts JSON"
+        },
+        {
+          "name": "<dispatch>.rules.json",
+          "type": "rule[] + pack",
+          "req": true,
+          "meaning": "rules for this node's `rulePhases`, filtered by `appliesTo`"
+        }
+      ],
+      "cites": [
+        "src-dispatch-id",
+        "src-template-return"
+      ]
+    },
+    {
+      "id": "result-file",
+      "name": "Unit result file",
+      "schemaId": "— (prose contract)",
+      "file": "`results/<node>.g<G>.<unit>.r<R>.md`",
+      "writer": "unit",
+      "reader": "controller (verify), reviewer unit, driver (digest only)",
+      "enforced": "existence + digest",
+      "enforcedNote": "The driver never parses it; the verdict is what the controller passes to `record --verdict`.",
+      "fields": [
+        {
+          "name": "worker: status · claims (OBSERVED/DERIVED/ASSUMED) · evidence pointers · artifact paths · checks · doubts (HIGH/LOW) · weakest link",
+          "type": "markdown",
+          "req": true,
+          "meaning": ""
+        },
+        {
+          "name": "reviewer: verdict PASS/FAIL · failure class · blocking findings · uncovered rules/units · weakest link",
+          "type": "markdown",
+          "req": true,
+          "meaning": ""
+        }
+      ],
+      "cites": [
+        "src-template-return"
+      ]
+    },
+    {
+      "id": "node-artifact",
+      "name": "Node artifacts",
+      "schemaId": "— (card contract)",
+      "file": "ticket dir: `plan.md`, `investigation.md`, `drafts/<name>.md`…",
+      "writer": "the node's worker unit",
+      "reader": "later units, reviewers, the user",
+      "enforced": "existence only",
+      "enforcedNote": "Required sections are defined in each node card (e.g. `## Condition → negative case` in plan.md) but the gate checks only that the file exists.",
+      "fields": [
+        {
+          "name": "file names",
+          "type": "from `artifacts[]`",
+          "req": true,
+          "meaning": "`@delivery.drafts` expands to `drafts/<name>.md` per profile draft"
+        },
+        {
+          "name": "sections",
+          "type": "from the node card",
+          "req": true,
+          "meaning": "e.g. `## Confirmed cause` + `Confidence:` in investigation.md"
+        }
+      ],
+      "cites": [
+        "src-artifacts-expand",
+        "src-absent"
+      ]
+    }
+  ]
+}

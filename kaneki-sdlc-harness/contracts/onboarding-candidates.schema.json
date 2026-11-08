@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sdlc-onboarding-candidates@1",
+  "title": "Onboarding candidates",
+  "description": "Output of `sdlc onboard-scan`, updated by `onboard-verify`, consumed by `onboard-write`. A working file: keep it outside the repo (scratchpad).",
+  "type": "object",
+  "required": ["schemaVersion", "generator", "scannedAt", "root", "proposal", "evidence", "repos", "questions", "gaps", "verification"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "generator": {"type": "string"},
+    "scannedAt": {"type": "string"},
+    "root": {"type": "string"},
+    "proposal": {"type": "object", "description": "Flat profile path → proposed value."},
+    "evidence": {"type": "object", "description": "Flat profile path → {confidence, evidence[], status}."},
+    "repos": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["path", "stack", "commands"],
+        "properties": {
+          "path": {"type": "string"}, "stack": {"type": "string"}, "stackAlternatives": {"type": "array"},
+          "surfaceReasons": {"type": "object"},
+          "commands": {"type": "array", "items": {"type": "object", "required": ["cmd", "role", "source", "evidence", "runnable"],
+            "properties": {"cmd": {"type": "string"}, "role": {"enum": ["install", "mutating", "test", "lint", "format", "build", "doctor", "other"]},
+                           "source": {"enum": ["ci", "package-script"]}, "evidence": {"type": "string"}, "runnable": {"type": "boolean"}}}},
+          "envFiles": {"type": "array"}, "envKeys": {"type": "array", "description": "Key names only, from .env.example-style files; .env is never read."},
+          "envUrls": {"type": "object", "description": "Only *URL*/*HOST* keys whose example value is an http(s) URL."},
+          "testDocs": {"type": "array"}
+        }
+      }
+    },
+    "services": {"type": "array"},
+    "trackerSignals": {"type": "object"},
+    "questions": {
+      "type": "array",
+      "items": {"type": "object", "required": ["id", "field", "question", "options", "recommended", "why"],
+        "properties": {"id": {"type": "string"}, "field": {"type": "string", "description": "Profile path, or `_gitignore` / `_device` for actions."},
+                       "question": {"type": "string"}, "multiSelect": {"type": "boolean"},
+                       "options": {"type": "array", "items": {"type": "object", "required": ["label", "value"]}},
+                       "recommended": {"type": "string"}, "why": {"type": "string"}}}
+    },
+    "gaps": {"type": "array", "items": {"type": "string"}},
+    "verification": {"type": "array"}
+  }
+}

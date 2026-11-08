@@ -1,0 +1,12 @@
+<h2>What to fix before relying on it</h2>
+<p>Found while reading the code for this guide on {{ facts.testDate }}. None of these is caught by the current {{ facts.tests }} tests. {{ cite('src-test-cycle') }}</p>
+<div class="tbl">
+  <p class="cap">Review points, most severe first</p>
+  <table>
+    <tr><th>Id</th><th>Severity</th><th>Problem</th><th>Detail and suggested fix</th></tr>
+    {% for g in gaps %}
+    <tr{% if g.sev == 'high' %} class="hl"{% endif %}><td><code>{{ g.id }}</code></td><td>{{ sev(g.sev) }}</td><td><strong>{{ g.title }}</strong></td><td>{{ rich(g.detail) }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+<div class="callout info"><strong>Suggested order:</strong> R1 and R2 first (they let wrong work pass a gate), then R3 and R4 (they make the node-to-node data contract explicit), then the schema work in R5–R6.</div>

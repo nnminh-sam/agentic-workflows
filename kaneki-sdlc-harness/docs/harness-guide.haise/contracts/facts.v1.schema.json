@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "facts@1",
+  "type": "object",
+  "required": [
+    "graphId",
+    "version",
+    "harness",
+    "nodeCount",
+    "layerCount",
+    "bugTrace",
+    "featureTrace",
+    "reviewTrace",
+    "tokenCount",
+    "tests",
+    "testDate",
+    "layers",
+    "loopCap",
+    "ttl",
+    "minHoursLeft"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "graphId": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    },
+    "harness": {
+      "type": "string"
+    },
+    "nodeCount": {
+      "type": "integer"
+    },
+    "layerCount": {
+      "type": "integer"
+    },
+    "bugTrace": {
+      "type": "integer"
+    },
+    "featureTrace": {
+      "type": "integer"
+    },
+    "reviewTrace": {
+      "type": "integer"
+    },
+    "tokenCount": {
+      "type": "integer"
+    },
+    "tests": {
+      "type": "integer"
+    },
+    "testDate": {
+      "type": "string"
+    },
+    "layers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "nodes"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "nodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "loopCap": {
+      "type": "integer"
+    },
+    "ttl": {
+      "type": "integer"
+    },
+    "minHoursLeft": {
+      "type": "integer"
+    }
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sdlc-extension@1",
+  "title": "Family extension",
+  "description": "Nodes a capability family inserts at a graph slot. They run only when the ticket enables the family (--family <id>). Node specs use the same fields as graph/lifecycle.json nodes.",
+  "type": "object",
+  "required": ["slot", "order", "nodes"],
+  "properties": {
+    "slot": {"enum": ["after-code-review", "after-evidence"]},
+    "order": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+    "nodes": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["purpose", "requires", "produces", "mutability", "units", "boundary", "gates", "artifacts", "card"],
+        "properties": {
+          "purpose": {"type": "string"},
+          "when": {"type": "object", "description": "Extra conditions (kind, surface, stack) beyond the family itself."},
+          "requires": {"type": "array", "items": {"type": "string"}},
+          "produces": {"type": "array", "items": {"type": "string"}},
+          "feeds": {"type": "array", "items": {"type": "string"}, "description": "Core nodes that must wait for this node's tokens (added to their requires)."},
+          "mutability": {"enum": ["none", "state", "artifacts", "findings-only", "source"]},
+          "units": {"type": "array", "items": {"type": "object", "required": ["id", "role", "tier"], "properties": {"id": {"type": "string"}, "role": {"enum": ["worker"]}, "tier": {"enum": ["routine", "deep"]}}}},
+          "reviewer": {"type": "object", "properties": {"tier": {"enum": ["routine", "deep"]}}},
+          "boundary": {"enum": ["controller", "user"]},
+          "gates": {"type": "array", "items": {"enum": ["G1", "G3", "G4", "G5", "G6", "G7"]}},
+          "rulePhases": {"type": "array", "items": {"enum": ["design", "code", "test", "evidence", "delivery"]}},
+          "artifacts": {"type": "array", "items": {"type": "string"}},
+          "card": {"type": "string", "description": "Node card path, relative to skills/kaneki-flow/ (bundled) or absolute."}
+        }
+      }
+    }
+  }
+}

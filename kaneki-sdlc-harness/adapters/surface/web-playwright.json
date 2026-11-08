@@ -1,0 +1,11 @@
+{
+  "kind": "surface",
+  "id": "web-playwright",
+  "surface": "web",
+  "description": "Browser UI driven by Playwright (MCP or the test runner).",
+  "prerequisites": ["base URL reachable (profile evidence.surfaces.web.config.baseUrl)", "test account from env, never written to artifacts"],
+  "run": "Drive each case's steps with Playwright; one trace or video per case; assert the expected value from the page, not from a screenshot.",
+  "capture": ["screenshot before/after per step that changes state", "playwright trace zip", "network response of the mutating request", "backing DB rows before/after when a DB surface exists"],
+  "mutatesSharedState": "when the app points at a shared environment",
+  "requiresG6": false
+}

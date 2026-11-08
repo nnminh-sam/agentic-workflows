@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "layout@1",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": [
+      "path",
+      "where",
+      "writer",
+      "when",
+      "lifecycle",
+      "contract"
+    ],
+    "additionalProperties": false,
+    "properties": {
+      "path": {
+        "type": "string"
+      },
+      "where": {
+        "enum": [
+          "project",
+          "ticket",
+          "beside each repo"
+        ]
+      },
+      "writer": {
+        "type": "string"
+      },
+      "when": {
+        "type": "string"
+      },
+      "lifecycle": {
+        "type": "string"
+      },
+      "contract": {
+        "type": "string"
+      }
+    }
+  }
+}

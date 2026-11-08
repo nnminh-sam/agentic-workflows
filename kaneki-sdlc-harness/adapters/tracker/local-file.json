@@ -1,0 +1,10 @@
+{
+  "kind": "tracker",
+  "id": "local-file",
+  "description": "No tracker: the ticket is a markdown file the user writes (tickets/<id>.md next to the profile).",
+  "config": {"dir": "tickets"},
+  "fetch": {
+    "instructions": "Copy {dir}/{ticket}.md to ticket.md unchanged. If it is missing, G7: ask the user for the ticket text."
+  },
+  "reply": {"draft": "tracker-reply", "format": "markdown", "post": "none (the draft is the deliverable)"}
+}

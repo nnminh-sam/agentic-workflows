@@ -1,0 +1,249 @@
+{
+  "$contract": "sources@1",
+  "rev": 1,
+  "updated": "2026-11-04",
+  "description": "Every source the doc cites; rendered as the last section",
+  "data": [
+    {
+      "id": "src-graph-order",
+      "type": "Code",
+      "title": "Core graph order with the extension slots",
+      "loc": "`kaneki-sdlc-harness/graph/lifecycle.json:11-20` · draft v0.1.0, read 2026-11-04",
+      "quote": "  \"order\": [\n    \"prepare\",\n    \"investigate\", \"fix-plan\",\n    \"requirement-analysis\", \"impact-analysis\", \"feature-plan\",\n    \"coding\", \"code-review\",\n    \"@slot:after-code-review\",\n    \"testcase\", \"testcase-review\",\n    \"execute-and-evidence\",\n    \"@slot:after-evidence\",\n    \"final-review\", \"delivery-drafts\", \"deliverable-ready\",",
+      "quote_code": true
+    },
+    {
+      "id": "src-graph-coding",
+      "type": "Code",
+      "title": "Node spec of `coding`",
+      "loc": "`kaneki-sdlc-harness/graph/lifecycle.json:106-120` · draft v0.1.0, read 2026-11-04",
+      "quote": "    \"coding\": {\n      \"layer\": \"implementation\",\n      \"purpose\": \"Implement the approved plan in the ticket worktree; self-check every code-phase rule bound to the touched paths.\",\n      \"requires\": [\"approved-plan\", \"review-scope\"],\n      \"produces\": [\"source-change\"],\n      \"mutability\": \"source\",\n      \"units\": [{\"id\": \"worker\", \"role\": \"worker\", \"tier\": \"routine\"}],\n      \"boundary\": \"controller\",\n      \"gates\": [\"G6\", \"G7\"],\n      \"rulePhases\": [\"code\"],\n      \"artifacts\": [\"implementation.md\"],\n      \"subjectNode\": true,\n      \"card\": \"references/nodes/coding.md\"\n    },\n    \"code-review\": {",
+      "quote_code": true
+    },
+    {
+      "id": "src-graph-testcase",
+      "type": "Code",
+      "title": "`testcase` consumes the plan, not the code",
+      "loc": "`kaneki-sdlc-harness/graph/lifecycle.json:138-142` · draft v0.1.0, read 2026-11-04",
+      "quote": "    \"testcase\": {\n      \"layer\": \"implementation\",\n      \"purpose\": \"Derive test cases from the approved plan (not from the code) in the profile's testcase format.\",\n      \"requires\": [\"approved-plan\"],\n      \"produces\": [\"testcases\"],",
+      "quote_code": true
+    },
+    {
+      "id": "src-dependents",
+      "type": "Code",
+      "title": "harness.graph.dependents — token walk for invalidation",
+      "loc": "`kaneki-sdlc-harness/harness/graph.py:101-112` · draft v0.1.0, read 2026-11-04",
+      "quote": "def dependents(graph: dict[str, Any], order: list[str], start: str) -> list[str]:\n    \"\"\"`start` plus every later node that (transitively) consumes a token it produces.\"\"\"\n    if start not in order:\n        raise HarnessError(f\"{start} is not in this ticket's trace\")\n    stale = [start]\n    tokens = set(graph[\"nodes\"][start].get(\"produces\", []))\n    for node_id in order[order.index(start) + 1:]:\n        spec = graph[\"nodes\"][node_id]\n        if tokens & set(spec.get(\"requires\", [])):\n            stale.append(node_id)\n            tokens |= set(spec.get(\"produces\", []))\n    return stale",
+      "quote_code": true
+    },
+    {
+      "id": "src-feeds",
+      "type": "Code",
+      "title": "Extension `feeds` adds tokens to core nodes' requires",
+      "loc": "`kaneki-sdlc-harness/harness/graph.py:41-47` · draft v0.1.0, read 2026-11-04",
+      "quote": "    # `feeds`: an extension node hands its tokens to named core nodes, so they wait for it (inert when the\n    # family is off, because no node in the trace produces the token).\n    for node_id, spec in list(nodes.items()):\n        for target in spec.get(\"feeds\", []):\n            if target not in nodes:\n                raise HarnessError(f\"{node_id} feeds unknown node {target}\")\n            nodes[target] = {**nodes[target], \"requires\": list(dict.fromkeys(nodes[target].get(\"requires\", []) + spec[\"produces\"]))}",
+      "quote_code": true
+    },
+    {
+      "id": "src-missing",
+      "type": "Code",
+      "title": "harness.state.missing_prerequisites — readiness by token",
+      "loc": "`kaneki-sdlc-harness/harness/state.py:82-94` · draft v0.1.0, read 2026-11-04",
+      "quote": "def missing_prerequisites(graph: dict[str, Any], order: list[str], state: dict[str, Any], node: str) -> list[str]:\n    \"\"\"Readiness = every token the node requires is produced by a settled node of the trace.\n    A token no node in the trace produces is inert (e.g. a family-only token).\"\"\"\n    producers: dict[str, list[str]] = {}\n    for n in order:\n        for tok in graph[\"nodes\"][n].get(\"produces\", []):\n            producers.setdefault(tok, []).append(n)\n    missing = []\n    for tok in graph[\"nodes\"][node].get(\"requires\", []):\n        owners = [n for n in producers.get(tok, []) if n != node]\n        if owners and not any(settled(state, n) for n in owners):\n            missing.append(f\"{tok} (from {', '.join(owners)})\")\n    return missing",
+      "quote_code": true
+    },
+    {
+      "id": "src-newrecord",
+      "type": "Code",
+      "title": "New node record",
+      "loc": "`kaneki-sdlc-harness/harness/state.py:67-68` · draft v0.1.0, read 2026-11-04",
+      "quote": "def new_node_record() -> dict[str, Any]:\n    return {\"status\": \"pending\", \"generation\": 1, \"attempts\": 0, \"units\": [], \"closedAt\": None, \"verdict\": None}",
+      "quote_code": true
+    },
+    {
+      "id": "src-save",
+      "type": "Code",
+      "title": "Atomic state write with Windows retry",
+      "loc": "`kaneki-sdlc-harness/harness/state.py:46-57` · draft v0.1.0, read 2026-11-04",
+      "quote": "    def save(self, state: dict[str, Any]) -> None:\n        self.dir.mkdir(parents=True, exist_ok=True)\n        tmp = self.state_path.with_suffix(\".tmp\")\n        tmp.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding=\"utf-8\")\n        for attempt in range(20):  # Windows: AV/indexer can hold the target for a moment\n            try:\n                tmp.replace(self.state_path)\n                return\n            except PermissionError:\n                if attempt == 19:\n                    raise HarnessError(f\"G7: cannot replace {self.state_path} (file locked)\")\n                time.sleep(0.05 * (attempt + 1))",
+      "quote_code": true
+    },
+    {
+      "id": "src-log",
+      "type": "Code",
+      "title": "Append-only decision log",
+      "loc": "`kaneki-sdlc-harness/harness/state.py:59-64` · draft v0.1.0, read 2026-11-04",
+      "quote": "    def log(self, event: dict[str, Any]) -> dict[str, Any]:\n        self.dir.mkdir(parents=True, exist_ok=True)\n        event = {\"at\": now(), **event}\n        with self.log_path.open(\"a\", encoding=\"utf-8\") as fh:\n            fh.write(json.dumps(event, ensure_ascii=False) + \"\\n\")\n        return event",
+      "quote_code": true
+    },
+    {
+      "id": "src-subject",
+      "type": "Code",
+      "title": "Subject digest of a repository",
+      "loc": "`kaneki-sdlc-harness/harness/state.py:107-112` · draft v0.1.0, read 2026-11-04",
+      "quote": "def repo_subject(path: str) -> dict[str, str]:\n    \"\"\"Digest of what would be shipped: HEAD + uncommitted diff + untracked file list.\"\"\"\n    head = _git(path, \"rev-parse\", \"HEAD\").strip()\n    diff = _git(path, \"diff\", \"HEAD\", \"--binary\")\n    untracked = _git(path, \"ls-files\", \"--others\", \"--exclude-standard\")\n    return {\"head\": head, \"subject\": sha256_text(head + \"\\n\" + diff + \"\\n\" + untracked)}",
+      "quote_code": true
+    },
+    {
+      "id": "src-checkreceipts",
+      "type": "Code",
+      "title": "Receipt check at deliverable-ready",
+      "loc": "`kaneki-sdlc-harness/harness/state.py:125-140` · draft v0.1.0, read 2026-11-04",
+      "quote": "def check_receipts(state: dict[str, Any], min_hours_left: int) -> list[str]:\n    problems = []\n    receipts = state.get(\"receipts\") or {}\n    limit = datetime.now(timezone.utc) + timedelta(hours=min_hours_left)\n    for repo in state[\"context\"][\"repositories\"]:\n        rec = receipts.get(repo[\"id\"])\n        if not rec:\n            problems.append(f\"{repo['id']}: no receipt (rerun final-review)\")\n            continue\n        if datetime.fromisoformat(rec[\"expiresAt\"]) < limit:\n            problems.append(f\"{repo['id']}: receipt expires {rec['expiresAt']} (< {min_hours_left}h left) - re-issue from final-review, do not invalidate\")\n            continue\n        current = repo_subject(repo.get(\"worktree\") or repo[\"path\"])[\"subject\"]\n        if current != rec[\"subject\"]:\n            problems.append(f\"{repo['id']}: checkout changed since the receipt - invalidate the node that owns the change\")\n    return problems",
+      "quote_code": true
+    },
+    {
+      "id": "src-ticketroot",
+      "type": "Code",
+      "title": "Ticket root resolves relative to the profile file",
+      "loc": "`kaneki-sdlc-harness/harness/cli.py:35-37` · draft v0.1.0, read 2026-11-04",
+      "quote": "def ticket_root(profile: dict[str, Any], pdir: Path) -> Path:\n    root = Path(profile[\"paths\"][\"ticketRoot\"])\n    return root if root.is_absolute() else (pdir / root).resolve()",
+      "quote_code": true
+    },
+    {
+      "id": "src-artifacts-expand",
+      "type": "Code",
+      "title": "`@delivery.drafts` expands to drafts/<name>.md",
+      "loc": "`kaneki-sdlc-harness/harness/cli.py:62-69` · draft v0.1.0, read 2026-11-04",
+      "quote": "    def artifacts(self, node: str) -> list[str]:\n        names = []\n        for name in self.spec(node).get(\"artifacts\", []):\n            if name == \"@delivery.drafts\":\n                names += [f\"drafts/{d}.md\" for d in self.profile[\"delivery\"].get(\"drafts\", [])]\n            else:\n                names.append(name)\n        return names",
+      "quote_code": true
+    },
+    {
+      "id": "src-plan-save",
+      "type": "Code",
+      "title": "`plan` saves state",
+      "loc": "`kaneki-sdlc-harness/harness/cli.py:160-164` · draft v0.1.0, read 2026-11-04",
+      "quote": "    }\n    if args.card:\n        plan = {k: v for k, v in plan.items() if v is not None}\n    s.save()\n    out(plan)",
+      "quote_code": true
+    },
+    {
+      "id": "src-dispatch-id",
+      "type": "Code",
+      "title": "Dispatch id, rules file and result path",
+      "loc": "`kaneki-sdlc-harness/harness/cli.py:195-199` · draft v0.1.0, read 2026-11-04",
+      "quote": "    round_no = 1 + sum(1 for u in rec[\"units\"] if u[\"unit\"] == args.unit and u[\"generation\"] == rec[\"generation\"])\n    dispatch = f\"{args.node}.g{rec['generation']}.{args.unit}.r{round_no}\"\n    rules_path = pdir / f\"{dispatch}.rules.json\"\n    rules_path.write_text(json.dumps(rules, indent=2, ensure_ascii=False), encoding=\"utf-8\")\n    result_path = s.ticket.dir / \"results\" / f\"{dispatch}.md\"",
+      "quote_code": true
+    },
+    {
+      "id": "src-record",
+      "type": "Code",
+      "title": "`record` refuses a missing result or a wrong model",
+      "loc": "`kaneki-sdlc-harness/harness/cli.py:240-249` · draft v0.1.0, read 2026-11-04",
+      "quote": "    result = Path(args.result)\n    if not result.is_file():\n        raise HarnessError(f\"G7: result file missing: {result} (the controller never fills a missing unit)\")\n    tier = next((u[\"tier\"] for u in spec.get(\"units\", []) if u[\"id\"] == args.unit), spec.get(\"reviewer\", {}).get(\"tier\"))\n    if args.model != s.model(tier):\n        raise HarnessError(f\"{args.node}/{args.unit} is planned on {s.model(tier)} ({tier}); a {args.model} record is refused\")\n    entry = {\"unit\": args.unit, \"generation\": rec[\"generation\"], \"model\": args.model, \"status\": args.status,\n             \"result\": str(result), \"resultDigest\": sha256_file(result), \"tokens\": args.tokens,\n             \"verdict\": args.verdict, \"failureClass\": args.failure_class, \"at\": now()}\n    rec[\"units\"].append(entry)",
+      "quote_code": true
+    },
+    {
+      "id": "src-gate",
+      "type": "Code",
+      "title": "`gate` readiness and loop cap",
+      "loc": "`kaneki-sdlc-harness/harness/cli.py:262-277` · draft v0.1.0, read 2026-11-04",
+      "quote": "        raise HarnessError(f\"{node} already closed at generation {rec['generation']} (gate calls are not re-asked)\")\n    missing = missing_prerequisites(s.graph, s.order, s.state, node)\n    if missing:\n        raise HarnessError(f\"G7: {node} is not ready; missing {missing}\")\n    cap = s.profile.get(\"gates\", {}).get(\"loopCap\", 2)\n    current = [u for u in rec[\"units\"] if u[\"generation\"] == rec[\"generation\"]]\n    result: dict[str, Any] = {\"node\": node}\n\n    if args.status == \"needs-changes\":\n        back = spec.get(\"loopBackTo\")\n        if not back:\n            raise HarnessError(f\"{node} has no loop-back; use rejected + invalidate\")\n        attempts = rec[\"attempts\"] + 1\n        if attempts >= cap and args.actor != \"user\":\n            raise HarnessError(f\"G4: {node} NEEDS CHANGES after {attempts} rounds (cap {cap}); ask the user, then repeat with --actor user\")\n        stale = _invalidate(s, back, f\"{node} NEEDS CHANGES: {args.note or ''}\".strip())",
+      "quote_code": true
+    },
+    {
+      "id": "src-absent",
+      "type": "Code",
+      "title": "`gate` approval checks: units, reviewer, artifact existence, user boundary",
+      "loc": "`kaneki-sdlc-harness/harness/cli.py:280-297` · draft v0.1.0, read 2026-11-04",
+      "quote": "    elif args.status == \"approved\":\n        planned = [u[\"id\"] for u in spec.get(\"units\", [])] + ([\"reviewer\"] if spec.get(\"reviewer\") else [])\n        done_units = {u[\"unit\"] for u in current if u[\"status\"] == \"ok\"}\n        lacking = [u for u in planned if u not in done_units]\n        if lacking:\n            raise HarnessError(f\"G7: {node} has no ok record for units {lacking} at generation {rec['generation']}\")\n        if spec.get(\"reviewer\"):\n            last_rev = [u for u in current if u[\"unit\"] == \"reviewer\"][-1]\n            if last_rev.get(\"verdict\") == \"FAIL\":\n                raise HarnessError(f\"{node}: last reviewer verdict is FAIL ({last_rev.get('failureClass')}); fix and re-review\")\n        absent = [a for a in s.artifacts(node) if not (s.ticket.dir / a).is_file()]\n        if absent:\n            raise HarnessError(f\"G7: {node} artifacts missing: {absent}\")\n        boundary = spec[\"boundary\"]\n        if boundary == \"user\" and node in (\"fix-plan\", \"feature-plan\") and s.profile.get(\"gates\", {}).get(\"autoSkipPlanApproval\"):\n            boundary = \"controller\"\n        if boundary == \"user\" and args.actor != \"user\":\n            raise HarnessError(f\"G0: {node} closes on the user's approval; ask Proceed / Re-run / Stop, then --actor user\")",
+      "quote_code": true
+    },
+    {
+      "id": "src-gate-effects",
+      "type": "Code",
+      "title": "`gate` side effects: subject, receipts, artifact digests, reopen",
+      "loc": "`kaneki-sdlc-harness/harness/cli.py:298-322` · draft v0.1.0, read 2026-11-04",
+      "quote": "        if spec.get(\"reopens\"):\n            if not args.reopen:\n                raise HarnessError(f\"{node}: pass --reopen <earliest invalidated node> or --reopen none\")\n        if spec.get(\"subjectNode\"):\n            rec[\"subject\"] = {r[\"id\"]: repo_subject(r.get(\"worktree\") or r[\"path\"]) for r in s.ctx[\"repositories\"]}\n            result[\"subject\"] = rec[\"subject\"]\n        if spec.get(\"issuesReceipts\"):\n            ttl = s.profile[\"delivery\"].get(\"receiptTtlHours\", 72)\n            result[\"receipts\"] = issue_receipts(s.state, ttl)\n        if spec.get(\"checksReceipts\"):\n            problems = check_receipts(s.state, s.profile[\"delivery\"].get(\"minHoursLeft\", 24))\n            if problems:\n                raise HarnessError(\"G7: receipts not shippable: \" + \"; \".join(problems))\n        rec[\"artifactDigests\"] = {a: sha256_file(s.ticket.dir / a) for a in s.artifacts(node)}\n        rec[\"status\"] = \"done\"\n        rec[\"verdict\"] = \"approved\"\n        rec[\"closedAt\"] = now()\n        result[\"verdict\"] = \"approved\"\n        if spec.get(\"reopens\") and args.reopen != \"none\":\n            result[\"reopened\"] = args.reopen\n            result[\"stale\"] = _invalidate(s, args.reopen, f\"review round {s.ctx['reviewRound']}: {args.note or ''}\".strip())\n    else:  # rejected / stopped\n        rec[\"verdict\"] = args.status\n        result[\"verdict\"] = args.status\n",
+      "quote_code": true
+    },
+    {
+      "id": "src-invalidate",
+      "type": "Code",
+      "title": "_invalidate — stale, bump generation, drop receipts",
+      "loc": "`kaneki-sdlc-harness/harness/cli.py:330-344` · draft v0.1.0, read 2026-11-04",
+      "quote": "def _invalidate(s: Session, node: str, reason: str) -> list[str]:\n    stale = G.dependents(s.graph, s.order, node)\n    for n in stale:\n        rec = s.state[\"nodes\"][n]\n        if rec[\"status\"] == \"pending\" and rec[\"generation\"] == 1 and not rec[\"units\"]:\n            continue  # never ran: nothing to supersede\n        rec[\"status\"] = \"stale\"\n        rec[\"generation\"] += 1\n        rec[\"verdict\"] = None\n        if n != stale[0]:\n            rec[\"attempts\"] = 0\n    if any(s.spec(n).get(\"issuesReceipts\") for n in stale):\n        s.state[\"receipts\"] = {}\n    s.ticket.log({\"event\": \"invalidate\", \"node\": node, \"stale\": stale, \"reason\": reason})\n    return stale",
+      "quote_code": true
+    },
+    {
+      "id": "src-handback",
+      "type": "Code",
+      "title": "`handback` copies the review and restarts the review nodes",
+      "loc": "`kaneki-sdlc-harness/harness/cli.py:376-389` · draft v0.1.0, read 2026-11-04",
+      "quote": "    src = Path(args.review_file)\n    if not src.is_file():\n        raise HarnessError(f\"review file not found: {src}\")\n    s.ctx[\"reviewRound\"] += 1\n    s.ctx[\"maturity\"] = \"pr_opened\"\n    rnd = s.ctx[\"reviewRound\"]\n    dest = s.ticket.dir / \"reviews\" / f\"round-{rnd}{src.suffix or '.md'}\"\n    dest.parent.mkdir(parents=True, exist_ok=True)\n    dest.write_bytes(src.read_bytes())\n    for node in (\"read-review\", \"triage-review\", \"respond-review\"):\n        rec = s.state[\"nodes\"].setdefault(node, new_node_record())\n        if rec[\"units\"] or rec[\"status\"] == \"done\":\n            rec.update({\"status\": \"pending\", \"generation\": rec[\"generation\"] + 1, \"verdict\": None, \"attempts\": 0})\n    s.save()",
+      "quote_code": true
+    },
+    {
+      "id": "src-template-return",
+      "type": "Code",
+      "title": "Packet return contract",
+      "loc": "`kaneki-sdlc-harness/skills/sdlc-flow/scripts/packet-template.md:38-47` · draft v0.1.0, read 2026-11-04",
+      "quote": "## Return contract\n\nWrite the full result to the result file, then reply in ≤ 150 words: status, result file path, its\nsha256 (`sdlc digest --path <file>`), one line per blocking item.\n\n- Worker result: status · claims (OBSERVED/DERIVED/ASSUMED) · evidence pointers · artifact paths ·\n  checks run with results · open doubts (HIGH/LOW) · weakest link.\n- Reviewer result: verdict PASS/FAIL · failure class · blocking findings with evidence · rules or\n  units not covered · weakest link.\n",
+      "quote_code": true
+    },
+    {
+      "id": "src-skill-loop",
+      "type": "Doc",
+      "title": "Controller loop: dispatch and record",
+      "loc": "`kaneki-sdlc-harness/skills/sdlc-flow/SKILL.md:30-40` · draft v0.1.0, read 2026-11-04",
+      "quote": "3. **Dispatch.** Per unit, write a facts JSON (`weakestClaim`, `observed`, `doubts`, `settled`,\n   `authorizedPaths`, and `findingsToFix` on a round two), then `$SDLC packet --ticket <id> --node <n> --unit <u> --facts <file>`.\n   Dispatch each unit as its `agentType` (`sdlc-worker` / `sdlc-deep`) to a distinct fresh subagent with one line:\n   *\"Read the packet at `<path>` (sha256 `<packetDigest>`) and execute it.\"* Units with disjoint outputs go in one\n   message. The controller never fills a missing unit.\n4. **Verify, then record.** Check the result file exists and its digest; spot-check the citations the\n   gate depends on (open the cited `path:line` yourself). Then\n   `$SDLC record --ticket <id> --node <n> --unit <u> --result <file> --model <model> --tokens <n> [--verdict ...]`.\n   A model other than the planned one is refused. Then the reviewer unit, if planned, over the latest results.\n   Reviewer FAIL `record`-class → fix the record and re-record; `artifact`-class → re-dispatch the failed\n   worker (resume the same agent when the host allows) then one more reviewer round.",
+      "quote_code": true
+    },
+    {
+      "id": "src-profile-schema",
+      "type": "Spec",
+      "title": "Project profile contract (required keys)",
+      "loc": "`kaneki-sdlc-harness/contracts/project-profile.schema.json:1-8` · draft v0.1.0, read 2026-11-04",
+      "quote": "{\n  \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",\n  \"$id\": \"sdlc-project-profile@1\",\n  \"title\": \"Project profile\",\n  \"description\": \"Everything project-specific. The graph, node cards and driver never name a stack, platform, tracker or language; this file and the adapters it selects do.\",\n  \"type\": \"object\",\n  \"required\": [\"schemaVersion\", \"project\", \"paths\", \"models\", \"tracker\", \"repositories\", \"rulepacks\", \"testcase\", \"evidence\", \"delivery\"],\n  \"properties\": {",
+      "quote_code": true
+    },
+    {
+      "id": "src-adapter-schema",
+      "type": "Spec",
+      "title": "Adapter contract (per-kind shapes)",
+      "loc": "`kaneki-sdlc-harness/contracts/adapter.schema.json:1-15` · draft v0.1.0, read 2026-11-04",
+      "quote": "{\n  \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",\n  \"$id\": \"sdlc-adapter@1\",\n  \"title\": \"Adapter\",\n  \"description\": \"An adapter is data plus instructions a unit reads. It never runs by itself; the unit executes what it describes under the packet's limits.\",\n  \"type\": \"object\",\n  \"required\": [\"kind\", \"id\", \"description\"],\n  \"properties\": {\n    \"kind\": {\"enum\": [\"tracker\", \"stack\", \"surface\", \"delivery\"]},\n    \"id\": {\"type\": \"string\"},\n    \"description\": {\"type\": \"string\"},\n    \"config\": {\"type\": \"object\"}\n  },\n  \"allOf\": [\n    {\"if\": {\"properties\": {\"kind\": {\"const\": \"tracker\"}}},",
+      "quote_code": true
+    },
+    {
+      "id": "src-rulepack-schema",
+      "type": "Spec",
+      "title": "Rulepack contract (rule fields)",
+      "loc": "`kaneki-sdlc-harness/contracts/rulepack.schema.json:13-22` · draft v0.1.0, read 2026-11-04",
+      "quote": "      \"items\": {\n        \"type\": \"object\",\n        \"required\": [\"id\", \"phase\", \"severity\", \"title\", \"check\"],\n        \"properties\": {\n          \"id\": {\"type\": \"string\", \"pattern\": \"^[A-Z][A-Z0-9-]+$\"},\n          \"phase\": {\"enum\": [\"design\", \"code\", \"test\", \"evidence\", \"delivery\"]},\n          \"severity\": {\"enum\": [\"critical\", \"high\", \"medium\", \"low\"]},\n          \"title\": {\"type\": \"string\"},\n          \"check\": {\"type\": \"string\", \"description\": \"What the reviewer verifies, phrased so PASS/FAIL is decidable from evidence.\"},\n          \"appliesTo\": {",
+      "quote_code": true
+    },
+    {
+      "id": "src-extension-schema",
+      "type": "Spec",
+      "title": "Extension contract (slot, order, nodes)",
+      "loc": "`kaneki-sdlc-harness/contracts/extension.schema.json:1-12` · draft v0.1.0, read 2026-11-04",
+      "quote": "{\n  \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",\n  \"$id\": \"sdlc-extension@1\",\n  \"title\": \"Family extension\",\n  \"description\": \"Nodes a capability family inserts at a graph slot. They run only when the ticket enables the family (--family <id>). Node specs use the same fields as graph/lifecycle.json nodes.\",\n  \"type\": \"object\",\n  \"required\": [\"slot\", \"order\", \"nodes\"],\n  \"properties\": {\n    \"slot\": {\"enum\": [\"after-code-review\", \"after-evidence\"]},\n    \"order\": {\"type\": \"array\", \"items\": {\"type\": \"string\"}, \"minItems\": 1},\n    \"nodes\": {\n      \"type\": \"object\",",
+      "quote_code": true
+    },
+    {
+      "id": "src-state-schema",
+      "type": "Spec",
+      "title": "Ticket state contract",
+      "loc": "`kaneki-sdlc-harness/contracts/state.schema.json:1-12` · draft v0.1.0, read 2026-11-04",
+      "quote": "{\n  \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",\n  \"$id\": \"sdlc-state@1\",\n  \"title\": \"Ticket state\",\n  \"description\": \"<ticketRoot>/<ticket>/state.json — written only by the driver. decisions.jsonl next to it is the append-only log of every init, record, gate, invalidate and handback.\",\n  \"type\": \"object\",\n  \"required\": [\"schemaVersion\", \"graphId\", \"profilePath\", \"context\", \"nodes\", \"receipts\"],\n  \"properties\": {\n    \"schemaVersion\": {\"const\": 1},\n    \"graphId\": {\"type\": \"string\"},\n    \"profilePath\": {\"type\": \"string\"},\n    \"context\": {",
+      "quote_code": true
+    },
+    {
+      "id": "src-test-inval",
+      "type": "Test",
+      "title": "Test: invalidating coding keeps the test cases",
+      "loc": "`kaneki-sdlc-harness/tests/test_lifecycle.py:93-101` · draft v0.1.0, read 2026-11-04",
+      "quote": "    def test_invalidate_coding_keeps_testcases(self) -> None:\n        profile = load_profile(self.profile)\n        graph = G.load_graph(HOME, profile, self.tmp)\n        order = G.trace(graph, build_context(profile, \"T\", \"bug\", None, None, None))\n        stale = G.dependents(graph, order, \"coding\")\n        self.assertIn(\"code-review\", stale)\n        self.assertIn(\"final-review\", stale)\n        self.assertNotIn(\"testcase\", stale)  # test cases derive from the plan, not the code\n        self.assertNotIn(\"testcase-review\", stale)",
+      "quote_code": true,
+      "note": "All 8 tests passed on 2026-11-04 (`python -m unittest discover -s tests`)."
+    },
+    {
+      "id": "src-test-cycle",
+      "type": "Test",
+      "title": "Test: review round reopens coding, keeps testcase",
+      "loc": "`kaneki-sdlc-harness/tests/test_lifecycle.py:158-168` · draft v0.1.0, read 2026-11-04",
+      "quote": "        # after PR: a review arrives, triage reopens coding, only the stale part reruns\n        review = self.tmp / \"review.md\"\n        review.write_text(\"RC-1: rename variable\\n\")\n        code, res = run(\"handback\", \"--ticket\", t, \"--review-file\", str(review), *self.p)\n        self.assertEqual(code, 0, res)\n        self.assertEqual(res[\"nextPending\"], \"read-review\")\n        self.complete(t, \"read-review\")\n        res = self.complete(t, \"triage-review\", actor=\"user\", extra=(\"--reopen\", \"coding\"))\n        self.assertIn(\"coding\", res[\"stale\"])\n        self.assertNotIn(\"testcase\", res[\"stale\"])\n        self.assertEqual(res[\"nextPending\"], \"coding\")",
+      "quote_code": true
+    }
+  ]
+}

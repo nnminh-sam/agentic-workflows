@@ -1,0 +1,404 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sdlc-project-profile@1",
+  "title": "Project profile",
+  "description": "Everything project-specific. The graph, node cards and driver never name a stack, platform, tracker or language; this file and the adapters it selects do.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "project",
+    "git",
+    "paths",
+    "models",
+    "tracker",
+    "repositories",
+    "rulepacks",
+    "testcase",
+    "evidence",
+    "delivery"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "meta": {
+      "type": "object",
+      "description": "Written by kaneki-onboarding. Field-level provenance lives in the sidecar sdlc.profile.evidence.json.",
+      "properties": {
+        "generator": {
+          "type": "string"
+        },
+        "generatedAt": {
+          "type": "string"
+        },
+        "refreshedAt": {
+          "type": "string"
+        },
+        "evidenceFile": {
+          "type": "string"
+        }
+      }
+    },
+    "project": {
+      "type": "object",
+      "required": [
+        "id",
+        "name"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    },
+    "locale": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Optional. Every output is English unless set here (or by a per-ticket override the user asked for in the prompt). Keys are independent: there is no fallback between them and nothing is inferred from the repository or the user's own language. Skills, node cards and packets are always English.",
+      "properties": {
+        "chat": {
+          "type": "string",
+          "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
+          "description": "The controller talking to the user: questions, progress tables, summaries."
+        },
+        "artifacts": {
+          "type": "string",
+          "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
+          "description": "Ticket files: analysis, plan, test cases, evidence report, review findings."
+        },
+        "delivery": {
+          "type": "string",
+          "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
+          "description": "Commit messages and PR descriptions."
+        },
+        "review": {
+          "type": "string",
+          "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
+          "description": "Replies to PR review comments."
+        },
+        "tracker": {
+          "type": "string",
+          "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
+          "description": "The reply posted on the ticket tracker."
+        }
+      }
+    },
+    "git": {
+      "type": "object",
+      "required": [
+        "user"
+      ],
+      "additionalProperties": false,
+      "description": "The account every git command of every node runs as. Applied per command (GIT_AUTHOR_*/GIT_COMMITTER_*, GIT_SSH_COMMAND) through `sdlc git`; repository and global git config are never changed. Gates reject commits made as anyone else.",
+      "properties": {
+        "user": {
+          "type": "object",
+          "required": [
+            "name",
+            "email"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "email": {
+              "type": "string",
+              "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+            }
+          }
+        },
+        "sshCommand": {
+          "type": "string",
+          "minLength": 1,
+          "description": "e.g. `ssh -i ~/.ssh/project_key -o IdentitiesOnly=yes`. Only the key path is stored, never the key."
+        }
+      }
+    },
+    "paths": {
+      "type": "object",
+      "required": [
+        "ticketRoot"
+      ],
+      "properties": {
+        "ticketRoot": {
+          "type": "string",
+          "description": "Relative to the profile file."
+        },
+        "branchPrefix": {
+          "type": "string",
+          "default": "ticket/"
+        },
+        "worktreeRoot": {
+          "type": "string",
+          "minLength": 1,
+          "default": "worktrees",
+          "description": "Folder that holds every ticket worktree as <worktreeRoot>/<repoId>-<ticket>. Relative to the profile file; must be outside every repository."
+        }
+      }
+    },
+    "models": {
+      "type": "object",
+      "required": [
+        "routine",
+        "deep"
+      ],
+      "description": "Model per capability tier. routine = extraction/coding/drafting; deep = diagnosis, planning, review.",
+      "properties": {
+        "routine": {
+          "type": "string"
+        },
+        "deep": {
+          "type": "string"
+        }
+      }
+    },
+    "tracker": {
+      "type": "object",
+      "required": [
+        "adapter"
+      ],
+      "properties": {
+        "adapter": {
+          "type": "string",
+          "description": "Bundled id (adapters/tracker/<id>.json) or path relative to the profile."
+        },
+        "config": {
+          "type": "object"
+        }
+      }
+    },
+    "repositories": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "path",
+          "stack",
+          "surfaces"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string",
+            "description": "Main checkout (read-only for the harness; coding happens in a ticket worktree)."
+          },
+          "stack": {
+            "type": "string",
+            "description": "Stack id (bundled adapter id, or the id of a draft adapter)."
+          },
+          "stackAdapter": {
+            "type": "string",
+            "description": "Optional project-local stack adapter (path relative to the profile). It may `extends` the bundled adapter of `stack` and override its commands with the ones detected in this repo."
+          },
+          "surfaces": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            },
+            "description": "Surfaces this repo is verified on; each must be allowed by the stack adapter and listed in evidence.surfaces."
+          },
+          "defaultBranch": {
+            "type": "string",
+            "default": "main"
+          },
+          "remote": {
+            "type": "string"
+          },
+          "git": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Per-repository override of git.user / git.sshCommand (a repo that must use another account).",
+            "properties": {
+              "user": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "email"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "email": {
+                    "type": "string",
+                    "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+                  }
+                }
+              },
+              "sshCommand": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    "rulepacks": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Bundled pack ids (rulepacks/<id>.json) or paths relative to the profile. Stack packs (rulepacks/stack/<stack>.json) load automatically."
+    },
+    "testcase": {
+      "type": "object",
+      "required": [
+        "format"
+      ],
+      "properties": {
+        "format": {
+          "enum": [
+            "markdown",
+            "xlsx",
+            "csv",
+            "gherkin"
+          ]
+        },
+        "template": {
+          "type": "string"
+        },
+        "helper": {
+          "type": "string",
+          "description": "Script that reads/writes the template safely (required for xlsx)."
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "required": [
+        "surfaces"
+      ],
+      "properties": {
+        "surfaces": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "adapter": {
+                "type": "string",
+                "description": "Surface adapter id, or 'none' with a reason."
+              },
+              "reason": {
+                "type": "string"
+              },
+              "config": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "adapter"
+            ]
+          }
+        },
+        "template": {
+          "type": "string",
+          "description": "Optional evidence workbook/report template."
+        }
+      }
+    },
+    "delivery": {
+      "type": "object",
+      "required": [
+        "adapter",
+        "drafts"
+      ],
+      "properties": {
+        "adapter": {
+          "type": "string"
+        },
+        "drafts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Draft names; each must have a template in the delivery adapter."
+        },
+        "receiptTtlHours": {
+          "type": "integer",
+          "default": 72
+        },
+        "minHoursLeft": {
+          "type": "integer",
+          "default": 24
+        },
+        "config": {
+          "type": "object"
+        }
+      }
+    },
+    "families": {
+      "type": "array",
+      "description": "Capability families: optional node extensions (inserted at graph slots) and extra rulepacks, switched on per ticket with --family.",
+      "items": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "nodes": {
+            "type": "string",
+            "description": "Extension file (contracts/extension.schema.json)."
+          },
+          "rulepack": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "gates": {
+      "type": "object",
+      "properties": {
+        "loopCap": {
+          "type": "integer",
+          "default": 2
+        },
+        "autoSkipPlanApproval": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "properties": {
+        "doctor": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sharedState": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Shared resources whose mutation needs G6."
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

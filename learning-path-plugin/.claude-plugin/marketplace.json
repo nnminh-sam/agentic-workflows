@@ -1,0 +1,12 @@
+{
+  "name": "learning-path",
+  "owner": { "name": "MINHNN4" },
+  "description": "Diagnose a learner, pick a path through an answer-your-way notebook, publish it as a static site.",
+  "plugins": [
+    {
+      "name": "learning-path",
+      "source": "./plugins/learning-path",
+      "description": "/learning-path:diagnose interviews you one question at a time and writes learning-path.json; /learning-path:build turns the notebook + path into a public static site (dist/)."
+    }
+  ]
+}

@@ -1,0 +1,70 @@
+<h2>Who talks to whom</h2>
+<p>There are five actors. The <strong>controller</strong> (the main Claude session running <code>SKILL.md</code>) is the only one that talks to everybody. The <strong>driver</strong> (<code>sdlc.py</code>) owns state. <strong>Units</strong> are fresh subagents that each do one job and see only their packet. The <strong>user</strong> approves at fixed points. The <strong>files</strong> are the shared memory. {{ cite('src-skill-loop') }}</p>
+<figure class="fig">
+<svg viewBox="0 0 900 400" role="img" aria-label="Actors and channels of the harness">
+  <defs><marker id="arr-bp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker></defs>
+  <g font-size="13" fill="var(--ink)">
+    <rect x="20" y="20" width="200" height="70" rx="10" fill="var(--panel)" stroke="var(--line)"/>
+    <text x="120" y="48" text-anchor="middle" font-weight="600">Profile + adapters</text>
+    <text x="120" y="70" text-anchor="middle" font-size="12" fill="var(--muted)">sdlc.profile.json · adapters/ · rulepacks/</text>
+
+    <rect x="350" y="20" width="200" height="70" rx="10" fill="var(--accent-soft)" stroke="var(--accent)"/>
+    <text x="450" y="48" text-anchor="middle" font-weight="600">User</text>
+    <text x="450" y="70" text-anchor="middle" font-size="12" fill="var(--muted)">approves plan · drafts · triage</text>
+
+    <rect x="350" y="160" width="200" height="70" rx="10" fill="var(--panel)" stroke="var(--ink)" stroke-width="1.6"/>
+    <text x="450" y="188" text-anchor="middle" font-weight="600">Controller</text>
+    <text x="450" y="210" text-anchor="middle" font-size="12" fill="var(--muted)">SKILL.md loop · never does unit work</text>
+
+    <rect x="20" y="160" width="200" height="70" rx="10" fill="var(--info-soft)" stroke="var(--info)"/>
+    <text x="120" y="188" text-anchor="middle" font-weight="600">Driver (sdlc.py)</text>
+    <text x="120" y="210" text-anchor="middle" font-size="12" fill="var(--muted)">only writer of state</text>
+
+    <rect x="680" y="160" width="200" height="70" rx="10" fill="var(--panel)" stroke="var(--line)"/>
+    <text x="780" y="188" text-anchor="middle" font-weight="600">Units (subagents)</text>
+    <text x="780" y="210" text-anchor="middle" font-size="12" fill="var(--muted)">worker · reviewer · fresh context</text>
+
+    <rect x="20" y="300" width="330" height="80" rx="10" fill="var(--ok-soft)" stroke="var(--ok)"/>
+    <text x="185" y="328" text-anchor="middle" font-weight="600">Ticket directory</text>
+    <text x="185" y="350" text-anchor="middle" font-size="12" fill="var(--muted)">state.json · decisions.jsonl · artifacts</text>
+    <text x="185" y="368" text-anchor="middle" font-size="12" fill="var(--muted)">packets/ · results/ · reviews/</text>
+
+    <rect x="560" y="300" width="320" height="80" rx="10" fill="var(--warn-soft)" stroke="var(--warn)"/>
+    <text x="720" y="328" text-anchor="middle" font-weight="600">Repository worktree</text>
+    <text x="720" y="350" text-anchor="middle" font-size="12" fill="var(--muted)">source changes (coding only)</text>
+    <text x="720" y="368" text-anchor="middle" font-size="12" fill="var(--muted)">digested into subject + receipts</text>
+
+    <g stroke="var(--muted)" stroke-width="1.6" fill="none">
+      <line x1="120" y1="90" x2="120" y2="158" marker-end="url(#arr-bp)"/>
+      <line x1="348" y1="195" x2="222" y2="195" marker-end="url(#arr-bp)" marker-start="url(#arr-bp)"/>
+      <line x1="552" y1="195" x2="678" y2="195" marker-end="url(#arr-bp)" marker-start="url(#arr-bp)"/>
+      <line x1="450" y1="92" x2="450" y2="158" marker-end="url(#arr-bp)" marker-start="url(#arr-bp)"/>
+      <line x1="120" y1="232" x2="120" y2="298" marker-end="url(#arr-bp)"/>
+      <line x1="740" y1="232" x2="360" y2="300" marker-end="url(#arr-bp)"/>
+      <line x1="800" y1="232" x2="800" y2="298" marker-end="url(#arr-bp)"/>
+      <line x1="140" y1="232" x2="720" y2="298" stroke-dasharray="5 4" marker-end="url(#arr-bp)"/>
+    </g>
+    <g font-size="12" fill="var(--muted)">
+      <text x="128" y="128">C11 config</text>
+      <text x="285" y="186" text-anchor="middle">C3 / C4 CLI JSON</text>
+      <text x="615" y="186" text-anchor="middle">C5 packet / C7 result</text>
+      <text x="458" y="128">C9 approvals</text>
+      <text x="128" y="268">C1 tokens · log</text>
+      <text x="575" y="262" text-anchor="middle">C2 artifacts</text>
+      <text x="808" y="268">C8 source</text>
+      <text x="300" y="262" text-anchor="middle">digest</text>
+    </g>
+  </g>
+</svg>
+<figcaption>The controller sits in the middle; units never talk to the driver or to each other directly. They meet only through files. Channel ids match the table below. {{ cite('src-skill-loop', 'src-save') }}</figcaption>
+</figure>
+<div class="tbl">
+  <p class="cap">Every channel, what it carries and how strictly it is checked</p>
+  <table>
+    <tr><th>Id</th><th>From → To</th><th>Carrier</th><th>Carries</th><th>Contract</th><th>Checked by</th></tr>
+    {% for c in channels %}
+    <tr{% if c.enforced in ['none (free JSON)', 'existence only'] %} class="hl"{% endif %}><td><code>{{ c.id }}</code></td><td>{{ get(c, 'from', '') }} → {{ c.to }}</td><td>{{ rich(c.carrier) }}</td><td>{{ c.carries }}</td><td><a href="#c-{{ c.contract }}"><code>{{ c.contract }}</code></a></td><td>{{ c.enforced }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+<div class="callout warn"><strong>Note:</strong> highlighted rows are the weakest links. The facts JSON (C6) is free-form, and artifact files (C2) are checked only for existence, yet C2 carries the actual analysis and plan from node to node.</div>

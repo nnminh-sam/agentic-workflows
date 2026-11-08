@@ -1,0 +1,25 @@
+<h2>Contracts that record a ticket's progress (state)</h2>
+<p>These are written only by the driver, during a ticket's life. <code>state.json</code> is the current view and the only thing the driver trusts. <code>decisions.jsonl</code> is the audit trail of how it got there. {{ cite('src-save', 'src-log') }} {{ tag('sure') }}</p>
+<pre><code>state.json
+├─ schemaVersion · graphId · profilePath · createdAt
+├─ context            → ticket-context (kind, families, surfaces, repositories[], reviewRound)
+├─ nodes
+│   └─ &lt;node-id&gt;      → node-record (status, generation, attempts, verdict, subject?, artifactDigests?)
+│       └─ units[]    → unit-record (unit, generation, model, status, result, resultDigest, verdict…)
+└─ receipts
+    └─ &lt;repo-id&gt;      → receipt (head, subject, issuedAt, expiresAt)</code></pre>
+{% set ids = ['state', 'ticket-context', 'node-record', 'unit-record', 'receipt', 'decision-event'] %}
+{% for id in ids %}{% set c = find(contracts, 'id', id) %}
+<h3 id="c-{{ c.id }}">{{ c.name }}</h3>
+<div class="card {{ 'ok' if c.enforced in ['driver', 'driver-written'] else ('bad' if c.enforced in ['none', 'existence only'] else 'warn') }}"><strong>Written by {{ c.writer }} · read by {{ c.reader }} · enforced: {{ c.enforced }}.</strong> {{ rich(c.enforcedNote) }} {{ cite(c.cites) }}</div>
+<div class="tbl">
+  <p class="cap">Shape of {{ c.name }} · {{ rich(c.file) }}</p>
+  <table>
+    <tr><th>Field</th><th>Type</th><th>Required</th><th>Meaning</th></tr>
+    {% for f in c.fields %}
+    <tr><td><code>{{ f.name }}</code></td><td><code>{{ f.type }}</code></td><td>{{ 'yes' if f.req else 'no' }}</td><td>{{ rich(f.meaning) }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endfor %}
+<div class="callout warn"><strong>Note:</strong> <code>state.json</code> is never validated when it is loaded. A hand edit (for example setting a node to <code>done</code>) is trusted, and <code>decisions.jsonl</code> would not reveal it because nothing reads the log back (R8).</div>

@@ -1,0 +1,13 @@
+#!/bin/sh
+# OS-agnostic launcher for the harness driver (macOS, Linux, Windows Git Bash / MSYS).
+# Picks the first interpreter that is a real Python >= 3.9 (stock macOS ships 3.9): $SDLC_PYTHON, python3, python, py -3.
+# (On Windows `python3` may be the Microsoft Store stub, so each candidate is test-run, not just found.)
+here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+ok() { "$@" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)' >/dev/null 2>&1; }
+if [ -n "$SDLC_PYTHON" ] && ok $SDLC_PYTHON; then exec $SDLC_PYTHON "$here/sdlc.py" "$@"; fi
+for py in python3 python; do
+  if command -v "$py" >/dev/null 2>&1 && ok "$py"; then exec "$py" "$here/sdlc.py" "$@"; fi
+done
+if command -v py >/dev/null 2>&1 && ok py -3; then exec py -3 "$here/sdlc.py" "$@"; fi
+echo '{"error": "G7: Python 3.9+ not found. Install it (macOS: brew install python; Ubuntu: apt install python3) or set SDLC_PYTHON."}'
+exit 2
