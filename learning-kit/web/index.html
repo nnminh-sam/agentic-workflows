@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quiz</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="bar">
+    <div class="bar-title" id="title">Loading…</div>
+    <div class="bar-right">
+      <span id="progress-text" class="muted"></span>
+      <button id="theme" class="icon-btn" title="Toggle theme" aria-label="Toggle theme">◐</button>
+    </div>
+  </header>
+  <div class="progress"><div id="progress-fill"></div></div>
+  <main id="app" aria-live="polite"></main>
+  <script src="app.js"></script>
+</body>
+</html>
