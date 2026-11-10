@@ -158,6 +158,15 @@ def main() -> int:
     leftovers = sorted(set(re.findall(r"\{\{[A-Z_]+\}\}", text)))
     if leftovers:
         errors.append("unfilled template tokens: " + ", ".join(leftovers))
+    pending = sorted(set(re.findall(r'src="@@([^@"]+)@@"', text)))
+    if pending:
+        errors.append("image placeholders not embedded (run scripts/embed_images.py): " + ", ".join(pending))
+    # embedded raster images: too small = blurry in the zoom viewer
+    from embed_images import data_uri_size  # same folder
+    for alt, uri in re.findall(r'<img\b[^>]*?alt="([^"]*)"[^>]*?src="(data:image/[^"]+)"', text):
+        size = data_uri_size(uri)
+        if size and size[0] < 1200:
+            warns.append(f'image "{alt}" is only {size[0]}x{size[1]} px: embed a source at least 1200 px wide so it stays sharp when zoomed')
 
     d = Doc()
     d.feed(text)
