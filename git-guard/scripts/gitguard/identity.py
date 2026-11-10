@@ -8,6 +8,7 @@ import re
 import subprocess
 import tempfile
 import time
+import unicodedata
 from pathlib import Path
 from typing import Callable
 
@@ -63,7 +64,9 @@ def name_problem(name: str | None, params: dict) -> str | None:
     expected = params.get("expected") or []
     if not name:
         return "commit author name is unset"
-    if expected and name not in expected:
+    # macOS input can store names decomposed (NFD) while git config holds them composed (NFC).
+    nfc = lambda v: unicodedata.normalize("NFC", v)
+    if expected and nfc(name) not in [nfc(e) for e in expected]:
         return f"commit author name is '{name}', expected one of {expected}"
     return None
 
