@@ -98,6 +98,12 @@ scaffolding, no writing), check the invocation:
    - no `<style>`, no external scripts/images/fonts, no edits to the shell CSS/JS.
    Large docs: write section by section (several Edits) rather than one huge Write.
 
+   - images (screenshots, photos): get the largest original (≥ 1200 px wide,
+     never downscale), write `<img alt="…" src="@@relative/path.png@@">` and run
+     `python "SKILL_DIR/scripts/embed_images.py" "<out>" --base <images dir>`.
+     Every figure image and diagram is zoomable in the page (click → full-screen
+     viewer); components.md "Images" has the details.
+
 6. **Validate** and fix until there are 0 errors; resolve warnings unless there is
    a stated reason:
    ```
@@ -132,7 +138,19 @@ if the content now reads better another way.
 
 - One document = one shell version. Shell changes are made only in
   `assets/template.html` (bump `data-haise-version` and the version comments),
-  never per document; existing docs keep the shell they were built with.
+  never per document; existing docs keep the shell they were built with, unless
+  the user asks for a newer shell feature in them: then run
+  `python "SKILL_DIR/scripts/upgrade_shell.py" "<doc>"` (content is untouched).
+- Shell v2.1.0 adds the zoom viewer for figure images and diagrams.
+- Shell v3.0.0 restyles the page in the learning-kit reader look (unboxed
+  sections divided by rules, 17 px text, brighter palette, white callouts with a
+  coloured edge and `.kind` label, step cards on a timeline, mono citation pills)
+  and adds phase colours `.p1….p6`, `.chip`, `.ex`, and the callout kinds
+  `tip / interview / example / myth / tldr`. All v2 class names still work.
+- Shell v3.1.0 adds phase focus: elements sharing `data-phase="…"` (step
+  cards, SVG groups, `.phase-key` chips) light up together on hover, and pin
+  on tap/click (components.md "Phase focus"). When a doc walks through stages
+  that appear in steps and diagrams, tag them.
 - Facts only from sources you reopened; user guesses or predictions are not
   findings — record them as hypotheses (`OPEN`) unless the user confirmed them
   as decisions (then cite as type `Decision` with who/when).
