@@ -25,10 +25,24 @@ PowerShell and `LK` starts with a quote, prefix it with `& `. Paths use `/` on e
    `--depth aware|use|deep` (default `use`). Anything after the topic that isn't a flag is the
    learner's description of what they already know about it.
 2. `LK topic list --json`. Match the topic to an existing slug (fuzzy match is fine, but confirm if
-   it's ambiguous). If it doesn't exist, create it: `LK topic new <slug> --title "<Title>" --depth <d> [--fresh]`
+   it's ambiguous). If it doesn't exist, check its size first (below), then create it:
+   `LK topic new <slug> --title "<Title>" --depth <d> [--fresh]`
    (`--fresh` when `--new` was given). If `--new` was given but the topic exists, say so and resume it.
+   - **Too broad for one topic?** A new topic must fit one quiz: 4–12 concepts, ≤ `depth.<d>.facets`
+     research facets. A field or a goal ("system design", "distributed systems", "get good at Go") doesn't.
+     If it isn't a node of a path (`LK path for-topic <slug>` is empty) and it looks that broad, ask once
+     (AskUserQuestion): **build a learning path** (recommended: invoke the `path` skill with the goal and
+     stop here), **narrow it** (they name the slice, e.g. "caching for read-heavy APIs"), or **overview at
+     `aware` depth** (a map of the field, not mastery).
 3. If `--extend`: `LK topic extend <slug>` (only works from `scheduled`), then go to **research**.
-4. `LK topic status <slug>` and `LK config show` (read `agents.*` for subagent model/effort and
+4. **Path context.** `LK path for-topic <slug>`. If the topic is a node of a path, keep that context for
+   every stage: the path `goal` and `learner`, the node's `focus` (use it as the research facets),
+   `outcomes` (what the quiz and the note must prove), `kind`, and its `prereqs` topics (already learned:
+   build on their concepts, don't re-teach them; quiz items may connect to them). A `capstone` node
+   integrates its prereqs on a realistic problem: research is about the design trade-offs between them,
+   and with depth `deep` the lab is a written design defended against those trade-offs. If `--depth`
+   wasn't given, use the node's depth.
+5. `LK topic status <slug>` and `LK config show` (read `agents.*` for subagent model/effort and
    `depth.*` for sizes). Jump to the section for `stage`. After finishing a stage, run
    `LK topic advance <slug> <next>` and **continue into the next stage in the same turn** unless that
    stage needs the learner (read, quiz, lab, note). Then stop and tell them exactly what to do.
@@ -54,6 +68,7 @@ Goal: get what they already believe down on paper *before* any teaching (pre-tes
 Read `KIT/docs/authoring/research-guide.md` first and follow it. Outline:
 
 1. Plan 2–5 facets from prior.md questions and the depth (`depth.<d>.facets`, source count `depth.<d>.sources`).
+   For a path node, start from the node's `focus` and aim every facet at its `outcomes`.
 2. Reuse first: `LK source search "<topic keywords>"` and `LK source list --topic <slug>`.
 3. **Collect** in parallel: one Agent per facet, `model`/`effort` = `agents.collect`, all in one message.
    Give each one the facet, the slug, the LK command and the source rules from the guide. Collectors
@@ -61,16 +76,20 @@ Read `KIT/docs/authoring/research-guide.md` first and follow it. Outline:
    `LK source add --file`). They return only `[{id, title, why}]`.
 4. **Aggregate**: one Agent with `agents.aggregate`. It reads prior.md plus every snapshot for the topic
    (`LK source path <id>`), writes `research.md` and a concepts draft JSON (in the scratchpad), and
-   follows the guide's template (every claim cited `[S0001]`, questions answered, prediction checked,
-   conflicts flagged).
+   follows the guide's template and `KIT/docs/authoring/visuals.md` (every claim cited `[S0001]`, questions
+   answered, prediction checked, conflicts flagged, processes drawn as `lk-steps` / `lk-sequence` /
+   `lk-arch` blocks, short paragraphs, a concrete example per concept).
 5. `LK concepts merge <slug> <draft.json>`, then `LK concepts list <slug>`. Sanity-check it: 4–12 concepts
    for `use`, at least 2 marked core, every concept cites sources.
-6. `LK topic advance <slug> read`.
+6. `LK read <slug> --check`. Fix errors (broken diagram blocks) and warnings (long paragraphs, unknown
+   citations, concepts with no `{#id}` heading) by editing research.md, or send them back to the aggregator.
+7. `LK topic advance <slug> read`. This refuses while the check has errors.
 
 ## stage: read  (needs the learner)
 
-Tell them the path `DATA/topics/<slug>/research.md` (to open in their editor), roughly how long it takes to read,
-and: *"Ask me anything while you read. Don't edit the doc. Your own words come later, in the note.
+Run `LK read <slug>`. It builds `DATA/topics/<slug>/research.html` (diagrams, step cards, examples, source
+chips, contents with reading times) and opens it in the browser. If `opened` is false, give them the `url`.
+Tell them the reading time (`minutes`), that research.md is the same content as plain text, and: *"Ask me anything while you read. Don't edit the doc. Your own words come later, in the note.
 Run `/learn <slug>` again (or say 'done') when you've read it."*
 
 While they ask questions: answer from the sources (cite ids), and append each Q + a one-line answer to
@@ -108,7 +127,7 @@ stop: tell them to sleep on it and come back tomorrow.
    concepts from `LK concepts list <slug>`). Their wrong answers are in the session (`LK session show <id> --full`).
 2. Agent with `agents.reteach`, following `KIT/docs/authoring/reteach-guide.md`: writes
    `DATA/topics/<slug>/reteach/round-<round>.md`, aimed **only** at what they got wrong, grounded in sources.
-3. Tell them to read it, briefly. Then `LK topic advance <slug> quiz_gen` and generate **fresh** items for
+3. `LK read <slug> --file reteach/round-<round>.md` opens it as a page. Tell them to read it, briefly. Then `LK topic advance <slug> quiz_gen` and generate **fresh** items for
    the remaining targets only (old items are spent).
 
 ## stage: lab  (depth=deep, needs the learner)
@@ -129,6 +148,8 @@ Hand off: *"Run `/note <slug>`. Write or dictate the note in your own words, wit
 
 Show `LK topic status <slug>`. If concepts have lapsed: `LK topic advance <slug> reteach` (relearn),
 then follow **reteach**. Otherwise suggest `/recall` when cards are due, or `--extend` to grow the topic.
+If the topic is a path node (`LK path for-topic <slug>`), the next step is `/path <path>`: it reviews the
+rest of the plan against how this topic went, then moves to the next node.
 
 ## Grading fallback
 

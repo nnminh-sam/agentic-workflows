@@ -2,17 +2,36 @@
 
 A learning loop where retrieval comes first, built on Claude Code:
 **what I know → research (source bank) → read → quiz (80% gate) → reteach → lab → own-words note → spaced recall.**
+Broad goals become a **learning path**: a reviewed, ordered set of topics with a placement quiz and milestone checkpoints.
 
-Runs on Linux, macOS, Windows and WSL. Python 3.9+ standard library only; no pip dependencies.
-Design and architecture: [docs/DESIGN.md](docs/DESIGN.md).
+Browse everything (paths, topics, research docs, quiz history, mistakes) and take quizzes in a local web app,
+and let agents read it and quiz you through an MCP server.
+
+Runs on Linux, macOS, Windows and WSL. Python 3.9+ standard library only; no pip dependencies (the MCP server
+is an optional extra). Design and architecture: [docs/DESIGN.md](docs/DESIGN.md).
 
 ## Setup
 
 ```sh
 git clone git@github.com:nnminh-sam/agentic-workflows.git && cd agentic-workflows/learning-kit
 python lk.py install --home ~/learning     # data home + user-level skills in ~/.claude/skills
-python -m unittest discover -s tests       # 27 tests, no network
+python -m unittest discover -s tests       # 61 tests, no network (3 skip without the mcp SDK)
 ```
+
+## Web app and MCP server
+
+```sh
+python lk.py web                           # library + quiz app at http://127.0.0.1:8765/ (Ctrl+C stops it)
+
+pip install -e ".[mcp]"                    # optional, Python >= 3.10: the official MCP SDK
+claude mcp add learning-kit -- python "$PWD/lk.py" mcp   # Claude Code can now browse and quiz you
+```
+
+- With `lk web` running, the skills' quizzes (`/quiz`, `/recall`, `/path`) open inside it instead of a
+  one-off server. Without it they work as before.
+- Over MCP an agent can read your paths, topics, docs, sessions, recall queue and mistakes, and run practice or
+  recall quizzes in chat. Gate, placement and checkpoint rounds stay in the browser.
+- Use the absolute interpreter path in `claude mcp add` if `python` isn't the one with the extra installed.
 
 - Use `python3` instead of `python` if that's what your OS calls it (most Linux and macOS installs).
 - `--home` can be any folder (default `~/learning`). `LK_HOME` overrides it per shell.
@@ -24,6 +43,8 @@ python -m unittest discover -s tests       # 27 tests, no network
 
 | Command | What it does |
 |---|---|
+| `/path <goal>` | turn a broad goal ("system design") into a path of topics: intake, plan, placement, then one `/learn` loop per node |
+| `/path <slug>` | resume a path from any session: runs whichever step is next |
 | `/learn <topic> [what I know…]` | start or resume a topic; runs whichever stage is next |
 | `/learn <topic> --new` | brand-new topic: just 3 questions + 1 prediction to start |
 | `/learn <topic> --extend` | grow a finished topic (new concepts become the next gate) |
@@ -36,9 +57,15 @@ python -m unittest discover -s tests       # 27 tests, no network
 
 ```sh
 python lk.py topic list | topic status <slug> | topic advance <slug> <stage>
+python lk.py read <slug> [--check] [--file reteach/round-2.md]   # research as an HTML page with diagrams
+python lk.py path new <slug> | path validate <draft> | path import <slug> <draft> [--reason]
+python lk.py path next <slug> | path show <slug> | path override <slug> <node> tested_out|skipped|clear
+python lk.py serve --placement <path> | --checkpoint <path> --milestone <id>
 python lk.py source fetch <url> --topic <slug> --kind docs --quality 3
 python lk.py quiz validate <file> --topic <slug> | quiz import <slug> <file>
 python lk.py serve --topic <slug> | --review | --session <id>
+python lk.py web [--port N] [--no-open]                       # the library app
+python lk.py mcp                                              # MCP server on stdio (needs .[mcp])
 python lk.py srs due | srs stats | stats
 python lk.py --help            # or: python -m lk --help, or: lk --help after pip install -e .
 ```

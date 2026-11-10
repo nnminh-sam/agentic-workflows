@@ -130,6 +130,11 @@ def _guard(slug: str, st: dict, to: str) -> None:
             raise LkError("research.md is missing or too short")
         if not target_concepts(slug):
             raise LkError("no target concepts for this version: `lk concepts merge` first")
+        from .reader import check  # local import: reader imports topics
+        bad = check(slug)["errors"]
+        if bad:
+            raise LkError("research.md has broken visual blocks (`lk read <slug> --check`):\n  - "
+                          + "\n  - ".join(bad))
     if to == "quiz":
         from .quiz import coverage  # local import: quiz imports topics
         cov = coverage(slug)

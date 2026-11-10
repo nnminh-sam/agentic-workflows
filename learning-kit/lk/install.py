@@ -12,7 +12,7 @@ from pathlib import Path
 from . import paths
 from .store import read_json, write_json, write_text
 
-SKILLS = ("learn", "quiz", "note", "recall")
+SKILLS = ("learn", "path", "quiz", "note", "recall")
 
 _NEEDS_QUOTES = re.compile(r"[\s\"'$`&|;<>()*?!#~\\]")
 
@@ -55,7 +55,7 @@ def _rmtree(p: Path) -> None:
 
 def init_home(home: Path) -> list[str]:
     made = []
-    for sub in ("topics", "sources", "sessions"):
+    for sub in ("topics", "paths", "sources", "sessions"):
         p = home / sub
         if not p.exists():
             p.mkdir(parents=True)
@@ -71,6 +71,7 @@ def init_home(home: Path) -> list[str]:
             "# Learning data (learning-kit)\n\n"
             f"Tool: `{paths.KIT_DIR.as_posix()}` — design: `docs/DESIGN.md` there.\n\n"
             "- `topics/<slug>/` prior.md, research.md, concepts.json, quiz.json, attempts.jsonl, note.md, lab/\n"
+            "- `paths/<slug>/` learning paths: path.json (plan + record), intake.md, plan.md, placement.json\n"
             "- `sources/` global source bank (index.json + S####.md snapshots)\n"
             "- `sessions/` one JSON per quiz sitting\n"
             "- `srs.json`, `srs-log.jsonl` spaced-recall cards and review log\n"

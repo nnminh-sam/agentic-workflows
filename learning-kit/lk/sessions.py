@@ -1,5 +1,9 @@
 """Quiz sessions: one file per sitting (gate, practice or review), shared by every question type.
 
+Modes: gate, practice, review (one topic or SRS), plus two path modes: placement (before a
+learning path starts: which nodes the learner already knows) and checkpoint (a mixed quiz over
+a finished milestone).
+
 Lifecycle: open -> (answers recorded) -> grading -> graded -> applied
                                       +-> grade_failed (retry with `lk grade <id>` or the UI)
 "Applied" means the side effects ran exactly once: attempts log, mistakes log, then either the
@@ -10,10 +14,11 @@ from __future__ import annotations
 import random
 from pathlib import Path
 
-from . import gate, grader, mistakes, paths, quiz, sources, srs, topics
+from . import gate, grader, learnpath, mistakes, paths, quiz, sources, srs, topics
+from .lock import locked
 from .store import LkError, append_jsonl, now_iso, read_json, short_token, today, write_json
 
-MODES = ("gate", "practice", "review")
+MODES = ("gate", "practice", "review", "placement", "checkpoint")
 
 
 def spath(sid: str) -> Path:
@@ -32,13 +37,15 @@ def save(s: dict) -> None:
     write_json(spath(s["id"]), s)
 
 
-def _new(mode: str, topic: str | None, entries: list[dict], round_: int | None = None, title: str = "") -> dict:
-    sid = f"{today().isoformat()}-{mode}-{topic or 'mixed'}-{short_token(4)}"
+def _new(mode: str, topic: str | None, entries: list[dict], round_: int | None = None, title: str = "",
+         key: str | None = None, extra: dict | None = None) -> dict:
+    sid = f"{today().isoformat()}-{mode}-{key or topic or 'mixed'}-{short_token(4)}"
     s = {
         "id": sid, "mode": mode, "topic": topic, "round": round_, "title": title,
         "created": now_iso(), "updated": now_iso(), "status": "open",
         "seed": random.randrange(1 << 30),
         "items": entries, "answers": {}, "results": {}, "summary": None, "gate": None, "srs": [],
+        **(extra or {}),
     }
     save(s)
     return s
@@ -151,6 +158,42 @@ def create_review(limit: int | None = None, variants: dict | list | None = None,
     return _new("review", None, entries, None, f"Recall — {today().isoformat()}")
 
 
+def create_placement(path_slug: str) -> dict:
+    """Placement for a learning path: items live in paths/<slug>/placement.json, concept = node id."""
+    p = learnpath.load(path_slug)
+    existing = find_open(path_slug, "placement")
+    if existing:
+        return existing
+    items = learnpath.load_placement(path_slug)
+    if not items:
+        raise LkError(f"no placement items: `lk path placement-import {path_slug} <file>` first")
+    nodes = {n["id"]: n for n in p["nodes"]}
+    rng = random.Random()
+    entries = []
+    for it in _ordered(items, rng):
+        u = f"path:{path_slug}/{it['id']}"
+        entries.append({"uid": u, "topic": nodes.get(it["concept"], {}).get("topic", it["concept"]),
+                        "origin": u, "variant": False, "item": it})
+    labels = {nid: n["title"] for nid, n in nodes.items()}
+    return _new("placement", None, entries, None, f"{p['title']} — placement", key=path_slug,
+                extra={"path": path_slug, "labels": labels, "placement": None})
+
+
+def create_checkpoint(path_slug: str, mid: str) -> dict:
+    m = learnpath.milestone(path_slug, mid)
+    key = f"{path_slug}-{mid}"
+    existing = find_open(key, "checkpoint")
+    if existing:
+        return existing
+    rng = random.Random()
+    picked = learnpath.checkpoint_items(path_slug, mid)
+    entries = [_entry(t, i) for t, i in picked]
+    rng.shuffle(entries)
+    return _new("checkpoint", None, srs._interleave(entries),
+                None, f"Checkpoint — {m['title']}", key=key,
+                extra={"path": path_slug, "milestone": mid, "checkpoint": None})
+
+
 # ---------------------------------------------------------------- answering
 
 def record_answer(s: dict, u: str, response, confidence: int | None, time_ms: int | None) -> None:
@@ -220,6 +263,11 @@ def summarize(s: dict) -> dict:
 
 
 def _apply(s: dict) -> None:
+    if s["mode"] == "placement":
+        # Placement measures what the learner knew *before* the path: no attempts, no mistakes log
+        # (it isn't a mistake to not know what you haven't studied), only the path's record.
+        s["placement"] = learnpath.record_placement(s["path"], s)
+        return
     for e in s["items"]:
         u, it = e["uid"], e["item"]
         r = s["results"][u]
@@ -242,10 +290,14 @@ def _apply(s: dict) -> None:
                                                                                       r.get("explanation", "")) if x),
                 "confidence": conf, "session": s["id"],
             })
-        if s["mode"] == "review":
+        if s["mode"] in ("review", "checkpoint"):
+            # A checkpoint answer is a real retrieval: it updates the item's card (if it has one),
+            # and an Again lapses the concept exactly like a recall review.
             upd = srs.record(e["origin"], float(r["score"]), conf)
             if upd:
                 s["srs"].append(upd)
+    if s["mode"] == "checkpoint":
+        s["checkpoint"] = learnpath.record_checkpoint(s["path"], s["milestone"], s)
     if s["mode"] == "gate":
         res = gate.evaluate(s)
         res.update(gate.apply(s, res))
@@ -253,26 +305,34 @@ def _apply(s: dict) -> None:
 
 
 def finish(sid: str, grade_fn=None) -> dict:
-    s = load(sid)
-    if s["status"] == "applied":
-        return s
-    s["status"] = "grading"
-    s.pop("error", None)
-    save(s)
+    # The data-home lock is held around the bookkeeping only, never across LLM grading (minutes).
+    with locked():
+        s = load(sid)
+        if s["status"] == "applied":
+            return s
+        s["status"] = "grading"
+        s.pop("error", None)
+        save(s)
     try:
         _grade(s, grade_fn or grader.grade)
     except LkError as e:
-        s["status"] = "grade_failed"
-        s["error"] = str(e)
-        save(s)  # keep the script-graded results; only the LLM part is retried
+        with locked():
+            s["status"] = "grade_failed"
+            s["error"] = str(e)
+            save(s)  # keep the script-graded results; only the LLM part is retried
         raise
-    s["summary"] = summarize(s)
-    s["status"] = "graded"
-    save(s)
-    _apply(s)
-    s["status"] = "applied"
-    s["finished"] = now_iso()
-    save(s)
+    with locked():
+        # Two finishers (the web app and `lk grade`) may have graded at once: apply side effects once.
+        cur = load(sid)
+        if cur["status"] == "applied":
+            return cur
+        s["summary"] = summarize(s)
+        s["status"] = "graded"
+        save(s)
+        _apply(s)
+        s["status"] = "applied"
+        s["finished"] = now_iso()
+        save(s)
     return s
 
 
@@ -337,6 +397,8 @@ def results_view(s: dict) -> dict:
         a = s["answers"].get(e["uid"], {})
         if e["topic"] not in cnames:
             cnames[e["topic"]] = topics.concept_map(e["topic"]) if topics.exists(e["topic"]) else {}
+            for k, v in (s.get("labels") or {}).items():
+                cnames[e["topic"]].setdefault(k, {"name": v})
         rows.append({
             "n": n + 1, "uid": e["uid"], "topic": e["topic"], "type": it["type"], "prompt": it["prompt"],
             "code": it.get("code"), "concept": it["concept"],
@@ -348,4 +410,6 @@ def results_view(s: dict) -> dict:
                         for x in it.get("source_ids", [])],
         })
     return {"id": s["id"], "mode": s["mode"], "status": s["status"], "error": s.get("error"),
-            "summary": s.get("summary"), "gate": s.get("gate"), "srs": s.get("srs"), "items": rows}
+            "summary": s.get("summary"), "gate": s.get("gate"), "srs": s.get("srs"),
+            "path": s.get("path"), "placement": s.get("placement"), "checkpoint": s.get("checkpoint"),
+            "items": rows}

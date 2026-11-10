@@ -7,7 +7,8 @@ import json
 import sys
 from pathlib import Path
 
-from . import __version__, gate, install, paths, quiz, sessions, sources, srs, topics
+from . import __version__, gate, install, learnpath, paths, quiz, reader, service, sessions, sources, srs, topics
+from .lock import locked
 from .store import LkError, dumps, now_iso, read_json, slugify, write_json, write_text
 
 
@@ -61,6 +62,62 @@ def cmd_topic(a):
         out(topics.status(a.slug))
 
 
+def _print_path(v: dict) -> None:
+    print(f"{v['title']}  (v{v['version']}, {v['progress']:.0%} done)")
+    print(f"goal: {v['goal']}")
+    ms = {x: m["id"] for m in v["milestones"] for x in m["nodes"]}
+    for r in v["nodes"]:
+        stage = f" @{r['stage']}" if r["status"] == "in_progress" else ""
+        lapsed = f"  lapsed {r['lapsed']}" if r["lapsed"] else ""
+        pre = ",".join(r.get("prereqs", [])) or "-"
+        print(f"  {r['id']:<6} {r['status'] + stage:<22} {r.get('kind', 'core'):<9} {r.get('depth', 'use'):<6} "
+              f"{r.get('detail', 'stub'):<5} {ms.get(r['id'], ''):<4} {r['topic']:<32} after {pre}{lapsed}")
+
+
+def cmd_path(a):
+    if a.action == "new":
+        slug = slugify(a.slug)
+        p = learnpath.create(slug, a.title or a.slug)
+        out({"path": slug, "dir": str(learnpath.pdir(slug)), "version": p["version"],
+             "next": "write intake.md, then plan.md + a draft, then `lk path import`"})
+    elif a.action == "list":
+        rows = learnpath.list_paths()
+        if a.json:
+            return out(rows)
+        if not rows:
+            return print("no paths yet")
+        for r in rows:
+            print(f"{r['id']:<28} v{r['version']}  {r['nodes']:>2} nodes  {r['progress']:.0%} done  {r['title']}")
+    elif a.action == "show":
+        v = learnpath.view(a.slug)
+        if a.json:
+            return out(v)
+        _print_path(v)
+    elif a.action == "raw":
+        out(learnpath.load(a.slug))
+    elif a.action == "validate":
+        data = _load_json_file(a.file)
+        errs, warns = learnpath.validate_plan(data)
+        out({"ok": not errs, "errors": errs, "warnings": warns})
+        if errs:
+            sys.exit(1)
+    elif a.action == "import":
+        out(learnpath.import_plan(a.slug, _load_json_file(a.file), a.reason or "", a.force))
+    elif a.action == "next":
+        out(learnpath.next_action(a.slug))
+    elif a.action == "reviewed":
+        out(learnpath.mark_reviewed(a.slug, a.node, a.note or ""))
+    elif a.action == "override":
+        status = None if a.status == "clear" else a.status
+        out(learnpath.set_override(a.slug, a.node, status, a.note or "", a.force))
+    elif a.action == "placement-import":
+        out(learnpath.placement_import(a.slug, _load_json_file(a.file)))
+    elif a.action == "placement-skip":
+        out(learnpath.placement_skip(a.slug, a.reason or ""))
+    elif a.action == "for-topic":
+        out(learnpath.for_topic(a.slug))
+
+
 def cmd_concepts(a):
     if a.action == "merge":
         data = _load_json_file(a.file)
@@ -80,7 +137,10 @@ def cmd_concepts(a):
 def cmd_source(a):
     tps = [t for t in (a.topic or "").split(",") if t] if hasattr(a, "topic") else []
     if a.action == "fetch":
-        out(sources.fetch(a.url, tps, a.title or "", a.kind, a.quality, a.notes or "", a.refresh))
+        page_title, text = sources.fetch_text(a.url)  # network: outside the data-home lock
+        with locked():
+            out(sources.add(a.url, a.title or page_title or a.url, text, tps, a.kind, a.quality, a.notes or "",
+                            a.refresh))
     elif a.action == "add":
         text = Path(a.file).read_text(encoding="utf-8")
         out(sources.add(a.url, a.title, text, tps, a.kind, a.quality, a.notes or "", a.refresh))
@@ -128,32 +188,52 @@ def cmd_session(a):
     elif a.action == "review":
         s = sessions.create_review(a.limit, _load_json_file(a.variants) if a.variants else None,
                                    0 if a.no_mistakes else None)
+    elif a.action == "placement":
+        s = sessions.create_placement(a.slug)
+    elif a.action == "checkpoint":
+        s = sessions.create_checkpoint(a.slug, a.milestone)
     elif a.action == "show":
         s = sessions.load(a.id)
-        return out(sessions.results_view(s) if a.full else _brief(s))
+        return out(sessions.results_view(s) if a.full else service.session_brief(s))
     else:
         raise LkError(a.action)
     out({"session": s["id"], "items": len(s["items"]), "status": s["status"]})
 
 
-def _brief(s: dict) -> dict:
-    return {"id": s["id"], "mode": s["mode"], "topic": s["topic"], "status": s["status"],
-            "answered": len(s["answers"]), "items": len(s["items"]), "error": s.get("error"),
-            "summary": s.get("summary"), "gate": s.get("gate"), "srs": s.get("srs")}
-
-
 def cmd_serve(a):
+    with locked():
+        sid = _serve_session(a)
+    from .server import serve
+    s = serve(sid, open_browser_flag=not a.no_open, port=a.port)
+    print("SESSION_RESULT=" + dumps(service.session_brief(s)))
+
+
+def _serve_session(a) -> str:
     if a.session:
         sid = a.session
     elif a.topic:
         sid = (sessions.create_practice(a.topic, a.n) if a.practice else sessions.create_gate(a.topic, a.force))["id"]
     elif a.review:
         sid = sessions.create_review(a.limit, _load_json_file(a.variants) if a.variants else None)["id"]
+    elif a.placement:
+        sid = sessions.create_placement(a.placement)["id"]
+    elif a.checkpoint:
+        if not a.milestone:
+            raise LkError("--checkpoint needs --milestone <id>")
+        sid = sessions.create_checkpoint(a.checkpoint, a.milestone)["id"]
     else:
-        raise LkError("give --session, --topic or --review")
-    from .server import serve
-    s = serve(sid, open_browser_flag=not a.no_open, port=a.port)
-    print("SESSION_RESULT=" + dumps(_brief(s)))
+        raise LkError("give --session, --topic, --review, --placement or --checkpoint")
+    return sid
+
+
+def cmd_web(a):
+    from .server import web
+    web(open_browser_flag=not a.no_open, port=a.port)
+
+
+def cmd_mcp(a):
+    from .mcp_server import run
+    run()
 
 
 def cmd_grade(a):
@@ -163,7 +243,7 @@ def cmd_grade(a):
         s = sessions.apply_manual_grades(a.id, _load_json_file(a.apply))
     else:
         s = sessions.finish(a.id)
-    out(_brief(s))
+    out(service.session_brief(s))
 
 
 def cmd_gate(a):
@@ -226,6 +306,20 @@ def cmd_note(a):
     out({"total": total, "passed": passed, "scores": scores, "moved_to": moved})
 
 
+def cmd_read(a):
+    if a.check:
+        r = reader.check(a.slug, a.file)
+        out(r)
+        if not r["ok"]:
+            raise LkError("fix the visual blocks above (docs/authoring/visuals.md)")
+        return
+    r = reader.build(a.slug, a.file, a.out)
+    if not a.no_open:
+        from .server import open_file
+        r["opened"] = open_file(r["html"])
+    out(r)
+
+
 def cmd_stats(a):
     rows = topics.list_topics()
     by_stage: dict[str, int] = {}
@@ -233,7 +327,8 @@ def cmd_stats(a):
         by_stage[r["stage"]] = by_stage.get(r["stage"], 0) + 1
     from .store import read_jsonl
     ms = read_jsonl(paths.mistakes_jsonl())
-    out({"topics": len(rows), "by_stage": by_stage, "srs": srs.stats(), "mistakes": len(ms),
+    out({"topics": len(rows), "by_stage": by_stage, "paths": len(learnpath.list_paths()),
+         "srs": srs.stats(), "mistakes": len(ms),
          "confident_mistakes": sum(1 for m in ms if m.get("confident")), "home": str(paths.home())})
 
 
@@ -262,6 +357,27 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--force", action="store_true"); x.add_argument("--note")
     x = t.add_parser("extend"); x.add_argument("slug")
     sub.choices["topic"].set_defaults(fn=cmd_topic)
+
+    pa = sub.add_parser("path", help="learning paths: a DAG of topics for a broad goal")
+    ps = pa.add_subparsers(dest="action", required=True)
+    x = ps.add_parser("new"); x.add_argument("slug"); x.add_argument("--title")
+    x = ps.add_parser("list"); x.add_argument("--json", action="store_true")
+    x = ps.add_parser("show"); x.add_argument("slug"); x.add_argument("--json", action="store_true")
+    x = ps.add_parser("raw", help="print path.json (to copy into a re-plan draft)"); x.add_argument("slug")
+    x = ps.add_parser("validate", help="check a draft plan"); x.add_argument("file")
+    x = ps.add_parser("import", help="store a validated draft as the next version"); x.add_argument("slug")
+    x.add_argument("file"); x.add_argument("--reason"); x.add_argument("--force", action="store_true")
+    x = ps.add_parser("next", help="the one next step, as JSON"); x.add_argument("slug")
+    x = ps.add_parser("reviewed", help="the plan was reviewed after a node finished"); x.add_argument("slug")
+    x.add_argument("node"); x.add_argument("--note")
+    x = ps.add_parser("override", help="learner decision: tested_out / skipped / clear"); x.add_argument("slug")
+    x.add_argument("node"); x.add_argument("status", choices=[*learnpath.OVERRIDES, "clear"])
+    x.add_argument("--note"); x.add_argument("--force", action="store_true")
+    x = ps.add_parser("placement-import"); x.add_argument("slug"); x.add_argument("file")
+    x = ps.add_parser("placement-skip"); x.add_argument("slug"); x.add_argument("--reason")
+    x = ps.add_parser("for-topic", help="path nodes that point at a topic (context for /learn)")
+    x.add_argument("slug", help="topic slug")
+    pa.set_defaults(fn=cmd_path)
 
     c = sub.add_parser("concepts")
     cs = c.add_subparsers(dest="action", required=True)
@@ -308,6 +424,8 @@ def build_parser() -> argparse.ArgumentParser:
     x = sss.add_parser("practice"); x.add_argument("slug"); x.add_argument("--n", type=int, default=10)
     x = sss.add_parser("review"); x.add_argument("--limit", type=int); x.add_argument("--variants")
     x.add_argument("--no-mistakes", action="store_true")
+    x = sss.add_parser("placement"); x.add_argument("slug", help="path slug")
+    x = sss.add_parser("checkpoint"); x.add_argument("slug", help="path slug"); x.add_argument("milestone")
     x = sss.add_parser("show"); x.add_argument("id"); x.add_argument("--full", action="store_true")
     se.set_defaults(fn=cmd_session)
 
@@ -320,6 +438,9 @@ def build_parser() -> argparse.ArgumentParser:
     sv.add_argument("--review", action="store_true")
     sv.add_argument("--variants")
     sv.add_argument("--limit", type=int)
+    sv.add_argument("--placement", metavar="PATH", help="placement quiz for a learning path")
+    sv.add_argument("--checkpoint", metavar="PATH", help="milestone checkpoint for a learning path")
+    sv.add_argument("--milestone")
     sv.add_argument("--port", type=int)
     sv.add_argument("--no-open", action="store_true")
     sv.set_defaults(fn=cmd_serve)
@@ -346,8 +467,28 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("file")
     n.set_defaults(fn=cmd_note)
 
+    x = sub.add_parser("read", help="render research.md (or another topic doc) as an HTML page and open it")
+    x.add_argument("slug"); x.add_argument("--file", help="a Markdown file inside the topic folder (default research.md)")
+    x.add_argument("--out", help="where to write the page (default: next to the .md)")
+    x.add_argument("--check", action="store_true", help="validate only: visual blocks, citations, long paragraphs")
+    x.add_argument("--no-open", action="store_true"); x.set_defaults(fn=cmd_read)
+
     x = sub.add_parser("stats"); x.set_defaults(fn=cmd_stats)
+
+    x = sub.add_parser("web", help="the library app: browse paths, topics, docs, sessions; take quizzes")
+    x.add_argument("--port", type=int); x.add_argument("--no-open", action="store_true"); x.set_defaults(fn=cmd_web)
+
+    x = sub.add_parser("mcp", help="MCP server on stdio for Claude Code (needs: pip install -e .[mcp])")
+    x.set_defaults(fn=cmd_mcp)
     return p
+
+
+# Commands that manage the data-home lock themselves: long-running servers, LLM grading, network fetches.
+_SELF_LOCKING = {"serve", "web", "mcp", "grade", "install"}
+
+
+def _unlocked(args) -> bool:
+    return args.cmd in _SELF_LOCKING or (args.cmd == "source" and args.action == "fetch")
 
 
 def main(argv=None) -> int:
@@ -359,12 +500,16 @@ def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
     # Slugs are lowercase on disk; normalizing here makes "MVCC" and "mvcc" the same topic on
     # case-sensitive filesystems (Linux) exactly as they already are on Windows and macOS.
-    for attr in ("slug", "topic"):
+    for attr in ("slug", "topic", "placement", "checkpoint", "node", "milestone"):
         v = getattr(args, attr, None)
         if isinstance(v, str):
             setattr(args, attr, v.strip().lower())
     try:
-        args.fn(args)
+        if _unlocked(args):
+            args.fn(args)
+        else:
+            with locked():
+                args.fn(args)
     except LkError as e:
         print(f"lk: {e}", file=sys.stderr)
         return 2

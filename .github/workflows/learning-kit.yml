@@ -38,6 +38,12 @@ jobs:
         run: |
           python -m pip install -e . --quiet
           LK_HOME="$RUNNER_TEMP/lk-home" lk topic list
+      - name: MCP server (optional extra, Python >= 3.10)
+        if: matrix.python != '3.9'
+        shell: bash
+        run: |
+          python -m pip install -e ".[mcp]" --quiet
+          python -B -m unittest tests.test_mcp -v
       - uses: actions/setup-node@v4
         if: matrix.os == 'ubuntu-latest' && matrix.python == '3.12'
         with:

@@ -52,6 +52,18 @@ DEFAULT_CONFIG: dict = {
         "reteach":   {"model": "opus", "effort": "medium"},
         "note_review": {"model": "opus", "effort": "medium"},
         "reword":    {"model": "opus", "effort": "medium"},
+        "path_plan": {"model": "opus", "effort": "high"},
+        "path_review": {"model": "opus", "effort": "medium"},
+    },
+    # Learning paths (lk/learnpath.py): a DAG of topics for goals too broad for one topic.
+    "path": {
+        "max_nodes": 15,                  # more than this: split into a second path
+        "full_window": 3,                 # nodes detailed ahead of the learner (rolling wave)
+        "placement_max_items": 24,
+        "placement_items_per_node": 3,
+        "test_out_confidence": 2.5,       # mean confidence (1 guess .. 3 sure) needed with an 80% score
+        "fast_track_score": 0.5,          # placement mean that suggests a lighter depth
+        "checkpoint_items_per_node": 3,
     },
     "depth": {
         "aware": {"sources": [3, 5], "facets": 2, "items_per_concept": [1, 2]},
@@ -92,6 +104,10 @@ def topics_dir() -> Path:
 
 def topic_dir(slug: str) -> Path:
     return topics_dir() / slug
+
+
+def learning_paths_dir() -> Path:
+    return home() / "paths"
 
 
 def sources_dir() -> Path:

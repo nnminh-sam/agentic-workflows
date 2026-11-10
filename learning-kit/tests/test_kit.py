@@ -7,6 +7,7 @@ import sys
 import tempfile
 import threading
 import unittest
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -309,10 +310,10 @@ class TestSrs(Base):
 
 class TestServer(Base):
     def test_http_flow(self):
-        from lk.server import QuizServer
+        from lk.server import AppServer
         slug = self.make_topic()
         sid = sessions.create_gate(slug)["id"]
-        srv = QuizServer(("127.0.0.1", 0), sid)
+        srv = AppServer(("127.0.0.1", 0), watch=sid)
         th = threading.Thread(target=srv.serve_forever, daemon=True)
         th.start()
         base = f"http://127.0.0.1:{srv.server_address[1]}"
@@ -323,7 +324,7 @@ class TestServer(Base):
             with urllib.request.urlopen(req) as r:
                 return json.loads(r.read())
         try:
-            view = call("/api/session")
+            view = call(f"/api/sessions/{sid}")
             self.assertEqual(len(view["items"]), 4)
             for v in view["items"]:
                 self.assertFalse({"answer", "rubric", "reference_answer", "blanks", "explanation"} & set(v))
@@ -335,19 +336,116 @@ class TestServer(Base):
                 resp = {"mcq": lambda: {"choice": it["answer"]},
                         "cloze": lambda: {"blanks": [b[0] for b in it["blanks"]]},
                         "explain": lambda: {"text": "correct"}}[it["type"]]()
-                call("/api/answer", {"uid": v["uid"], "response": resp, "confidence": 3, "time_ms": 5})
-            call("/api/finish", {})
+                call(f"/api/sessions/{sid}/answer", {"uid": v["uid"], "response": resp, "confidence": 3, "time_ms": 5})
+            call(f"/api/sessions/{sid}/finish", {})
             for _ in range(100):
-                r = call("/api/result")
+                r = call(f"/api/sessions/{sid}/result")
                 if r["status"] == "applied":
                     break
                 threading.Event().wait(0.1)
             self.assertEqual(r["status"], "applied")
             self.assertTrue(r["gate"]["passed"])
             self.assertEqual(len(r["items"]), 4)
+            call(f"/api/sessions/{sid}/done", {})
+            th.join(5)
+            self.assertFalse(th.is_alive(), "closing the watched session stops `lk serve`'s server")
+            self.assertTrue(sessions.load(sid)["closed"])
         finally:
             srv.shutdown()
             srv.server_close()
+
+    def _start(self):
+        from lk.server import AppServer
+        srv = AppServer(("127.0.0.1", 0))
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+        return srv, f"http://127.0.0.1:{srv.server_address[1]}"
+
+    def _req(self, url, body=None, headers=None):
+        req = urllib.request.Request(url, data=None if body is None else json.dumps(body).encode(),
+                                     headers={"Content-Type": "application/json", **(headers or {})})
+        try:
+            with urllib.request.urlopen(req) as r:
+                return r.status, r.read()
+        except urllib.error.HTTPError as e:
+            return e.code, e.read()
+
+    def test_library_routes(self):
+        slug = self.make_topic()
+        srv, base = self._start()
+        code, body = self._req(base + "/api/overview")
+        ov = json.loads(body)
+        self.assertEqual(code, 200)
+        self.assertEqual([t["slug"] for t in ov["topics"]], [slug])
+        self.assertNotIn("dir", ov["topics"][0])
+        t = json.loads(self._req(base + f"/api/topics/{slug}")[1])
+        self.assertTrue(t["can_gate"])
+        self.assertEqual([d["file"] for d in t["docs"]][:2], ["prior.md", "research.md"])
+        self.assertEqual(t["quiz"]["items"], 4)
+        self.assertNotIn("prompt", json.dumps(t["quiz"]))  # counts only: browsing never spoils gate items
+        doc = json.loads(self._req(base + f"/api/topics/{slug}/doc?file=research.md")[1])
+        self.assertIn("MVCC", doc["markdown"])
+        code, page = self._req(base + f"/read/{slug}?file=research.md")
+        self.assertEqual(code, 200)
+        self.assertIn(b"<!doctype html>", page.lower())
+        for bad in ("../../config.json", "state.json", "..%2Fstate.md"):
+            code, _ = self._req(base + f"/api/topics/{slug}/doc?file={bad}")
+            self.assertEqual(code, 400, bad)
+        self.assertEqual(self._req(base + "/api/topics/..%2F..%2Fx")[0], 400)
+        # start a practice round from the library, answer, list it
+        b = json.loads(self._req(base + "/api/sessions", {"kind": "practice", "topic": slug, "n": 2})[1])
+        self.assertEqual(b["items"], 2)
+        rows = json.loads(self._req(base + f"/api/sessions?topic={slug}")[1])
+        self.assertEqual(rows[0]["id"], b["id"])
+        self.assertEqual(self._req(base + "/api/sessions", {"kind": "nope"})[0], 400)
+        self.assertEqual(self._req(base + "/api/nope")[0], 404)
+
+    def test_host_and_origin_guards(self):
+        srv, base = self._start()
+        self.assertEqual(self._req(base + "/api/health")[0], 200)
+        # DNS rebinding: right IP, foreign Host header
+        self.assertEqual(self._req(base + "/api/health", headers={"Host": "evil.example:80"})[0], 403)
+        self.assertEqual(self._req(base + "/", headers={"Host": "evil.example"})[0], 403)
+        # cross-site POST
+        code, _ = self._req(base + "/api/sessions", {"kind": "review"}, headers={"Origin": "http://evil.example"})
+        self.assertEqual(code, 403)
+
+    def test_lock_is_reentrant_and_exclusive(self):
+        from lk.lock import locked
+        order = []
+        with locked():
+            with locked():
+                order.append("inner")
+
+            def other():
+                with locked():
+                    order.append("other")
+            t = threading.Thread(target=other)
+            t.start()
+            threading.Event().wait(0.3)
+            order.append("outer-still-held")
+        t.join(5)
+        self.assertEqual(order, ["inner", "outer-still-held", "other"])
+
+    def test_lock_across_processes(self):
+        import subprocess
+        from lk.lock import locked
+        code = "\n".join([
+            "import sys; sys.path.insert(0, sys.argv[1])",
+            "from lk.lock import locked",
+            "from lk.store import LkError",
+            "try:",
+            "    with locked(timeout=0.5): print('got')",
+            "except LkError: print('busy')",
+        ])
+        with locked():
+            busy = subprocess.run([sys.executable, "-c", code, str(ROOT)], capture_output=True, text=True,
+                                  env={**os.environ, "LK_HOME": str(self.tmp)}, timeout=30)
+        free = subprocess.run([sys.executable, "-c", code, str(ROOT)], capture_output=True, text=True,
+                              env={**os.environ, "LK_HOME": str(self.tmp)}, timeout=30)
+        self.assertEqual(busy.stdout.strip(), "busy", busy.stderr)
+        self.assertEqual(free.stdout.strip(), "got", free.stderr)
 
 
 class TestPortability(Base):

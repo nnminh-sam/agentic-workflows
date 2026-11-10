@@ -31,7 +31,9 @@ Commands are for a POSIX shell (Bash tool; Git Bash on Windows). In PowerShell, 
    `KIT/docs/authoring/note-rubric.md`. It returns the rubric JSON. Save it to the scratchpad.
 4. `LK note record <slug> <review.json>`. The script applies the bar (≥ 8/10, correctness 2/2, nothing at 0),
    writes note-review.md, and on a pass moves the topic to `scheduled` and enrolls the cards.
-5. Report: total score, pass/revise, the one or two most useful fixes. On **revise**:
+5. Report: total score, pass/revise, the one or two most useful fixes. On a **pass**, if the topic is a
+   node of a learning path (`LK path for-topic <slug>` is not empty), end with: next is `/path <path>`.
+   For a path node, the reviewer also checks the note against the node's `outcomes`. On **revise**:
    - correctness < 2 or a concept misunderstood → offer a relearn of those concepts:
      `LK concepts set <slug> <id> --status learning` for each, then `LK topic advance <slug> reteach` and
      `/learn <slug>`.

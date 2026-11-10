@@ -1,10 +1,14 @@
-/* learning-kit quiz app. One app for every session mode (gate / practice / review) and every
+/* learning-kit web app: the library (paths, topics, docs, sessions) and the quiz, on one hash router.
+ *   #/                 library home        #/path/<slug>   a learning path     #/topic/<slug>   a topic
+ *   #/session/<id>[/n] a quiz session      #/mistakes      the mistakes log
+ * The quiz serves every session mode (gate / practice / review / placement / checkpoint) and every
  * question type. To add a type: add an entry to TYPES with render(item, saved) -> {el, collect}.
  * collect() returns a response object, or null when the answer is incomplete. */
 "use strict";
 
 const app = document.getElementById("app");
-const S = { session: null, idx: 0, answers: {}, shownAt: 0, view: "intro" };
+// gen increments on every navigation, so async work (polling, fetches) started by an old view stops.
+const S = { sid: null, session: null, idx: 0, answers: {}, shownAt: 0, view: "lib", gen: 0 };
 
 // ------------------------------------------------------------------ utils
 const h = (tag, attrs = {}, ...kids) => {
@@ -236,7 +240,10 @@ const MODE_INFO = {
   gate: ["Mastery gate", "Pass bar: 80% overall, and every core concept needs a correct explain/predict answer. Below the bar you get a targeted reteach and a fresh round."],
   practice: ["Practice", "No stakes: nothing here changes your topic stage or schedule. Mistakes still go to your mistakes log."],
   review: ["Spaced recall", "Questions are due today across your topics, often reworded. Your answers set when each one comes back."],
+  placement: ["Placement", "Before the path starts: which steps do you already know? Not knowing is the expected answer for most of these. Press \"I don't know\" freely; guessing only puts you in steps too early."],
+  checkpoint: ["Checkpoint", "A mixed quiz across the steps of a finished milestone. Bar: 80%. Answers update your recall schedule, and a miss sends its concept back for relearning."],
 };
+const MULTI_TOPIC = new Set(["review", "placement", "checkpoint"]);
 
 function viewIntro() {
   S.view = "intro";
@@ -277,7 +284,7 @@ function go(i) {
   app.replaceChildren(h("div", { class: "card" },
     h("div", { class: "meta" }, h("span", {}, `Question ${i + 1} of ${S.session.items.length}`), h("span", { class: "chip" }, T.label),
       h("span", { title: "difficulty" }, "●".repeat(item.difficulty || 2) + "○".repeat(3 - (item.difficulty || 2))),
-      S.session.mode === "review" ? h("span", { class: "chip" }, item.topic) : null),
+      MULTI_TOPIC.has(S.session.mode) ? h("span", { class: "chip" }, item.topic) : null),
     T.ownsPrompt ? null : h("div", { class: "prompt", html: md(item.prompt) }),
     item.code ? h("pre", {}, h("code", {}, item.code)) : null,
     widget.el,
@@ -302,7 +309,7 @@ async function post(i, response, confidence) {
   const item = S.session.items[i];
   const prev = S.answers[item.uid];
   const time_ms = (prev?.time_ms || 0) + (Date.now() - S.shownAt);
-  await api("/api/answer", { uid: item.uid, response, confidence, time_ms });
+  await api(`/api/sessions/${encodeURIComponent(S.sid)}/answer`, { uid: item.uid, response, confidence, time_ms });
   S.answers[item.uid] = { response, confidence, time_ms };
 }
 
@@ -339,7 +346,7 @@ function viewOverview() {
 }
 
 async function finish() {
-  try { await api("/api/finish", {}); } catch (e) { return alert(e.message); }
+  try { await api(`/api/sessions/${encodeURIComponent(S.sid)}/finish`, {}); } catch (e) { return alert(e.message); }
   viewGrading();
 }
 
@@ -351,13 +358,15 @@ function viewGrading() {
   poll();
 }
 
-async function poll() {
+async function poll(gen = S.gen) {
+  if (gen !== S.gen) return; // navigated away
   try {
-    const r = await api("/api/result");
+    const r = await api(`/api/sessions/${encodeURIComponent(S.sid)}/result`);
+    if (gen !== S.gen) return;
     if (r.status === "applied") return viewResults(r);
     if (r.status === "grade_failed") return viewFailed(r);
   } catch { /* server busy; keep polling */ }
-  setTimeout(poll, 2000);
+  setTimeout(() => poll(gen), 2000);
 }
 
 function viewFailed(r) {
@@ -383,6 +392,23 @@ function nextStep(r) {
     return h("div", { class: "next" }, h("strong", {}, msg[0] + " "), h("span", { html: inlineMd(msg[1]) }),
       weak.length ? h("div", { class: "small", style: "margin-top:6px" }, h("span", { class: "chip warn" }, "weak spot"),
         ` ${weak.join(", ")}: below 80% on its own. Its missed questions come back in recall tomorrow. Cover it in your note.`) : null);
+  }
+  if (r.mode === "placement" && r.placement) {
+    const label = { test_out: "you seem to know it", fast_track: "partly known: lighter depth", learn: "learn it" };
+    const names = {};
+    r.items.forEach((it) => (names[it.concept] = it.concept_name));
+    const rows = Object.entries(r.placement.nodes || {}).sort((a, b) => b[1].mean - a[1].mean);
+    return h("div", { class: "next" }, h("strong", {}, "Placement recorded. "),
+      h("span", { html: inlineMd(`Back in the terminal, \`/path ${r.path}\` turns this into decisions. Nothing is skipped without you saying so.`) }),
+      h("ul", { class: "small" }, ...rows.map(([nid, v]) =>
+        h("li", {}, `${names[nid] || nid}: ${pct(v.mean)}, confidence ${v.confidence}/3 → ${label[v.recommend] || v.recommend}`))));
+  }
+  if (r.mode === "checkpoint" && r.checkpoint) {
+    const c = r.checkpoint;
+    const again = (r.srs || []).filter((x) => x.grade === 1).length;
+    return h("div", { class: "next" }, h("strong", {}, c.passed ? "Milestone holds. " : "Below the bar. "),
+      h("span", { html: inlineMd(c.weak_topics.length ? `Weak: ${c.weak_topics.join(", ")}. ` : "") }),
+      h("span", { html: inlineMd(`${again ? `${again} concept(s) marked for relearning. ` : ""}Next: \`/path ${r.path}\``) }));
   }
   if (r.mode === "review") {
     const again = (r.srs || []).filter((x) => x.grade === 1).length;
@@ -442,10 +468,15 @@ function viewResults(r) {
     list.append(d);
   });
 
-  const done = h("div", { class: "actions" }, h("span"), h("button", { class: "btn primary", onclick: async () => {
-    try { await api("/api/done", {}); } catch { /* already closed */ }
-    app.replaceChildren(h("div", { class: "card" }, h("h2", {}, "Session closed"), h("p", { class: "muted" }, "You can close this tab. Results are saved, and the terminal has the summary.")));
-  } }, "Close session"));
+  const topic = S.session.topic;
+  const done = h("div", { class: "actions" },
+    h("a", { class: "btn ghost", href: topic ? `#/topic/${encodeURIComponent(topic)}` : "#/" }, topic ? "Back to topic" : "Back to library"),
+    h("button", { class: "btn primary", onclick: async () => {
+      try { await api(`/api/sessions/${encodeURIComponent(S.sid)}/done`, {}); } catch { /* server already gone */ }
+      app.replaceChildren(h("div", { class: "card" }, h("h2", {}, "Session closed"),
+        h("p", { class: "muted" }, "Results are saved. If a skill opened this quiz, the terminal now has the summary."),
+        h("div", { class: "actions" }, h("span"), h("a", { class: "btn primary", href: "#/" }, "Library"))));
+    } }, "Close session"));
   app.replaceChildren(head, concepts, list, done);
   document.getElementById("progress-fill").style.width = "100%";
 }
@@ -466,21 +497,207 @@ document.addEventListener("keydown", (e) => {
   if (!inText && /^[1-9]$/.test(e.key) && current.widget.key) current.widget.key(Number(e.key));
 });
 
-// ------------------------------------------------------------------ boot
-(async function boot() {
+
+// ------------------------------------------------------------------ library
+// Browse-only views over /api. Anything that needs judgement (research, writing questions, reviewing a
+// note, planning a path) stays in Claude Code, so these views name the command instead of offering a button.
+const enc = encodeURIComponent;
+const link = (href, ...kids) => h("a", { href }, ...kids);
+const when = (iso) => (iso ? String(iso).slice(0, 16).replace("T", " ") : "");
+const STAGE_CLASS = { scheduled: "ok", quiz: "warn", reteach: "bad" };
+const STATUS_CLASS = { done: "ok", tested_out: "ok", in_progress: "warn", applied: "ok", grade_failed: "bad", open: "warn", grading: "warn" };
+const chip = (text, cls = "") => h("span", { class: "chip " + cls }, text);
+const meter = (x) => h("div", { class: "meter", title: pct(x) }, h("div", { style: `width:${Math.round((x || 0) * 100)}%` }));
+const cmd = (text) => h("code", {}, text);
+
+function chrome(title, crumbs = []) {
+  document.title = title ? `${title} · learning-kit` : "learning-kit";
+  document.getElementById("title").replaceChildren(
+    ...crumbs.flatMap(([t, href]) => [link(href, t), h("span", { class: "sep" }, " / ")]), title || "Library");
+  document.querySelector(".progress").hidden = true;
+  document.getElementById("progress-text").textContent = "";
+}
+
+async function startSession(body, confirmText) {
+  if (confirmText && !confirm(confirmText)) return;
   try {
-    S.session = await api("/api/session");
-  } catch (e) {
-    app.replaceChildren(h("div", { class: "card" }, h("h2", {}, "Can't load the session"), h("pre", {}, e.message)));
-    return;
-  }
-  document.title = S.session.title;
-  document.getElementById("title").textContent = S.session.title;
+    const b = await api("/api/sessions", body);
+    location.hash = `#/session/${enc(b.id)}`;
+  } catch (e) { alert(e.message); }
+}
+
+function sessionRow(s) {
+  const score = s.summary ? pct(s.summary.overall) : `${s.answered}/${s.items}`;
+  const verdict = s.gate ? chip(s.gate.passed ? "passed" : "not yet", s.gate.passed ? "ok" : "bad") : null;
+  return h("a", { class: "row", href: `#/session/${enc(s.id)}` },
+    h("span", { class: "grow" }, h("span", { class: "strong" }, s.title || s.id), h("span", { class: "small muted" }, ` ${when(s.created)}`)),
+    chip(s.mode), verdict, chip(s.status, STATUS_CLASS[s.status] || ""), h("span", { class: "small num" }, score));
+}
+
+async function viewHome() {
+  chrome("");
+  const o = await api("/api/overview");
+  const due = o.recall.due;
+  const recall = h("div", { class: "card" }, h("h2", {}, "Spaced recall"),
+    h("p", {}, due ? `${due} card(s) due today.` : "Nothing due today.",
+      o.recall.stats.next_due && !due ? h("span", { class: "muted" }, ` Next due ${o.recall.stats.next_due}.`) : null),
+    due ? h("div", { class: "chips" }, ...Object.entries(o.recall.by_topic).map(([t, n]) => chip(`${t} · ${n}`))) : null,
+    h("div", { class: "actions" }, h("span", { class: "small muted" }, "In Claude Code, ", cmd("/recall"), " rewords the cards first."),
+      h("button", { class: "btn primary", disabled: !due, onclick: () => startSession({ kind: "review" }) }, "Start recall")));
+  const open = o.open_sessions.length ? h("div", { class: "card" }, h("h2", {}, "Unfinished sessions"),
+    h("div", { class: "list" }, ...o.open_sessions.map(sessionRow))) : null;
+  const pathsCard = h("div", { class: "card" }, h("h2", {}, "Learning paths"),
+    o.paths.length ? h("div", { class: "list" }, ...o.paths.map((p) => h("a", { class: "row", href: `#/path/${enc(p.id)}` },
+      h("span", { class: "grow strong" }, p.title), h("span", { class: "small muted" }, `${p.nodes} steps`), meter(p.progress),
+      h("span", { class: "small num" }, pct(p.progress)))))
+      : h("p", { class: "muted" }, "No paths yet. For a broad goal, run ", cmd("/path <goal>"), " in Claude Code."));
+  const topicsCard = h("div", { class: "card" }, h("h2", {}, "Topics"),
+    o.topics.length ? h("div", { class: "list" }, ...o.topics.map((t) => {
+      const n = Object.values(t.concepts).reduce((a, b) => a + b, 0);
+      return h("a", { class: "row", href: `#/topic/${enc(t.slug)}` },
+        h("span", { class: "grow strong" }, t.title), t.concepts.lapsed ? chip(`${t.concepts.lapsed} lapsed`, "bad") : null,
+        chip(t.stage, STAGE_CLASS[t.stage] || ""), chip(t.depth), h("span", { class: "small num" }, `${t.concepts.mastered}/${n}`));
+    })) : h("p", { class: "muted" }, "No topics yet. Run ", cmd("/learn <topic>"), " in Claude Code."));
+  const recent = o.recent_sessions.length ? h("div", { class: "card" }, h("h2", {}, "Recent sessions"),
+    h("div", { class: "list" }, ...o.recent_sessions.map(sessionRow))) : null;
+  const foot = h("p", { class: "small muted foot" },
+    link("#/mistakes", `Mistakes log: ${o.mistakes.total}`), o.mistakes.confident ? ` (${o.mistakes.confident} sure & wrong)` : "",
+    ` · data: ${o.home} · v${o.version}`);
+  app.replaceChildren(...[recall, open, pathsCard, topicsCard, recent, foot].filter(Boolean));
+}
+
+async function viewPath(slug) {
+  const p = await api(`/api/paths/${enc(slug)}`);
+  chrome(p.title, [["Library", "#/"]]);
+  const nx = p.next;
+  const nextBox = h("div", { class: "next" }, h("strong", {}, "Next: "), h("span", { html: inlineMd(nx.message) }),
+    nx.command ? h("div", { class: "small", style: "margin-top:6px" }, "In Claude Code: ", cmd(nx.command)) : null,
+    h("div", { class: "small", style: "margin-top:6px" }, "Or run ", cmd(`/path ${p.id}`), " and it picks the step for you."),
+    nx.action === "checkpoint" ? h("div", { class: "actions" }, h("span"), h("button", { class: "btn primary",
+      onclick: () => startSession({ kind: "checkpoint", path: p.id, milestone: nx.milestone.id }) }, "Start checkpoint")) : null);
+  const head = h("div", { class: "card" },
+    h("div", { class: "meta" }, chip(`v${p.version}`), ...Object.entries(p.counts).map(([k, v]) => chip(`${v} ${k.replace("_", " ")}`, STATUS_CLASS[k] || ""))),
+    h("h1", {}, p.title), h("p", { class: "muted" }, p.goal),
+    h("div", { class: "row flat" }, meter(p.progress), h("span", { class: "small num" }, pct(p.progress))), nextBox);
+  const byId = Object.fromEntries(p.nodes.map((n) => [n.id, n]));
+  const nodeRow = (n) => {
+    const body = [h("span", { class: "small num muted" }, n.id),
+      h("span", { class: "grow" }, h("span", { class: "strong" }, n.title),
+        n.why ? h("span", { class: "small muted block" }, n.why) : null,
+        n.prereqs?.length ? h("span", { class: "small muted block" }, "after " + n.prereqs.map((x) => byId[x]?.title || x).join(", ")) : null),
+      n.lapsed ? chip(`${n.lapsed} lapsed`, "bad") : null,
+      n.kind && n.kind !== "core" ? chip(n.kind) : null, chip(n.depth || "use"),
+      chip(n.status === "in_progress" && n.stage ? `@ ${n.stage}` : n.status.replace("_", " "), STATUS_CLASS[n.status] || "")];
+    return n.topic_exists ? h("a", { class: "row", href: `#/topic/${enc(n.topic)}` }, ...body)
+      : h("div", { class: "row" + (n.ready ? "" : " dim") }, ...body);
+  };
+  const grouped = new Set();
+  const sections = (p.milestones || []).map((m) => {
+    m.nodes.forEach((x) => grouped.add(x));
+    const cp = p.checkpoints?.[m.id];
+    return h("div", { class: "card" }, h("h2", {}, m.title, " ", cp ? chip(cp.passed ? "checkpoint passed" : "checkpoint below bar", cp.passed ? "ok" : "bad") : null),
+      h("div", { class: "list" }, ...m.nodes.filter((x) => byId[x]).map((x) => nodeRow(byId[x]))));
+  });
+  const rest = p.nodes.filter((n) => !grouped.has(n.id));
+  if (rest.length) sections.push(h("div", { class: "card" }, h("h2", {}, sections.length ? "Other steps" : "Steps"),
+    h("div", { class: "list" }, ...rest.map(nodeRow))));
+  app.replaceChildren(head, ...sections);
+}
+
+async function viewTopic(slug) {
+  const t = await api(`/api/topics/${enc(slug)}`);
+  chrome(t.title, [["Library", "#/"]]);
+  const total = t.concept_list.length;
+  const head = h("div", { class: "card" },
+    h("div", { class: "meta" }, chip(t.stage, STAGE_CLASS[t.stage] || ""), chip(t.depth), chip(`v${t.version}`), t.round ? chip(`round ${t.round}`) : null,
+      ...t.paths.map((x) => h("a", { class: "chip", href: `#/path/${enc(x.path)}` }, `${x.path_title} · ${x.node}`))),
+    h("h1", {}, t.title),
+    h("div", { class: "row flat" }, meter(total ? t.concepts.mastered / total : 0), h("span", { class: "small num" }, `${t.concepts.mastered}/${total} mastered`)),
+    h("div", { class: "next" }, h("strong", {}, "Next: "), h("span", { html: inlineMd(t.next) }),
+      h("div", { class: "small", style: "margin-top:6px" }, "In Claude Code: ", cmd(`/learn ${t.slug}`))));
+  const docs = h("div", { class: "card" }, h("h2", {}, "Read"),
+    t.docs.length ? h("div", { class: "list" }, ...t.docs.map((d) => h("a", { class: "row", href: `/read/${enc(t.slug)}?file=${enc(d.file)}` },
+      h("span", { class: "grow strong" }, d.label), h("span", { class: "small muted" }, d.file), h("span", { class: "small muted" }, when(d.modified)))))
+      : h("p", { class: "muted" }, "Nothing written yet."));
+  const CONCEPT_CLASS = { mastered: "ok", lapsed: "bad", learning: "warn" };
+  const concepts = h("div", { class: "card" }, h("h2", {}, "Concepts"),
+    total ? h("div", { class: "list" }, ...t.concept_list.map((c) => h("div", { class: "row" },
+      h("span", { class: "grow" }, h("span", { class: "strong" }, (c.core ? "★ " : "") + c.name), c.summary ? h("span", { class: "small muted block" }, c.summary) : null),
+      chip(c.status || "new", CONCEPT_CLASS[c.status] || ""))))
+      : h("p", { class: "muted" }, "Concepts appear after research."),
+    total ? h("p", { class: "hint" }, "★ core: needs a correct explain/predict answer to pass the gate") : null);
+  const q = t.quiz;
+  const quizCard = h("div", { class: "card" }, h("h2", {}, "Quiz"),
+    h("p", {}, `${q.items} questions in the bank, ${q.fresh} not yet used in a gate.`,
+      Object.keys(q.by_type).length ? h("span", { class: "muted" }, " " + Object.entries(q.by_type).map(([k, v]) => `${v} ${TYPES[k]?.label.toLowerCase() || k}`).join(", ") + ".") : null),
+    t.can_gate && q.coverage_issues.length ? h("ul", { class: "small" }, ...q.coverage_issues.map((x) => h("li", {}, x))) : null,
+    h("div", { class: "actions" }, h("span", { class: "small muted" }, "Practice changes no stage or schedule."),
+      h("div", { class: "right" },
+        h("button", { class: "btn", disabled: !q.items, onclick: () => startSession({ kind: "practice", topic: t.slug, n: 10 }) }, "Practice"),
+        t.can_gate ? h("button", { class: "btn primary", onclick: () => startSession({ kind: "gate", topic: t.slug },
+          "Start the gate round? It decides whether this topic moves on (bar: 80%). Answer from memory.") }, "Gate round") : null)));
+  const hist = h("div", { class: "card" }, h("h2", {}, "Sessions"),
+    t.sessions.length ? h("div", { class: "list" }, ...t.sessions.map(sessionRow)) : h("p", { class: "muted" }, "No quizzes yet."));
+  app.replaceChildren(head, docs, concepts, quizCard, hist);
+}
+
+async function viewMistakes() {
+  chrome("Mistakes", [["Library", "#/"]]);
+  const rows = await api("/api/mistakes?limit=200");
+  app.replaceChildren(h("div", { class: "card" }, h("h2", {}, "Things I got wrong"),
+    h("p", { class: "muted small" }, "Newest first. ⚠ = I was sure and wrong: the most useful ones to reread."),
+    rows.length ? h("div", {}, ...rows.map((m) => h("details", { class: "res" },
+      h("summary", {}, h("span", { class: "dot bad" }), h("span", { class: "q" }, plain(m.prompt)),
+        m.confident ? h("span", { class: "chip bad" }, "⚠ sure") : null, h("span", { class: "small muted" }, `${m.topic} · ${m.date}`)),
+      h("div", { class: "body" }, kv("I said", m.answer), kv("Correct", m.expected), m.feedback ? kv("Why", m.feedback) : null,
+        h("div", { class: "kv small" }, link(`#/topic/${enc(m.topic)}`, `${m.topic} · ${m.concept}`))))))
+      : h("p", { class: "muted" }, "Nothing yet.")));
+}
+
+async function viewSession(sid, q) {
+  S.sid = sid;
+  S.session = await api(`/api/sessions/${enc(sid)}`);
+  const crumbs = [["Library", "#/"]];
+  if (S.session.topic) crumbs.push([S.session.topic, `#/topic/${enc(S.session.topic)}`]);
+  chrome(S.session.title, crumbs);
+  document.querySelector(".progress").hidden = false;
   S.answers = S.session.answers || {};
   setProgress();
   if (S.session.status === "applied" || S.session.status === "grade_failed") return poll();
   if (S.session.status === "grading") return viewGrading();
-  const deep = /^#q=(\d+)$/.exec(location.hash); // deep link: #q=3 opens question 3
-  if (deep) return go(Math.min(Number(deep[1]), S.session.items.length) - 1);
+  if (q) return go(Math.min(Number(q), S.session.items.length) - 1); // deep link: #/session/<id>/3
   viewIntro();
-})();
+}
+
+// ------------------------------------------------------------------ router
+const ROUTES = [
+  [/^#?\/?$/, viewHome],
+  [/^#\/path\/([^/]+)$/, viewPath],
+  [/^#\/topic\/([^/]+)$/, viewTopic],
+  [/^#\/session\/([^/]+)(?:\/(\d+))?$/, viewSession],
+  [/^#\/mistakes$/, viewMistakes],
+];
+
+async function route() {
+  S.gen++;
+  S.view = "lib";
+  current = null;
+  const hash = location.hash || "#/";
+  for (const [rx, view] of ROUTES) {
+    const m = rx.exec(hash);
+    if (!m) continue;
+    try {
+      await view(...m.slice(1).map((x) => (x === undefined ? x : decodeURIComponent(x))));
+    } catch (e) {
+      chrome("Not available", [["Library", "#/"]]);
+      app.replaceChildren(h("div", { class: "card" }, h("h2", {}, "Can't load this page"), h("pre", {}, e.message),
+        h("div", { class: "actions" }, h("span"), h("a", { class: "btn primary", href: "#/" }, "Library"))));
+    }
+    window.scrollTo(0, 0);
+    return;
+  }
+  location.hash = "#/";
+}
+
+window.addEventListener("hashchange", route);
+route();

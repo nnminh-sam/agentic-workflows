@@ -21,6 +21,9 @@ Used by `/learn` at the `research` stage. `LK` is the learning-kit CLI. The skil
 ## Aggregator: research.md
 
 Read `prior.md` first: their questions decide the emphasis. Then read every snapshot tagged with the topic.
+Also read `docs/authoring/visuals.md`: the learner reads research.md as an HTML page, and that guide sets the
+writing rules (short paragraphs, a concrete example per concept) and the diagram blocks (`lk-steps`,
+`lk-sequence`, `lk-arch`) and callouts (`> [!example]`, `> [!misconception]`, …) to use.
 
 Template (adapt the headings to the content; keep the ★ sections):
 
@@ -31,25 +34,31 @@ Template (adapt the headings to the content; keep the ★ sections):
 
 ## ★ Your questions, answered
 1. <their question>: <answer> [S0003]
-...
+...   (a question about a process is answered with an lk-steps block, not a long numbered paragraph)
 
 ## ★ Your prediction, checked
 <their prediction> → <what the sources say> [S0001]. (Be direct about right/wrong; the gap is useful.)
 
 ## Core ideas
 ### <Concept name>  {#concept-id}
-Explanation with a concrete example. Every factual claim cites a source id: [S0002].
+Explanation in short paragraphs, plus a concrete example (often a `> [!example]` callout). Every factual
+claim cites a source id: [S0002]. The page shows the concept's `summary` above this, so don't restate it.
 ...
 
-## How it works / mechanics (diagram in ASCII if it helps)
+## How it works / mechanics (an lk-sequence or lk-arch block, not ASCII art)
 ## Trade-offs: when to use it, when not to
-## Common misconceptions
+## Common misconceptions   (one `> [!misconception] "<the wrong belief>"` callout each)
 ## Where sources disagree or are unclear
 ## Further reading (ids + one line each)
 ```
 
 Rules: cite `[S####]` for every claim. Prefer concrete examples over abstractions. Tag each concept heading
-with its id. Length scales with depth: aware ≈ 600–1200 words, use ≈ 1500–3000, deep ≈ 3000–5000.
+with its id. Length scales with depth: aware ≈ 600–1200 words, use ≈ 1500–3000, deep ≈ 3000–5000 (prose;
+tables and diagrams don't count, and a diagram that replaces a paragraph is a win).
+
+Before returning, run `LK read <slug> --check` and fix every error and warning. Errors are broken diagram
+blocks; warnings are long paragraphs, unknown citations and concepts without a `{#id}` heading. Run it after
+`LK concepts merge`, so the concept checks apply.
 
 ## Aggregator: concepts draft
 

@@ -20,5 +20,9 @@ analogy, a worked example, or a step-by-step trace. Cite sources [S0004].
 **Check yourself (don't answer here, just think):** one question to try before the next round.
 ```
 
+The learner reads this as a page too (`LK read <slug> --file reteach/round-<N>.md`), so the rules and blocks in
+`docs/authoring/visuals.md` apply: a step-by-step trace is a good fit for an `lk-steps` block, and the
+contrast reads well as a `> [!misconception]` callout. Run `LK read <slug> --file reteach/round-<N>.md --check`.
+
 Don't repeat research.md word for word, because rereading the same text doesn't help. Don't include the
 next round's questions.
