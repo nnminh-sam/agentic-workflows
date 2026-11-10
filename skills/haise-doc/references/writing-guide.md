@@ -164,6 +164,11 @@ shell's CSS variables so they work in light and dark themes (see
 `components.md`). Never use external images, CDNs or JS chart libraries — the
 file must open offline from `file:///`.
 
+Screenshots and photos are embedded as `data:` URIs at full resolution
+(≥ 1200 px wide) with `scripts/embed_images.py` (see components.md "Images").
+Readers click any figure image or diagram to open it in the zoom viewer, so
+draw SVG text at real sizes (≥ 12 units) and do not shrink rasters to fit the page.
+
 ## 7. Language of the shell
 
 `--lang en` (default) or `--lang vi` sets `<html lang>`; the shell then
