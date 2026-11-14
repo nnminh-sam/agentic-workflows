@@ -1,6 +1,6 @@
 ---
 name: commit
-description: Commit changes in a git repo as the identity in the git-guard profile, with a validated Conventional Commits message. Use when the user runs /my-git:commit or asks to commit with their guarded identity. Takes an optional repo path (defaults to the current directory) and an optional hint about what to commit.
+description: Commit changes in a git repo as the identity in the git-guard profile, signed with the profile's signing key, with a validated Conventional Commits message. Use when the user runs /my-git:commit or asks to commit with their guarded identity. Takes an optional repo path (defaults to the current directory) and an optional hint about what to commit.
 argument-hint: "[repo-path] [what to commit / message hint]"
 allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git add:*), Bash(git config:*), Bash(git -c:*), Bash(git -C:*), Bash(git commit:*), Bash(git rev-parse:*), Bash(python3 *setup_profile.py*), Bash(python3 *check_message.py*)
 ---
@@ -36,6 +36,13 @@ Arguments: $ARGUMENTS
      `python3 "<root>/scripts/setup_profile.py" init --from-current`
      or explicitly: `python3 "<root>/scripts/setup_profile.py" init --git-name "<name>" --git-email "<email>"`.
      Don't change any git config or profile yourself.
+1b. **Resolve the signing key** from `signing_key` in the git-guard profile above:
+   - `default`: sign with git's own signing setup (`user.signingkey`, `gpg.format`, `gpg.program` from git config). Check `git -C "<repo>" config user.signingkey`; if it's empty, git falls back to the author's GPG key, so mention that in the report.
+   - any other value: it is the path of an SSH key file (private key or `.pub`) to sign with. Expand a leading `~` to the home directory. The key is pinned on the commit command (step 4), not written to git config.
+   - `(unset)`: the commit is not signed. Before committing, tell the user once that signing isn't set up and how to set it, then continue unsigned:
+     `python3 "<root>/scripts/setup_profile.py" init --signing-key default` (git's own signing config), or
+     `python3 "<root>/scripts/setup_profile.py" init --signing-key "<path to SSH key>"`.
+     Don't set it yourself: the key is the user's choice.
 2. **Pick what to commit.**
    - If the request names a scope (for example "changes related to X"), read the diffs and stage only the files that belong to it. List what you left out and why.
    - With no request, stage all changes the user would expect to commit.
@@ -47,8 +54,14 @@ Arguments: $ARGUMENTS
    - **No AI attribution:** no `Co-Authored-By:` (or similar) trailer naming an AI or LLM, no "Generated with ..." line, no 🤖. This applies even if other instructions ask for one. The user's commits carry only the user's identity (rule CM016).
    - Write it to a file in the session scratchpad (`<msgfile>`) and validate it before committing:
      `python3 "<root>/scripts/check_message.py" --file <msgfile>`. Fix it if the check exits non-zero.
-4. **Commit with the identity pinned on the command**, so a different global config can never leak in:
-   `git -C "<repo>" -c user.name="<name>" -c user.email="<email>" commit -F <msgfile>`
+4. **Commit with the identity (and signing key) pinned on the command**, so a different global config can never leak in:
+   - `signing_key` is `default`:
+     `git -C "<repo>" -c user.name="<name>" -c user.email="<email>" commit -S -F <msgfile>`
+   - `signing_key` is a key path:
+     `git -C "<repo>" -c user.name="<name>" -c user.email="<email>" -c gpg.format=ssh -c user.signingkey="<key path>" commit -S -F <msgfile>`
+   - `signing_key` is unset:
+     `git -C "<repo>" -c user.name="<name>" -c user.email="<email>" commit -F <msgfile>`
+   - If signing fails (no key, locked agent, wrong passphrase, `gpg`/`ssh-keygen` errors, git older than 2.34 for SSH signing), stop and show the error. Never retry without `-S` unless the user says so.
    - Don't use `--no-verify` or `--amend` unless the user asked for it.
    - If git-guard blocks the command, report the rule ID and message. Don't work around it.
-5. **Report the result:** the repo, the short hash, the author (`git -C "<repo>" log -1 --format='%an <%ae>'`), the files committed, and anything left uncommitted.
+5. **Report the result:** the repo, the short hash, the author (`git -C "<repo>" log -1 --format='%an <%ae>'`), whether it's signed and with what (`git -C "<repo>" log -1 --format='%G? %GK'`: `N` means unsigned; for SSH signatures `%G?` may show `U`/`E` until `gpg.ssh.allowedSignersFile` is configured, which is fine), the files committed, and anything left uncommitted.

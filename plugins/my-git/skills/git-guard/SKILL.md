@@ -53,6 +53,7 @@ The contracts never name an account. The values come from a profile:
 | `git_email` | `GIT_GUARD_GIT_EMAIL` | allowed author emails (comma-separated) |
 | `git_transport` | `GIT_GUARD_GIT_TRANSPORT` | `ssh` (default): SSH remotes + pinned `ssh_key`. `gh`: HTTPS remotes through the gh credential helper, no SSH key |
 | `ssh_key` | `GIT_GUARD_SSH_KEY` | private key path, or path suffix, that must be pinned (`ssh` transport only) |
+| `signing_key` | `GIT_GUARD_SIGNING_KEY` | how `/my-git:commit` signs: `default` = git's own signing config (`git commit -S`); a path = that SSH key (`gpg.format=ssh`); unset = unsigned |
 
 Values are resolved in this order: env var, then the project profile, then the user profile (`~/.claude/git-guard/profile.json`). The project profile is `<project>/.claude/git-guard/profile.local.json` for a plugin install, or `.claude/hooks/git-guard/profile.local.json` for a vendored install. Both are git-ignored. When a value is unset, its rule only checks that something is present.
 
@@ -63,6 +64,8 @@ python3 <root>/scripts/setup_profile.py show                      # values, thei
 python3 <root>/scripts/setup_profile.py init --from-current       # copy current git config + gh login (+ detect transport)
 python3 <root>/scripts/setup_profile.py init --from-current --transport gh   # single GitHub account: HTTPS + gh, no SSH key
 python3 <root>/scripts/setup_profile.py init --github-user <login> --ssh-key "<path>" --git-email a@b.c
+python3 <root>/scripts/setup_profile.py init --signing-key default            # sign commits with git's signing config
+python3 <root>/scripts/setup_profile.py init --signing-key "<path to SSH key>" # sign commits with this SSH key
 python3 <root>/scripts/setup_profile.py init --scope user ...     # applies to all projects
 python3 <root>/scripts/setup_profile.py unset github_orgs
 ```
@@ -70,6 +73,8 @@ python3 <root>/scripts/setup_profile.py unset github_orgs
 `init` writes the user's identity to disk, so confirm the values with the user before running it. If the project's `CLAUDE.md` names the required account or key, propose those values.
 
 Picking the transport: if the user has a single GitHub account, HTTPS remotes and gh set up as git's credential helper (`git config --get-urlmatch credential.helper https://github.com` prints `... gh auth git-credential`), propose `--transport gh`; `--from-current` detects it. Commits are still checked against `git_name`/`git_email`, and every push/pull/fetch is checked to go through gh as `github_user`. If the helper isn't set up yet, the user runs `gh auth setup-git` once. With several accounts or SSH remotes, use `ssh` with an `ssh_key`.
+
+Picking the signing key: ask the user whether commits should be signed. If they already sign with git (`git config commit.gpgsign` is `true`, or `user.signingkey` is set; `--from-current` detects this), propose `--signing-key default`. If they want a specific SSH key, use `--signing-key <path>` (private key or `.pub`; needs git 2.34+). The signing key can differ from `ssh_key`.
 
 ## Setting up a repository (branching model template)
 

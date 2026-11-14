@@ -48,6 +48,7 @@ def summary(cwd: str, contracts, run=identity.default_runner, env=None) -> list[
 def unset_profile(contracts) -> list[str]:
     skip = {"ssh_key"} if identity.transport(contracts.identity) == "gh" else set()
     skip.add("github_orgs")  # optional: only needed when you push to organisation repos
+    skip.add("signing_key")  # optional: only the commit skill reads it (unset = unsigned commits)
     return [k for k, v in contracts.profile.items() if v.value is None and k not in skip]
 
 

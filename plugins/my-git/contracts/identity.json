@@ -1,6 +1,6 @@
 {
   "contract": "identity",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "title": "Git & GitHub identity",
   "description": "Account-agnostic identity rules. Expected values come from each user's profile (see profile_variables), never from this shared file. When a variable is unset, the rule falls back to a presence / consistency check.",
   "applies_to": ["git commit", "git push/pull/fetch/clone/ls-remote", "git remote add/set-url", "gh *"],
@@ -41,6 +41,12 @@
       "env": "GIT_GUARD_SSH_KEY",
       "description": "Path (or path suffix) of the private key network git operations must pin with -i. Only used when git_transport is 'ssh'.",
       "example": "~/.ssh/id_ed25519_github"
+    },
+    "signing_key": {
+      "type": "string",
+      "env": "GIT_GUARD_SIGNING_KEY",
+      "description": "How the commit skill signs commits. 'default': git's own signing setup (user.signingkey, gpg.format, gpg.program from git config). Any other value: path to an SSH key file (private or .pub) used for SSH signing (gpg.format=ssh). Unset: commits are not signed.",
+      "example": "default"
     }
   },
   "settings": {

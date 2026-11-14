@@ -5,6 +5,8 @@
   python3 setup_profile.py init --from-current                 # fill from current git config + gh login
   python3 setup_profile.py init --from-current --transport gh  # single GitHub account: HTTPS + gh, no SSH key
   python3 setup_profile.py init --github-user octocat --git-email me@x.io --ssh-key ~/.ssh/id_gh
+  python3 setup_profile.py init --signing-key default                # sign commits with git's own signing config
+  python3 setup_profile.py init --signing-key ~/.ssh/id_sign.pub     # sign commits with this SSH key (gpg.format=ssh)
   python3 setup_profile.py init --scope user ...               # ~/.claude/git-guard/profile.json (all projects)
   python3 setup_profile.py unset github_orgs
   python3 setup_profile.py eject commit-message                # copy a shipped contract into the project to edit it
@@ -50,6 +52,10 @@ def detect_current(cwd: str, run=identity.default_runner, env=None) -> dict:
         for i, w in enumerate(words):
             if w == "-i" and i + 1 < len(words):
                 out["ssh_key"] = words[i + 1]
+    code, gpgsign = run(["git", "-C", cwd, "config", "--get", "commit.gpgsign"], cwd)
+    code2, signkey = run(["git", "-C", cwd, "config", "--get", "user.signingkey"], cwd)
+    if (code == 0 and gpgsign.strip().lower() in ("true", "yes", "on", "1")) or (code2 == 0 and signkey.strip()):
+        out["signing_key"] = SIGNING_DEFAULT
     login, _ = identity.gh_active_login("github.com", env, run, cwd, use_cache=False)
     if login:
         out["github_user"] = login
@@ -60,6 +66,19 @@ def detect_current(cwd: str, run=identity.default_runner, env=None) -> dict:
     elif gh_helper and login:
         out["git_transport"] = "gh"
     return out
+
+
+SIGNING_DEFAULT = "default"
+
+
+def signing_key_problem(value: str | None) -> str | None:
+    """A warning when signing_key is a path that doesn't point at a file."""
+    if not value or value == SIGNING_DEFAULT:
+        return None
+    if not os.path.isfile(os.path.expanduser(value)):
+        return (f"warning: signing_key '{value}' is not an existing file. Use 'default' for git's own signing "
+                f"config, or the path of an SSH key (private key or .pub).")
+    return None
 
 
 def gh_helper_hint(cwd: str, run=identity.default_runner) -> str | None:
@@ -123,7 +142,8 @@ def cmd_init(args) -> int:
             if args.overwrite or k not in data:
                 data[k] = v
     given = {"github_user": args.github_user, "github_orgs": args.github_orgs, "git_name": args.git_name,
-             "git_email": args.git_email, "ssh_key": args.ssh_key, "git_transport": args.transport}
+             "git_email": args.git_email, "ssh_key": args.ssh_key, "git_transport": args.transport,
+             "signing_key": args.signing_key}
     try:
         for k, v in given.items():
             if v is not None and k in decls:
@@ -136,6 +156,9 @@ def cmd_init(args) -> int:
         hint = gh_helper_hint(os.getcwd())
         if hint:
             print(hint, file=sys.stderr)
+    warn = signing_key_problem(data.get("signing_key"))
+    if warn:
+        print(warn, file=sys.stderr)
     unknown = sorted(set(data) - set(decls))
     if unknown:
         print(f"warning: unknown profile keys ignored by the hook: {unknown}", file=sys.stderr)
@@ -177,6 +200,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--ssh-key")
     p.add_argument("--transport", choices=identity.TRANSPORTS,
                    help="ssh: SSH remotes + pinned key; gh: HTTPS remotes through the gh credential helper (no SSH key)")
+    p.add_argument("--signing-key", metavar="default|PATH",
+                   help="sign commits: 'default' uses git's signing config; a path pins that SSH key (gpg.format=ssh)")
     u = sub.add_parser("unset", help="remove keys from a profile file")
     u.add_argument("keys", nargs="+")
     u.add_argument("--scope", choices=FILES, default="project")
