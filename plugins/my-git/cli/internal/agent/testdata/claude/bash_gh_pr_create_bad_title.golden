@@ -1,0 +1,2 @@
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"mygit: [GH005] PR title: header 'stuff' is not '<type>(<scope>)!: <subject>' (start with a type, e.g. 'feat: ...') (CM003)\n[GH008] PR body: missing section '## Summary'\n[GH008] PR body: missing section '## Detailed changes'\n[GH008] PR body: missing section '## Explanation'\n[GH008] PR body: missing section '## Test results (local)'\nRule details: mygit rules explain GH005"}}
+exit=0

@@ -1,0 +1,2 @@
+{"systemMessage":"mygit warnings: [CM009] subject should start lower case: 'Add x'","hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"mygit warnings: [CM009] subject should start lower case: 'Add x'"}}
+exit=0

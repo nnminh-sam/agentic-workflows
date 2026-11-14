@@ -1,0 +1,4 @@
+# plan 7f3a2c · manual · shell gitbash · run these, then: mygit plan verify 7f3a2c
+set -e
+git -C '/c/src/api' add -A
+git -C '/c/src/api' -c user.name='Octo Cat' -c user.email=octo@acme.example -c gpg.format=ssh -c user.signingkey=/c/Users/octo/.ssh/id_sign.pub commit -S -F "$TEMP/mygit-7f3a2c.msg"

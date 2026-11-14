@@ -1,0 +1,2 @@
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"mygit could not check this command: bad hook input (unexpected end of JSON input)"}}
+exit=0

@@ -1,0 +1,2 @@
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"mygit could not check this command: bad hook input (json: cannot unmarshal string into Go struct field claudeIn.tool_input of type struct { Command string \"json:\\\"command\\\"\" })"}}
+exit=0
