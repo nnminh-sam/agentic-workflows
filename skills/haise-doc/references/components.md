@@ -5,9 +5,60 @@ a `<style>` block to a document; if a one-off tweak is unavoidable use an
 inline `style` attribute that only references CSS variables
 (`var(--ok)`, `var(--c2)`…), never hard-coded colours.
 
-Colour variables (theme-aware): `--ink --muted --line --panel --bg --code`,
+Colour variables (theme-aware): `--ink --muted --line --panel --panel-2 --bg --code`,
 status `--accent/--accent-soft --ok/--ok-soft --bad/--bad-soft --warn/--warn-soft --info/--info-soft`,
-categorical series `--c1 … --c5` (blue, orange, green, purple, amber).
+categorical series `--c1 … --c5` (blue, orange, green, violet, teal),
+phase sets `--p1/--p1-soft … --p6/--p6-soft` (blue, teal, violet, orange, green, pink).
+
+### Look (shell v3)
+
+Sections are not boxed: each `h2` gets a thin rule above it and the page reads
+as one calm column (17 px text, `max-width` 860 px). Visual weight comes from
+the components below — white cards on a warm-grey page, coloured edges, small
+uppercase labels. Keep it that way: one idea per block, short paragraphs, a
+figure or card wherever a structure is explained.
+
+### Phase colours — one colour per stage, the same everywhere
+
+When a doc walks through stages (request hops, pipeline steps, layers), give
+each stage one of `.p1 … .p6` and reuse it in the step card, the chips, the
+callouts and the SVG (`var(--p3)` stroke / `var(--p3-soft)` fill). Readers
+then match a step to its diagram by colour alone. Say the mapping once in a
+figure caption.
+
+### Phase focus — hover one stage, light it up everywhere
+
+Give every element that belongs to a stage the same `data-phase="<name>"`
+(short lowercase names: `dns`, `tcp`, `build`, `deploy` …): the step card, the
+SVG group(s) of that stage in **every** diagram, and the chips of a phase key.
+Hovering any of them dims everything that has a *different* `data-phase`
+(elements without the attribute stay as they are). Click/tap on a step card or
+chip pins the focus (works on touch); click again or Esc releases it. Clicks
+inside diagrams still open the zoom viewer.
+
+```html
+<!-- phase key under the section's first callout: one chip per stage -->
+<div class="phase-key">Hover or tap a stage:
+  <span class="chip p1" data-phase="dns">DNS</span><span class="chip p2" data-phase="tcp">TCP</span> …</div>
+
+<ol class="steps">
+  <li class="p1" data-phase="dns"><strong>DNS: name → IP</strong> …</li>
+  <li class="p2" data-phase="tcp"><strong>TCP: open a line</strong> …</li>
+</ol>
+
+<!-- in SVG: wrap ALL marks of one stage (box/arrow + its labels) in one <g> -->
+<g data-phase="dns">
+  <rect … fill="var(--p1-soft)" stroke="var(--p1)"/><text …>1 · DNS</text>
+</g>
+<g data-phase="tcp">
+  <line … stroke="var(--p2)" marker-end="url(#arr-seq-tcp)"/><text …>SYN · SYN-ACK · ACK</text>
+</g>
+```
+
+Rules: use it only when ≥ 3 stages recur across ≥ 2 places (steps + a diagram,
+or two diagrams); one phase name per stage, identical everywhere; do not put
+`data-phase` on whole sections, whole figures or the `<svg>` itself (that would
+dim everything); leave actors, lifelines, axes and legends without it.
 
 ## Lead block (verdict + key points) — use when the doc opens with an answer
 
@@ -37,11 +88,20 @@ categorical series `--c1 … --c5` (blue, orange, green, purple, amber).
 
 ## Callouts, tags, severity
 
+White box with a coloured left edge. Start with a `.kind` label (small
+uppercase, in the callout colour) and optionally a `.ct` title line.
+
 ```html
-<div class="callout bad"><strong>The bug in one sentence:</strong> …</div>
+<div class="callout bad"><span class="kind">Bug</span><strong>In one sentence:</strong> …</div>
 <div class="callout ok">…confirmed…</div>
-<div class="callout warn">…risk…</div>
-<div class="callout info">…note / tip…</div>
+<div class="callout warn"><span class="kind">Watch out</span>…risk…</div>
+<div class="callout info">…note…</div>
+<div class="callout tip"><span class="kind">Tip</span>…</div>             <!-- green -->
+<div class="callout interview"><span class="kind">Interview</span>…</div> <!-- violet -->
+<div class="callout example"><p class="ct"><span class="kind">Example</span>What the handshakes cost</p><p>…</p></div> <!-- teal -->
+<div class="callout myth"><span class="kind">Common mix-up</span>…</div> <!-- red -->
+<div class="callout tldr"><span class="kind">In short</span>…</div>      <!-- grey -->
+<div class="callout p3"><span class="kind">TLS</span>…</div>             <!-- any phase colour -->
 <span class="tag sure">VERIFIED</span> <span class="tag infer">INFERRED</span> <span class="tag open">OPEN</span>
 <span class="sev high">High</span> <span class="sev med">Medium</span> <span class="sev low">Low</span>
 ```
@@ -58,14 +118,20 @@ categorical series `--c1 … --c5` (blue, orange, green, purple, amber).
 ```html
 <div class="grid2">            <!-- or grid3 -->
   <div class="card"><h4>Customer system</h4>Sends orders…</div>
-  <div class="card bad"><h4>Current code</h4>…</div>
+  <div class="card bad"><h4>Current code</h4>…</div>   <!-- coloured top edge: .ok .bad .warn .info .p1…p6 -->
 </div>
 
+<!-- step cards: numbered circle on a timeline + white card with a coloured top edge.
+     Colour per step: .p1 … .p6 (phase), or .ok / .bad / .warn (status). -->
 <ol class="steps">
-  <li><strong>Order import</strong> — …</li>
+  <li class="p1"><strong>DNS: name → IP</strong><span class="chip p1">skipped when cached</span>
+    <p>The browser asks a recursive resolver …</p>
+    <div class="ex"><span class="k">Example</span><code>www.example.com → 192.0.2.44</code></div></li>
   <li class="bad"><strong>Inspection</strong> — the step that is skipped</li>
   <li class="ok"><strong>Fix results</strong> — …</li>
 </ol>
+
+<span class="chip">1 round trip</span>  <span class="chip p4">cost</span>   <!-- small pill; phase class colours it -->
 
 <details class="more">
   <summary>Full call chain (12 hops)</summary>
@@ -191,6 +257,36 @@ discipline you may also consult the `dataviz` skill.
   <figcaption>Same pallet, same report, with spec step Ⅱ+Ⅲ. <a class="cite" href="#src-1">S1</a></figcaption>
 </figure>
 ```
+
+## Images (screenshots, photos) — embedded, high resolution, zoomable
+
+Every `<img>` and every diagram `<svg>` inside `figure.fig` is clickable: the shell
+opens it in a full-screen viewer (wheel / pinch zoom, drag to pan, `+` `−` `0` fit,
+`1` actual size, ←/→ between figures, Esc to close). Diagrams stay sharp at any
+zoom because they are vectors; raster images are only as sharp as the file you embed.
+
+- **Resolution:** embed the largest original you can get, at least **1200 px wide**
+  (1600–2400 px for UI screenshots). Never downscale for the page: the page shrinks
+  it, the viewer shows the full pixels. `check_doc.py` warns below 1200 px.
+- **Format:** keep the source format (PNG for UI with text, JPEG/WebP for photos).
+  A whole doc should stay under ~15 MB.
+- **How:** write a placeholder, then run `scripts/embed_images.py <doc> [--base <dir>]`,
+  which inlines each file as a `data:` URI unchanged:
+
+```html
+<figure class="fig">
+  <div class="grid2">
+    <img alt="Copilot dashboard (iPad)" src="@@shots/copilot-dashboard.png@@">
+    <img alt="Copilot cash flow (iPad)" src="@@shots/copilot-cashflow.png@@">
+  </div>
+  <figcaption>What to notice … <a class="cite" href="#src-3">S3</a></figcaption>
+</figure>
+```
+
+- Always set a meaningful `alt` — the viewer shows it as the title with the caption.
+- Optional inline style may only use sizes and `var(--…)` colours, e.g.
+  `style="border:1px solid var(--line);border-radius:8px"`; `max-width:100%` is already in the shell.
+- To opt one element out of zooming (a tiny icon, a decorative mark), add `data-nozoom` to it or a parent.
 
 ## Source entry
 

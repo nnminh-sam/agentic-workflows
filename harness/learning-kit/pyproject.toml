@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "learning-kit"
+version = "1.4.0"
+description = "Retrieval-first learning loop for Claude Code: research -> 80% quiz gate -> own-words note -> spaced recall"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = []          # stdlib only
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Operating System :: OS Independent",
+]
+
+[project.optional-dependencies]
+# `lk mcp` (the MCP server for Claude Code). The official SDK needs Python >= 3.10; the core stays stdlib.
+mcp = ["mcp>=2.3,<3; python_version >= '3.10'"]
+
+[project.scripts]
+# `pip install -e .` puts an `lk` command on PATH on Linux, macOS and Windows (lk.exe).
+# Editable installs only: the server and installer read web/ and skills/ from the repo checkout.
+lk = "lk.cli:main"
+
+[tool.setuptools]
+packages = ["lk"]
