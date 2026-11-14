@@ -1,0 +1,12 @@
+{
+  "name": "my-git-local",
+  "owner": { "name": "MINHNN4" },
+  "description": "Local marketplace for the my-git plugin.",
+  "plugins": [
+    {
+      "name": "my-git",
+      "source": "./",
+      "description": "git-guard PreToolUse + SessionStart hooks that enforce git identity, commit-message and gh CLI contracts, plus skills to set up the guard, commit and push."
+    }
+  ]
+}
