@@ -1,0 +1,89 @@
+{
+  "contract": "branching",
+  "version": "1.0.0",
+  "title": "Branching model",
+  "description": "Two long-lived branches: the production branch (main) and the staging branch (develop/base). Both only change through pull requests. Work branches start from staging, are named develop/<type>/<name>, and open their PR into staging. A release is a PR from staging into production.",
+  "applies_to": [
+    "git commit / merge / cherry-pick / revert / am / rebase",
+    "git push",
+    "git checkout -b / switch -c / branch <name>",
+    "gh pr create / gh pr edit --base"
+  ],
+  "settings": {
+    "production_branch": "main",
+    "staging_branch": "develop/base",
+    "remote": "origin"
+  },
+  "rules": [
+    {
+      "id": "BR001",
+      "name": "no-direct-commit-on-protected",
+      "title": "No direct commits on main or develop/base",
+      "description": "Commands in 'subcommands' that create commits are blocked while the production or staging branch is checked out. Create a work branch from develop/base instead. 'git merge --ff-only' (syncing with the remote) is allowed. The very first commit of a new repository uses initial_commit_severity.",
+      "severity": "deny",
+      "params": {
+        "subcommands": ["commit", "merge", "cherry-pick", "revert", "am", "rebase"],
+        "initial_commit_severity": "ask"
+      },
+      "examples": {
+        "good": ["git switch -c develop/feat/login develop/base && git commit -m \"feat: add login\""],
+        "bad": ["git switch develop/base && git commit -m \"feat: add login\""]
+      }
+    },
+    {
+      "id": "BR002",
+      "name": "no-direct-push-to-protected",
+      "title": "No direct pushes to main or develop/base",
+      "description": "git push that updates or deletes the production or staging branch on the remote is blocked; they only change through merged pull requests. --all and --mirror count as touching them. Publishing the branch for the very first time (no remote-tracking ref yet) uses new_branch_severity, so a new repository can be bootstrapped.",
+      "severity": "deny",
+      "params": {
+        "new_branch_severity": "ask"
+      },
+      "examples": {
+        "good": ["git push -u origin develop/feat/login"],
+        "bad": ["git push origin develop/base", "git push origin HEAD:main", "git push origin --delete develop/base"]
+      }
+    },
+    {
+      "id": "BR003",
+      "name": "branch-naming",
+      "title": "Work branches are named develop/<type>/<name>",
+      "description": "A new branch (git checkout -b, git switch -c, git branch <name>) must match one of 'patterns' or be the production or staging branch itself.",
+      "severity": "deny",
+      "params": {
+        "patterns": ["^develop/(feat|fix|chore|docs|refactor|perf|test|build|ci)/[a-z0-9][a-z0-9._-]*$"]
+      },
+      "examples": {
+        "good": ["git switch -c develop/feat/oauth-login develop/base", "git switch -c develop/fix/token-expiry develop/base"],
+        "bad": ["git switch -c login-feature", "git switch -c feat/login", "git switch -c develop/feat/Login"]
+      }
+    },
+    {
+      "id": "BR004",
+      "name": "branch-from-staging",
+      "title": "Work branches start from develop/base",
+      "description": "A new work branch must start from the staging branch (settings.staging_branch, locally or on settings.remote) or one of 'extra_base_refs'. Pass it explicitly (git switch -c develop/feat/x develop/base) or create the branch while develop/base is checked out.",
+      "severity": "deny",
+      "params": {
+        "extra_base_refs": []
+      },
+      "examples": {
+        "good": ["git switch -c develop/feat/login origin/develop/base"],
+        "bad": ["git switch -c develop/feat/login main"]
+      }
+    },
+    {
+      "id": "BR005",
+      "name": "pr-target",
+      "title": "PRs target develop/base; only develop/base releases into main",
+      "description": "gh pr create must pass --base. Work branches open their PR into the staging branch. A PR into the production branch must come from the staging branch (a release). gh pr edit --base follows the same rule.",
+      "severity": "deny",
+      "params": {},
+      "examples": {
+        "good": ["gh pr create --base develop/base --title \"feat: add login\" --body-file pr.md",
+                 "gh pr create --base main --head develop/base --title \"chore(release): v1.2.0\" --body-file pr.md"],
+        "bad": ["gh pr create --base main --title \"feat: add login\" --body-file pr.md", "gh pr create --title \"feat: x\" --body-file pr.md"]
+      }
+    }
+  ]
+}
