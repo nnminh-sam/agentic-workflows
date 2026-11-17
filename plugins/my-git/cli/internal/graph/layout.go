@@ -65,9 +65,10 @@ func Layout(commits []Commit) []Row {
 		next := append([]string(nil), lanes...)
 		next[col] = ""
 		row.Edges = verticals(lanes, col)
-		next, row.Edges = placeFirstParent(next, row.Edges, col, c.Parents)
+		var closed int
+		next, row.Edges, closed = placeFirstParent(next, row.Edges, col, c.Parents)
 		if len(c.Parents) > 1 {
-			next, row.Edges = placeMergeParents(next, row.Edges, col, c.Parents[1:])
+			next, row.Edges = placeMergeParents(next, row.Edges, col, closed, c.Parents[1:])
 		}
 		next = trim(next)
 		row.Width = max(len(lanes), len(next), maxEdgeLane(row.Edges)+1)
@@ -80,10 +81,10 @@ func Layout(commits []Commit) []Row {
 // placeFirstParent continues the commit's lane to its first parent. When
 // another lane already waits for that parent the lanes converge: a lane to
 // the left absorbs the commit's lane; a lane to the right is pulled into the
-// commit's column so the graph leans left.
-func placeFirstParent(next []string, edges []Edge, col int, parents []string) ([]string, []Edge) {
+// commit's column so the graph leans left (returning the freed lane in closed).
+func placeFirstParent(next []string, edges []Edge, col int, parents []string) ([]string, []Edge, int) {
 	if len(parents) == 0 {
-		return next, edges // root commit: the lane ends here
+		return next, edges, -1 // root commit: the lane ends here
 	}
 	p := parents[0]
 	k := indexOf(next, p)
@@ -97,20 +98,22 @@ func placeFirstParent(next []string, edges []Edge, col int, parents []string) ([
 		next[k], next[col] = "", p
 		edges = redirect(edges, k, col)
 		edges = append(edges, Edge{col, col})
+		return next, edges, k
 	}
-	return next, edges
+	return next, edges, -1
 }
 
 // placeMergeParents joins each further parent to the lane already waiting
-// for it, or opens a new lane to the right of col.
-func placeMergeParents(next []string, edges []Edge, col int, parents []string) ([]string, []Edge) {
+// for it, or opens a new lane to the right of col (skipping closed, which was
+// freed by a pull-left in the same row).
+func placeMergeParents(next []string, edges []Edge, col, closed int, parents []string) ([]string, []Edge) {
 	for _, p := range parents {
 		k := indexOf(next, p)
 		if k < 0 && next[col] == "" {
 			k = col // the first parent left this column: reuse it
 			next[k] = p
 		} else if k < 0 {
-			k = firstFree(next, col+1)
+			k = firstFreeExcept(next, col+1, closed)
 			next = grow(next, k)
 			next[k] = p
 		}
@@ -160,12 +163,20 @@ func indexOf(lanes []string, sha string) int {
 // firstFree returns the first free lane at or after from (possibly
 // len(lanes), meaning "append a lane").
 func firstFree(lanes []string, from int) int {
+	return firstFreeExcept(lanes, from, -1)
+}
+
+func firstFreeExcept(lanes []string, from, skip int) int {
 	for i := from; i < len(lanes); i++ {
-		if lanes[i] == "" {
+		if i != skip && lanes[i] == "" {
 			return i
 		}
 	}
-	return max(from, len(lanes))
+	n := max(from, len(lanes))
+	if n == skip {
+		n++
+	}
+	return n
 }
 
 // grow extends lanes so index i exists.

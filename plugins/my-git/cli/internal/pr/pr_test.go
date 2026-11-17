@@ -1,6 +1,8 @@
 package pr
 
 import (
+	"context"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -9,6 +11,7 @@ import (
 
 	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/app"
 	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/config"
+	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/execx"
 	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/tmpl"
 	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/workflow"
 )
@@ -199,5 +202,156 @@ func TestBodyForCheckResolvesUnderRepoRoot(t *testing.T) {
 	}
 	if filepath.IsAbs(bodyCheckPath) {
 		t.Errorf("bodyCheckPath %q must be relative (a /-rooted path is not absolute on Windows)", bodyCheckPath)
+	}
+}
+
+func testPRWorld(t *testing.T) (*app.Env, *config.Resolved, *execx.Fake) {
+	t.Helper()
+	home := t.TempDir()
+	repo := t.TempDir()
+	cfgDir := filepath.Join(home, ".config", "mygit")
+	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	global := `{"defaultProfile":"work","profiles":{"work":{
+		"git":{"name":"Octo","email":["o@x.io"],"signing":{"format":"ssh","key":"~/.ssh/id.pub"}},
+		"github":{"user":"octo","transport":"ssh","sshKey":"~/.ssh/id"}}}}`
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.json"), []byte(global), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	project := `{"version":1,"pr":{"checks":{"test":"go test ./...","lint":"go vet ./..."}}}`
+	if err := os.WriteFile(filepath.Join(repo, ".mygit.json"), []byte(project), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f := execx.NewFake()
+	f.Default = &execx.Result{ExitCode: 1}
+	f.OnOut("git rev-parse --show-toplevel", repo+"\n")
+	f.OnOut("git remote get-url origin", "git@github.com:octo/repo.git\n")
+	f.OnOut("git remote get-url --push origin", "git@github.com:octo/repo.git\n")
+	f.OnOut("git rev-parse -q --verify HEAD^{commit}", "deadbeef\n")
+	f.OnOut("git status --porcelain=v2", "")
+	f.OnOut("git for-each-ref --format=%(refname) %(objectname)", "refs/heads/develop/feat/login deadbeef\n")
+	f.OnOut("git symbolic-ref --short -q HEAD", "develop/feat/login\n")
+	f.OnOut("git -C "+repo+" symbolic-ref --short -q HEAD", "develop/feat/login\n")
+	f.OnOut("git show-ref --verify --quiet refs/heads/develop/feat/login", "")
+	f.OnOut("git show-ref --verify --quiet refs/heads/develop/base", "")
+	f.OnOut("git rev-parse --verify -q refs/remotes/origin/develop/base", "base123\n")
+	f.OnOut("git log "+LogFormat+" origin/develop/base..develop/feat/login", "abc1234\x1ffeat(auth): add login\x1fWhy we added login.\x1e")
+	f.OnOut("git diff --stat origin/develop/base...develop/feat/login", " 1 file changed, 5 insertions(+)\n")
+	f.OnOut("sh -c go test ./...", "ok\n")
+	f.OnOut("sh -c go vet ./...", "")
+	f.OnOut("gh auth status", "✓ Logged in to github.com account octo (keyring)\n  - Active account: true\n")
+	f.OnOut("gh auth status --active --hostname github.com --json hosts",
+		`{"hosts":{"github.com":[{"active":true,"state":"success","login":"octo"}]}}`)
+	f.OnOut("gh pr list --head develop/feat/login --base develop/base --state open --json url", "[]")
+	f.OnOut("git log --format=%H%x1f%G?%x1f%GS%x1f%s origin/develop/base..develop/feat/login",
+		"abc12340000\x1fG\x1fOcto\x1ffeat(auth): add login\n")
+	f.OnOut("git rev-parse -q --verify refs/heads/develop/feat/login^{commit}", "abc1234\n")
+	f.OnOut("git rev-parse --abbrev-ref --symbolic-full-name develop/feat/login@{upstream}", "origin/develop/feat/login\n")
+	f.OnOut("git rev-list --left-right --count origin/develop/feat/login...refs/heads/develop/feat/login", "0\t1\n")
+
+	e, err := app.Load(context.Background(), app.Deps{
+		Runner: f, Cwd: repo, Home: home, GOOS: "linux",
+		Getenv: func(k string) string {
+			if k == "HOME" {
+				return home
+			}
+			return ""
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := e.Require()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return e, c, f
+}
+
+func TestPlanCreateAndRelease(t *testing.T) {
+	e, c, f := testPRWorld(t)
+	ctx := context.Background()
+	now := time.Date(2026, 11, 17, 0, 0, 0, 0, time.UTC)
+
+	// 1. Happy path work-branch PR plan.
+	target, err := ResolveCreate(c.Workflow, "develop/feat/login", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if target.String() != "develop/feat/login → develop/base" {
+		t.Errorf("Target.String() = %q", target.String())
+	}
+	p := e.NewPlanner([]string{"pr", "create"})
+	res, err := Plan(ctx, p, Input{Env: e, Config: c, Target: target, Current: "develop/feat/login", Draft: true, Now: now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Blocked() || res.Title != "feat(auth): add login" || res.Push == "" || !strings.Contains(res.Create, "--draft") || res.Signed != 1 || res.Total != 1 {
+		t.Errorf("Plan result = %+v", res)
+	}
+
+	// 2. Failing check blocks unless AllowFailingChecks is true.
+	f.On("sh -c go vet ./...", execx.Result{ExitCode: 2, Stderr: "vet error\n"})
+	pFail := e.NewPlanner([]string{"pr", "create"})
+	resFail, err := Plan(ctx, pFail, Input{Env: e, Config: c, Target: target, Current: "develop/feat/login", Now: now})
+	if err != nil || !resFail.Blocked() {
+		t.Errorf("expected failing check to block: %+v, %v", resFail, err)
+	}
+	pAllow := e.NewPlanner([]string{"pr", "create"})
+	resAllow, err := Plan(ctx, pAllow, Input{Env: e, Config: c, Target: target, Current: "develop/feat/login", AllowFailingChecks: true, Now: now})
+	if err != nil || resAllow.Blocked() {
+		t.Errorf("AllowFailingChecks should not block: %+v, %v", resAllow, err)
+	}
+	f.OnOut("sh -c go vet ./...", "")
+
+	// 3. Existing open PR short-circuits.
+	f.OnOut("gh pr list --head develop/feat/login --base develop/base --state open --json url", `[{"url":"https://github.com/octo/repo/pull/9"}]`)
+	pExist := e.NewPlanner([]string{"pr", "create"})
+	resExist, err := Plan(ctx, pExist, Input{Env: e, Config: c, Target: target, Now: now})
+	if err != nil || resExist.Existing != "https://github.com/octo/repo/pull/9" {
+		t.Errorf("existing PR: %+v, %v", resExist, err)
+	}
+	f.OnOut("gh pr list --head develop/feat/login --base develop/base --state open --json url", "[]")
+
+	// 4. Release PR (protected head, skips GitHub noreply unsigned commits).
+	relTarget, err := ResolveRelease(c.Workflow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.OnOut("git rev-parse --verify -q refs/remotes/origin/main", "main123\n")
+	f.OnOut("git log "+LogFormat+" origin/main..origin/develop/base", "c1\x1ffeat: one\x1fBody.\x1ec2\x1ffix: two\x1fBody 2.\x1e")
+	f.OnOut("git diff --stat origin/main...origin/develop/base", " 2 files changed\n")
+	f.OnOut("git rev-list --count origin/develop/base..develop/base", "1\n")
+	f.OnOut("gh pr list --head develop/base --base main --state open --json url", "[]")
+	f.OnOut("git log --no-merges --format=%H%x1f%G?%x1f%GS%x1f%s%x1f%ce origin/main..origin/develop/base",
+		"c1\x1fN\x1f\x1fMerge PR\x1fnoreply@github.com\nc2\x1fN\x1f\x1ffix: two\x1fo@x.io\n")
+	pRel := e.NewPlanner([]string{"pr", "release"})
+	resRel, err := Plan(ctx, pRel, Input{Env: e, Config: c, Target: relTarget, Current: "develop/feat/login", NoChecks: true, Sections: map[string]string{"Explanation": "Release."}, Now: now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resRel.Push != "" || resRel.Total != 1 || resRel.Signed != 0 {
+		t.Errorf("release result = %+v", resRel)
+	}
+}
+
+func TestCheckAndURLCapture(t *testing.T) {
+	e, c, f := testPRWorld(t)
+	f.OnOut("gh pr view 42 --json title,body,baseRefName,headRefName",
+		`{"title":"feat: add x","body":"## Summary\nx\n## Detailed changes\ny\n## Explanation\nz\n## Test results\n- unit: ok\n- lint: ok\n","baseRefName":"develop/base","headRefName":"develop/feat/x"}`)
+	info, v, err := Check(context.Background(), e, c, 42)
+	if err != nil || info.Title != "feat: add x" || len(v.Findings) != 0 {
+		t.Errorf("Check = %+v, %+v, %v", info, v, err)
+	}
+
+	var url string
+	f.OnOut("gh pr create --title x", "creating...\nhttps://github.com/octo/repo/pull/12\n")
+	cap := URLCapture{Next: f, URL: &url}
+	if _, err := cap.Run(context.Background(), execx.Cmd{Name: "gh", Args: []string{"pr", "create", "--title", "x"}}); err != nil || url != "https://github.com/octo/repo/pull/12" {
+		t.Errorf("URLCapture = %q, %v", url, err)
+	}
+	if s := Sections(c, Target{Template: "default"}); len(s) == 0 {
+		t.Error("Sections empty")
 	}
 }

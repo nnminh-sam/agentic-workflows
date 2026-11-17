@@ -1,17 +1,13 @@
 package cli
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
 
-	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/config"
-	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/ghx"
-	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/gitx"
+	mgapp "github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/app"
 	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/graph"
 	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/workflow"
 )
@@ -29,37 +25,42 @@ type graphFlags struct {
 }
 
 func newGraphCmd(app *App) *cobra.Command {
+	s := newSession(app)
 	var fl graphFlags
 	cmd := &cobra.Command{
 		Use:   "graph",
 		Short: "show commits, branches, signatures and PRs as a lane graph",
 		Long: "Show local and remote branches, commits, signature status, ahead/behind and open PRs.\n" +
-			"Read-only. --fetch runs `git fetch --prune <remote>` first (only with --yes).",
+			"Read-only. --fetch runs `git fetch --prune <remote>` first (plan).",
 		Args: cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error { return runGraph(app, fl) },
+		RunE: func(cmd *cobra.Command, args []string) error { return runGraph(app, s, cmd, args, fl) },
 	}
 	f := cmd.Flags()
 	f.StringVar(&fl.remote, "remote", "", "remote whose branches are shown as origin (default: the workflow's remote)")
 	f.IntVar(&fl.limit, "limit", 50, "maximum commits to show (0 = all)")
-	f.BoolVar(&fl.fetch, "fetch", false, "run git fetch --prune <remote> first (needs --yes)")
+	f.BoolVar(&fl.fetch, "fetch", false, "run git fetch --prune <remote> first (plan)")
 	f.StringVar(&fl.html, "html", "", "write a self-contained HTML page to this file")
 	f.BoolVar(&fl.ascii, "ascii", false, "draw lanes with ASCII characters")
 	f.BoolVar(&fl.offline, "offline", false, "skip GitHub (no PR data)")
+	s.addOutFlag(cmd)
 	return cmd
 }
 
-func runGraph(app *App, fl graphFlags) error {
-	ctx := app.Context()
-	git, gh, err := graphTools(app)
+func runGraph(app *App, s *session, cmd *cobra.Command, args []string, fl graphFlags) error {
+	ctx := cmd.Context()
+	env, err := s.env(cmd)
 	if err != nil {
 		return err
 	}
-	wf, warn := graphWorkflow(app, git)
+	wf, warn := graphWorkflow(env)
 	remote := graphRemote(fl.remote, wf)
-	if err := graphFetch(app, git, remote, fl.fetch); err != nil {
-		return err
+	if fl.fetch {
+		applied, err := graphFetch(s, cmd, args, env, remote)
+		if err != nil || !applied {
+			return err
+		}
 	}
-	repo, err := graph.Collect(ctx, git, gh, graph.Options{Remote: remote, Limit: fl.limit, Offline: fl.offline})
+	repo, err := graph.Collect(ctx, env.Git, env.Gh, graph.Options{Remote: remote, Limit: fl.limit, Offline: fl.offline})
 	if err != nil {
 		return err
 	}
@@ -80,7 +81,7 @@ func runGraph(app *App, fl graphFlags) error {
 		}
 	}
 	if app.Opts.JSON {
-		return graphJSON(app.Out, struct {
+		return emitJSON(app.Out, struct {
 			graph.Repo
 			Rows []graph.Row `json:"rows"`
 		}{repo, rows})
@@ -93,41 +94,10 @@ func runGraph(app *App, fl graphFlags) error {
 	})
 }
 
-// graphTools returns git and gh bound to the working directory.
-func graphTools(app *App) (*gitx.Git, *ghx.Gh, error) {
-	dir, err := app.Cwd()
-	if err != nil {
-		return nil, nil, err
-	}
-	return gitx.New(app.Runner, dir), ghx.New(app.Runner, dir), nil
-}
-
-// graphResolve resolves the configuration for the repository of git.
-// TODO(orchestrator): replace with the shared internal/app resolver.
-func graphResolve(app *App, git *gitx.Git) (*config.Resolved, error) {
-	ctx := app.Context()
-	cwd, err := app.Cwd()
-	if err != nil {
-		return nil, err
-	}
-	root, _ := git.RepoRoot(ctx)
-	owner, _ := git.RemoteOwner(ctx, workflow.DefaultRemote)
-	home, _ := app.Home()
-	o := app.Opts
-	return config.Resolve(config.Inputs{
-		Cwd: cwd, RepoRoot: root, RemoteOwner: owner, GOOS: app.GOOS,
-		Getenv: app.Getenv, Home: home, ReadFile: os.ReadFile, Glob: filepath.Glob,
-		Flags: config.Flags{
-			Profile: o.Profile, Ruleset: o.Ruleset, Workflow: o.Workflow,
-			Rules: o.Rules, Mode: o.Mode, Shell: o.Shell,
-		},
-	})
-}
-
 // graphWorkflow returns the active workflow, or nil plus a warning when the
 // configuration cannot be resolved (the graph still works without it).
-func graphWorkflow(app *App, git *gitx.Git) (*workflow.Compiled, string) {
-	res, err := graphResolve(app, git)
+func graphWorkflow(env *mgapp.Env) (*workflow.Compiled, string) {
+	res, err := env.Require()
 	if err != nil {
 		return nil, fmt.Sprintf("workflow unavailable, protected markers off: %v", err)
 	}
@@ -151,22 +121,37 @@ func graphProtected(wf *workflow.Compiled) func(string) bool {
 	return wf.IsProtected
 }
 
-// graphFetch runs `git fetch --prune <remote>` when asked. Fetching writes
-// refs, so it only runs with --yes; otherwise it says what it would run.
-// TODO(orchestrator): route through the plan/mode flow.
-func graphFetch(app *App, git *gitx.Git, remote string, fetch bool) error {
-	if !fetch {
-		return nil
+// graphFetch plans and runs `git fetch --prune <remote>`. Fetching writes
+// remote-tracking refs, so it goes through the shared plan runner; it reports
+// whether the fetch was applied and the caller should proceed to render.
+func graphFetch(s *session, cmd *cobra.Command, args []string, env *mgapp.Env, remote string) (bool, error) {
+	if err := env.RequireRepo(); err != nil {
+		return false, err
 	}
-	c := git.Cmd("fetch", "--prune", remote)
-	if !app.Opts.Yes {
-		app.Errorf("would run: %s (updates remote-tracking refs; pass --yes to run it)\n", c)
-		return nil
+	p := env.NewPlanner(planArgv(cmd, args))
+	p.Git("fetch "+remote, "fetch", "--prune", remote)
+	built, err := p.Build(cmd.Context())
+	if err != nil {
+		return false, err
 	}
-	if _, err := git.Run(app.Context(), "fetch", "--prune", remote); err != nil {
-		return fmt.Errorf("fetch: %w", err)
+	ro := s.runOptions(env)
+	applied := false
+	ro.JSON = false
+	out := s.a.Out
+	if s.a.Opts.JSON {
+		applied = ro.Yes || ro.ApplyID != ""
+		if !applied {
+			ro.JSON = true
+		} else {
+			out = s.a.Err
+		}
 	}
-	return nil
+	x := &mgapp.Executor{Env: env, In: s.a.In, Out: out, Err: s.a.Err}
+	res, err := x.Run(cmd.Context(), built, ro)
+	if err != nil {
+		return false, err
+	}
+	return res.Status == mgapp.StatusApplied, nil
 }
 
 // graphUseColor enables ANSI color only for a terminal without NO_COLOR.
@@ -193,10 +178,4 @@ func graphWriteFile(path string, render func(io.Writer) error) error {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
 	return f.Close()
-}
-
-func graphJSON(w io.Writer, v any) error {
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	return enc.Encode(v)
 }

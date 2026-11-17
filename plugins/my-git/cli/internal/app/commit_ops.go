@@ -10,7 +10,6 @@ import (
 	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/engine"
 	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/policy"
 	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/profile"
-	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/rules"
 	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/shell"
 	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/shellfmt"
 	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/sign"
@@ -134,15 +133,12 @@ func CommitEvaluate(e *Env, c *config.Resolved, pinned []string, signed bool, ms
 	for _, a := range CommitStepArgs(pinned, signed, commitMsgFile) {
 		words = append(words, shellfmt.Quote(shellfmt.Bash, a))
 	}
-	deps := engine.Deps{
-		Repo: func(dir string) rules.Repo { return rules.NewGitRepo(e.Runner, dir) },
-		ReadFile: func(path string) ([]byte, error) {
-			if filepath.Base(path) == commitMsgFile {
-				return []byte(msg), nil
-			}
-			return nil, errCommitNoFile
-		},
-		Env: e.Getenv,
+	deps := e.EngineDeps()
+	deps.ReadFile = func(path string) ([]byte, error) {
+		if filepath.Base(path) == commitMsgFile {
+			return []byte(msg), nil
+		}
+		return nil, errCommitNoFile
 	}
 	return engine.Evaluate(engine.Request{Command: strings.Join(words, " "), Dialect: shell.Bash, Cwd: e.RepoRoot}, c.Policy, deps)
 }

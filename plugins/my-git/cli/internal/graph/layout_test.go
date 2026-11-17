@@ -457,8 +457,7 @@ func TestLayoutNoLaneRecycledInSameRow(t *testing.T) {
 		t.Fatal(err)
 	}
 	if bad := recycledLanes(rows); len(bad) > 0 {
-		t.Skipf("BUG: layout.go placeMergeParents reuses lane(s) %v freed by placeFirstParent's pull-left in the same row; "+
-			"connector %q reads as E continuing to Q", bad, connector(rows[3], false))
+		t.Fatalf("recycled lane(s) %v in same row; connector %q", bad, connector(rows[3], false))
 	}
 }
 

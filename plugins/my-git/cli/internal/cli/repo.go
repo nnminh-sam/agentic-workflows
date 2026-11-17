@@ -3,7 +3,6 @@ package cli
 import (
 	"fmt"
 	"io"
-	"os"
 	"strconv"
 	"strings"
 
@@ -16,7 +15,6 @@ import (
 	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/gitx"
 	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/profile"
 	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/repoops"
-	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/rules"
 	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/shell"
 	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/shellfmt"
 	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/verdict"
@@ -51,11 +49,7 @@ func repoEvaluate(a *App, e *app.Env, cmds ...execx.Cmd) verdict.Verdict {
 	if dir == "" {
 		dir = e.Cwd
 	}
-	deps := engine.Deps{
-		Repo:     func(d string) rules.Repo { return rules.NewGitRepo(a.Runner, d) },
-		ReadFile: os.ReadFile,
-		Env:      a.Getenv,
-	}
+	deps := e.EngineDeps()
 	for _, c := range cmds {
 		v.Extend(engine.Evaluate(engine.Request{Command: repoLine(c), Dialect: shell.Bash, Cwd: dir}, e.Config.Policy, deps))
 	}

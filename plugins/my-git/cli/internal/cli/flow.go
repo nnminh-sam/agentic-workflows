@@ -20,6 +20,7 @@ type flowFlags struct {
 }
 
 func newFlowCmd(app *App) *cobra.Command {
+	s := newSession(app)
 	var fl flowFlags
 	cmd := &cobra.Command{
 		Use:   "flow",
@@ -27,23 +28,20 @@ func newFlowCmd(app *App) *cobra.Command {
 		Long: "Place every work branch in the active workflow template (ahead of its base, pushed,\n" +
 			"PR state) and name the one command that moves it forward. Read-only.",
 		Args: cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error { return runFlow(app, fl) },
+		RunE: func(cmd *cobra.Command, args []string) error { return runFlow(app, s, cmd, args, fl) },
 	}
 	f := cmd.Flags()
-	f.BoolVar(&fl.fetch, "fetch", false, "run git fetch --prune <remote> first (needs --yes)")
+	f.BoolVar(&fl.fetch, "fetch", false, "run git fetch --prune <remote> first (plan)")
 	f.StringVar(&fl.html, "html", "", "write a self-contained HTML page to this file")
 	f.BoolVar(&fl.ascii, "ascii", false, "plain ASCII symbols")
 	f.BoolVar(&fl.offline, "offline", false, "skip GitHub (no PR data)")
+	s.addOutFlag(cmd)
 	return cmd
 }
 
-func runFlow(app *App, fl flowFlags) error {
-	ctx := app.Context()
-	git, gh, err := graphTools(app)
-	if err != nil {
-		return err
-	}
-	res, err := graphResolve(app, git)
+func runFlow(app *App, s *session, cmd *cobra.Command, args []string, fl flowFlags) error {
+	ctx := cmd.Context()
+	env, res, err := s.config(cmd)
 	if err != nil {
 		return err
 	}
@@ -51,17 +49,20 @@ func runFlow(app *App, fl flowFlags) error {
 	if wf == nil {
 		return errors.New("no workflow template is active")
 	}
-	if err := graphFetch(app, git, wf.Remote, fl.fetch); err != nil {
-		return err
+	if fl.fetch {
+		applied, err := graphFetch(s, cmd, args, env, wf.Remote)
+		if err != nil || !applied {
+			return err
+		}
 	}
 	// The flow only needs branch tips and PRs, not history: limit the log.
-	repo, err := graph.Collect(ctx, git, gh, graph.Options{
+	repo, err := graph.Collect(ctx, env.Git, env.Gh, graph.Options{
 		Remote: wf.Remote, Limit: 1, Offline: fl.offline, MergedPRs: true,
 	})
 	if err != nil {
 		return err
 	}
-	flow, err := graph.CollectFlow(ctx, git, wf, repo)
+	flow, err := graph.CollectFlow(ctx, env.Git, wf, repo)
 	if err != nil {
 		return err
 	}
@@ -76,7 +77,7 @@ func runFlow(app *App, fl flowFlags) error {
 		}
 	}
 	if app.Opts.JSON {
-		return graphJSON(app.Out, flow)
+		return emitJSON(app.Out, flow)
 	}
 	if fl.html != "" {
 		return nil

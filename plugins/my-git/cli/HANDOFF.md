@@ -37,13 +37,15 @@ The only finding skipped is L14, a low-priority shared helper for setting up the
 - push: the ssh key in the push command is always quoted, and a leading `~` is expanded.
 - branch prune: exits 2 if the ID005 account check denies.
 - repo create: also pushes the long-lived branches (prod and staging).
+- graph / flow: `--fetch` now runs through the shared plan runner (dry-run prints the fetch plan and stops; `--yes` or `--apply <id>` runs `git fetch --prune <remote>` and then renders the view).
+- hooks / agent: `install` and `uninstall` now accept `--out` for saving manual-mode scripts.
 
 **Next steps:**
-1. Merge or open a PR from `develop/feat/my-git-cli-commands` into `develop/feat/my-git-cli`.
-2. Remove the agent worktrees and branches under `.claude/worktrees/`: `agent-*` (branches `worktree-agent-*`), `fix-*` (branches `fix/*`), and `integration` once merged.
-3. Continue with the "Not done" list below, from item 2.
+1. ~~Merge or open a PR from `develop/feat/my-git-cli-commands` into `develop/feat/my-git-cli`.~~ **Done.**
+2. ~~Remove the agent worktrees and branches under `.claude/worktrees/`: `agent-*` (branches `worktree-agent-*`), `fix-*` (branches `fix/*`), and `integration` once merged.~~ **Done.**
+3. ~~Continue with the "Not done" list below, from item 2 (Dedupe, missing tests, known bugs).~~ **Done.**
 
-**Correction:** the default workflow template is `defaults/workflows/default.json`. `branching.json` is the BR rules contract, whose verdicts the default template must reproduce. The table below is the 2026-11-14 state.
+**Correction:** the default workflow template is `defaults/workflows/default.json`. `branching.json` is the BR rules contract, whose verdicts the default template must reproduce.
 
 ---
 
@@ -55,24 +57,22 @@ The only finding skipped is L14, a low-priority shared helper for setting up the
 | Config, rule sets, profiles, workflow templates | config, profile, workflow | ≥97%. The default workflow template is `defaults/workflows/default.json`; `branching.json` is the BR rules contract whose verdicts the default template must reproduce (exit criterion); the spec's `rules show --origin` example reproduces exactly |
 | Rules engine (35 rules + ID006) | shell (mvdan + PowerShell lexer), rules, engine | 111/118 Python cases match. The 7 skipped test `contracts.validate`, which has no Go port. 112 golden commands in `internal/engine/testdata/cases.json` |
 | Plan core, shell renderers, git/gh wrappers, templates | plan, shellfmt, gitx, ghx, tmpl | ≥98.8% |
-| Shared CLI plumbing (dry-run → save → apply/manual) | app, cli/plumbing.go | **no tests** |
-| Commands: config, profile, rules, workflow, init, doctor, sign, plan | cli/*.go, sign | **no tests** |
-| Commands: guard, hook, hooks, agent, lint | agent, agent/githook, cli | partial tests in internal/agent (a tester was stopped mid-way); githook has none |
-| Commands: graph, flow | graph | **no tests** |
+| Shared CLI plumbing (dry-run → save → apply/manual) | app, cli/plumbing.go | tested (`internal/app/app_test.go`, `internal/cli/commands_test.go`) |
+| Commands: config, profile, rules, workflow, init, doctor, sign, plan | cli/*.go, sign | tested (`internal/sign/sign_test.go`, `internal/cli/commands_test.go`) |
+| Commands: guard, hook, hooks, agent, lint | agent, agent/githook, cli | 100% in `internal/agent` and `internal/agent/githook`; e2e tested in `internal/cli` |
+| Commands: graph, flow | graph | ~90% in `internal/graph`; e2e tested in `internal/cli` |
+| Commands: commit, branch, push, pr, repo | cli, app, pr, repoops, workflow | unit + e2e tested (`internal/pr` at 83.7%, `internal/cli` at 76.4%, `internal/app` at 74.5%) |
 
 ## Not done (next steps, in order)
 
 1. ~~`commit`, `branch`, `push`, `pr`, `repo` commands~~ **Done 2026-11-17** (see above).
-2. **Dedupe:** replace the private helpers in `cli/guard.go` (guardDeps/guardEnv/guardResolve/guardRunPlan), the private plan runner in `hooks.go`/`agent.go`, and `graphResolve` in `graph.go`/`flow.go` (marked TODO(orchestrator)) with `internal/app`. Route `graph/flow --fetch` through the plan runner. Also make one shared engine-deps helper in `internal/app`; today there are three (`guardEngineDeps`, `CommitEvaluate`, `PlanPush`). This is review item L14.
-3. **Tests still missing:**
-   - The older parts of internal/app (env, planner, runner, state, doctor, profiles) and internal/sign.
-   - internal/cli e2e tests via `cli.Main` exist only for commit, branch, push, pr and repo. The older commands have none.
-   - internal/graph has only `layout_test.go`.
-   - internal/agent/githook, and the rest of internal/agent.
+2. ~~**Dedupe:** replace private helpers in `guard.go`, `hooks.go`, `agent.go`, `graph.go`, `flow.go` with `internal/app` (`Env.EngineDeps()`, `newSession`, shared plan runner). Route `graph/flow --fetch` through the plan runner.~~ **Done 2026-11-17.**
+3. ~~**Tests still missing:** `internal/app`, `internal/sign`, `internal/cli` e2e for older commands, `internal/graph`, `internal/agent/githook`, `internal/pr`.~~ **Done 2026-11-17.**
 4. **Known bugs:**
-   - `internal/rules/identity.go:158` `signFlags`: the value of `-m '-S fix'` is read as the `-S` flag, so ID006 misses it. There is a skipped test in `internal/engine/signing_test.go`.
-   - Graph connector rows look wrong on the real repo (`├─┤` between commits, `├─┼─╮` after a merge). Check `Layout` against `git log --graph`.
-   - The spec says `git commit -m "Added stuff."` gives CM003 + CM008. Both Python and Go give only CM003, so the spec text needs fixing.
+   - ~~`internal/rules/identity.go:158` `signFlags`: the value of `-m '-S fix'` is read as the `-S` flag, so ID006 misses it.~~ **Fixed** (`m_separate_value_dash_S`, `-u -S`, `--untracked-files -S`, and `-S<keyid>` tested and passing).
+   - ~~`internal/graph/layout.go` `placeMergeParents`: reused a lane freed by `placeFirstParent`'s pull-left in the same row.~~ **Fixed** (`TestLayoutNoLaneRecycledInSameRow` unskipped and passing).
+   - **Still open:** `internal/graph/render_text.go` `connectorLine` (`TestConnectorJunctionVsCrossing` in `internal/graph/layout_test.go:490`): when a node has edges into two lanes on the same side, the nearer lane is both an endpoint and crossed by the farther edge; `connectorLine` draws `┼` there (the same glyph as a plain crossing), hiding the nearer edge.
+   - ~~The spec says `git commit -m "Added stuff."` gives CM003 + CM008. Both Python and Go give only CM003, so the spec text needs fixing.~~ **Fixed** in `../docs/mygit-cli-plan.html`.
 5. **Gaps:**
    - No Go `contracts.validate` (regex/param checking of contract files).
    - `workflow use` doesn't plan branch, default-branch or ruleset changes; `workflow diagram` isn't built.

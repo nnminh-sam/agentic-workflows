@@ -1,19 +1,14 @@
 package cli
 
 import (
-	"context"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/agent"
-	mgapp "github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/app"
-	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/config"
 	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/engine"
-	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/plan"
 	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/rules"
 )
 
@@ -81,15 +76,18 @@ func guardRun(a *App, ad agent.Adapter, raw []byte, kind agent.Kind) (res agent.
 	if err != nil {
 		return agent.FailSafe(err.Error())
 	}
-	cfg, err := guardResolve(a, cwd)
+	env, err := loadEnvFor(a, cwd)
+	if err == nil {
+		_, err = env.Require()
+	}
 	if err != nil {
 		if agent.MayInvolveGit(req.Command) {
 			return agent.FailSafe(err.Error())
 		}
 		return agent.Allow(kind)
 	}
-	v := engine.Evaluate(engine.Request{Command: req.Command, Dialect: req.Dialect, Cwd: cwd}, cfg.Policy, guardEngineDeps(a))
-	v.Extend(agent.CheckApply(req, cfg.Execution.AgentApply))
+	v := engine.Evaluate(engine.Request{Command: req.Command, Dialect: req.Dialect, Cwd: cwd}, env.Config.Policy, env.EngineDeps())
+	v.Extend(agent.CheckApply(req, env.Config.Execution.AgentApply))
 	return agent.Result{Kind: kind, Verdict: v}
 }
 
@@ -106,7 +104,12 @@ func guardSession(a *App, req agent.Request) agent.Result {
 	if err != nil {
 		return guardFailure(agent.SessionStart, err)
 	}
-	cfg, err := guardResolve(a, cwd)
+	env, err := loadEnvFor(a, cwd)
+	if err != nil {
+		res.Context = agent.InvalidConfigContext(err)
+		return res
+	}
+	cfg, err := env.Require()
 	if err != nil {
 		res.Context = agent.InvalidConfigContext(err)
 		return res
@@ -128,70 +131,4 @@ func guardCwd(a *App, cwd string) (string, error) {
 		return cwd, nil
 	}
 	return a.Cwd()
-}
-
-// guardEngineDeps are the engine's side effects for real runs.
-func guardEngineDeps(a *App) engine.Deps {
-	return engine.Deps{
-		Repo:     func(dir string) rules.Repo { return rules.NewGitRepo(a.Runner, dir) },
-		ReadFile: os.ReadFile,
-		Env:      a.Getenv,
-	}
-}
-
-// --------------------------------------------------------------- shared plumbing
-// The helpers below adapt *App to internal/app for the guard, hook, hooks,
-// agent and lint commands. TODO(orchestrator): dedupe with the shared
-// helpers in internal/cli once they land.
-
-// guardDeps adapts the App to app.Deps for cwd.
-func guardDeps(a *App, cwd string) mgapp.Deps {
-	home, _ := a.Home()
-	return mgapp.Deps{
-		Runner: a.Runner, Getenv: a.Getenv, Cwd: cwd, Home: home, GOOS: a.GOOS,
-		Flags: config.Flags{
-			Profile: a.Opts.Profile, Ruleset: a.Opts.Ruleset, Workflow: a.Opts.Workflow,
-			Rules: a.Opts.Rules, Mode: a.Opts.Mode, Shell: a.Opts.Shell,
-		},
-	}
-}
-
-// guardEnv loads the environment for cwd ("" = -C / process cwd).
-func guardEnv(a *App, cwd string) (*mgapp.Env, error) {
-	if cwd == "" {
-		var err error
-		if cwd, err = a.Cwd(); err != nil {
-			return nil, err
-		}
-	}
-	return mgapp.Load(a.Context(), guardDeps(a, cwd))
-}
-
-// guardResolve resolves the config for cwd; an invalid config is an error.
-func guardResolve(a *App, cwd string) (*config.Resolved, error) {
-	env, err := guardEnv(a, cwd)
-	if err != nil {
-		return nil, err
-	}
-	return env.Require()
-}
-
-// guardRunPlan runs a built plan the way every mutating command does
-// (dry run by default; --yes, a y at the prompt, or --apply <id> applies).
-func guardRunPlan(ctx context.Context, a *App, env *mgapp.Env, p *plan.Plan, extra map[string]any) error {
-	o := mgapp.RunOptions{
-		Mode: a.Opts.Mode, Shell: a.Opts.Shell, ApplyID: a.Opts.Apply, Yes: a.Opts.Yes, JSON: a.Opts.JSON,
-		Interactive: a.IsTerminal != nil && a.IsTerminal(), TempDir: os.TempDir(), Extra: extra,
-	}
-	if env.Config != nil {
-		if o.Mode == "" {
-			o.Mode = env.Config.Execution.Mode
-		}
-		if o.Shell == "" {
-			o.Shell = env.Config.Execution.Shell
-		}
-	}
-	x := &mgapp.Executor{Env: env, In: a.In, Out: a.Out, Err: a.Err}
-	_, err := x.Run(ctx, p, o)
-	return err
 }

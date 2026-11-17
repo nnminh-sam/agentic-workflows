@@ -42,6 +42,10 @@ func TestSigningID006(t *testing.T) {
 		{"config_false_with_S", "git -c commit.gpgsign=false commit -S -m 'feat: add x'", ssh, shell.Bash, true},
 		{"m_value_is_not_a_flag", "git commit -mS", ssh, shell.Bash, true},                   // message "S", not -S
 		{"m_separate_value_dash_S", "git commit -m '-S fix' -m body", ssh, shell.Bash, true}, // -m's value is not a flag
+		{"u_then_S", "git commit -u -S -m 'feat: add x'", ssh, shell.Bash, false},
+		{"untracked_files_then_S", "git commit --untracked-files -S -m 'feat: add x'", ssh, shell.Bash, false},
+		{"S_keyid_with_m_then_m", "git commit -Sjim -m 'feat: add x'", ssh, shell.Bash, false},
+		{"u_mode_with_S_is_not_S", "git commit -uno -m 'feat: add x'", ssh, shell.Bash, true},
 		{"after_double_dash", "git commit -m 'feat: add x' -- -S", ssh, shell.Bash, true},
 		{"x509", commitX, signing("x509"), shell.Bash, true},
 		{"format_none", commitX, signing("none"), shell.Bash, false},
@@ -54,9 +58,6 @@ func TestSigningID006(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if c.name == "m_separate_value_dash_S" {
-				t.Skip("BUG: rules/identity.go signFlags scans option values: the -m value '-S fix' counts as -S (false negative)")
-			}
 			v := run(t, c.cmd, opts{pol: c.pol, dialect: c.dialect})
 			if got := contains(ids(v), "ID006"); got != c.finding {
 				t.Errorf("%q: ID006=%v want %v\n%s", c.cmd, got, c.finding, v.Reason())
