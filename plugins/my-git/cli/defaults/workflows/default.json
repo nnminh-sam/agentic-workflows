@@ -1,0 +1,26 @@
+{
+  "name": "default",
+  "description": "main (production) + develop/base (staging); work branches develop/<type>/<name>",
+  "remote": "origin",
+  "branches": {
+    "production": { "name": "main", "protected": true },
+    "staging": { "name": "develop/base", "protected": true, "githubDefault": true }
+  },
+  "work": {
+    "pattern": "develop/{type}/{name}",
+    "types": ["feat", "fix", "chore", "docs", "refactor", "perf", "test", "build", "ci"],
+    "from": "staging"
+  },
+  "transitions": [
+    { "id": "merge", "from": "work", "to": "staging", "via": "pr", "mergeMethod": "squash",
+      "prTemplate": "default", "deleteHead": true },
+    { "id": "release", "from": "staging", "to": "production", "via": "pr", "mergeMethod": "merge",
+      "prTemplate": "release", "tag": "v{version}" }
+  ],
+  "protection": { "requirePr": true, "approvals": 0, "forcePush": false, "deletion": false,
+                  "requireSigned": false, "linearHistory": false },
+  "prTemplates": {
+    "default": { "sections": ["Summary", "Detailed changes", "Explanation", "Test results"] },
+    "release": { "sections": ["Summary", "Included PRs", "Test results"] }
+  }
+}

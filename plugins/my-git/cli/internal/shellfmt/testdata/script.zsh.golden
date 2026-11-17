@@ -1,0 +1,12 @@
+#!/usr/bin/env zsh
+# plan 1c9e04 · manual · shell zsh · run these, then: mygit plan verify 1c9e04
+set -e
+# identity
+# from profile work
+git config user.name 'Octo O'\''Cat'
+git config core.sshCommand 'ssh -i ~/.ssh/id_acme -o IdentitiesOnly=yes'
+gh auth switch --user octo-acme
+git commit -m '100% & done | a^b <x>'
+GIT_SSH_COMMAND='ssh -i C:\keys\id' git push
+cd 'D:\work dir'
+make test

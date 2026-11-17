@@ -1,0 +1,4 @@
+REM plan 7f3a2c · manual · shell cmd · run these, then: mygit plan verify 7f3a2c
+git -c user.name="Octo Cat" ^
+    -c user.email=octo@acme.example -c gpg.format=ssh ^
+    commit -S -F "%TEMP%\mygit-7f3a2c.msg" || exit /b 1

@@ -1,0 +1,13 @@
+@chcp 65001 >nul
+@echo off
+REM plan 1c9e04 · manual · shell cmd · run these, then: mygit plan verify 1c9e04
+REM identity
+REM from profile work
+git config user.name "Octo O'Cat" || exit /b 1
+git config core.sshCommand "ssh -i ~/.ssh/id_acme -o IdentitiesOnly=yes" || exit /b 1
+gh auth switch --user octo-acme || exit /b 1
+git commit -m "100%% & done | a^b <x>" || exit /b 1
+set "GIT_SSH_COMMAND=ssh -i C:\keys\id"
+git push || exit /b 1
+cd /d "D:\work dir" || exit /b 1
+make test || exit /b 1
