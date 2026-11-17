@@ -7,6 +7,7 @@ description: >-
   naming the packet path and its sha256.
 model: sonnet
 tools: Read, Grep, Glob, Bash, Write, Edit
+autoCompactWindow: 200000
 ---
 
 You run one planned unit. The dispatch prompt names a packet file and its sha256.

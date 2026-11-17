@@ -52,7 +52,35 @@ def load_graph(home: Path, profile: dict[str, Any], profile_dir: Path) -> dict[s
     for node_id in order:
         if node_id not in nodes:
             raise HarnessError(f"graph order names unknown node {node_id}")
+    graph.setdefault("lanes", {DEFAULT_LANE: {"description": "every node"}})
+    for lane_id, lane in graph["lanes"].items():
+        for node_id in lane.get("order", []) + lane.get("inline", []):
+            if node_id not in nodes:
+                raise HarnessError(f"lane {lane_id} names unknown node {node_id}")
     return graph
+
+
+DEFAULT_LANE = "full"
+
+
+def lane_of(ctx: dict[str, Any]) -> str:
+    return ctx.get("lane") or DEFAULT_LANE
+
+
+def check_lane(graph: dict[str, Any], lane: str) -> dict[str, Any]:
+    if lane not in graph["lanes"]:
+        raise HarnessError(f"unknown lane {lane}; the graph has {sorted(graph['lanes'])}")
+    return graph["lanes"][lane]
+
+
+def graph_uses_worktree(graph: dict[str, Any], ctx: dict[str, Any]) -> bool:
+    """False for an `inPlace` lane: the ticket works in the repository checkout itself, on a branch."""
+    return not graph["lanes"].get(lane_of(ctx), {}).get("inPlace", False)
+
+
+def is_inline(graph: dict[str, Any], ctx: dict[str, Any], node: str) -> bool:
+    """A node the controller does itself in this lane: no subagent unit, no reviewer."""
+    return node in graph["lanes"].get(lane_of(ctx), {}).get("inline", [])
 
 
 def _load_extensions(home: Path, profile: dict[str, Any], profile_dir: Path) -> list[dict[str, Any]]:
@@ -98,7 +126,10 @@ def when_matches(cond: dict[str, Any] | None, ctx: dict[str, Any]) -> bool:
 
 
 def trace(graph: dict[str, Any], ctx: dict[str, Any]) -> list[str]:
-    return [n for n in graph["order"] if when_matches(graph["nodes"][n].get("when"), ctx)]
+    """The ticket's nodes in order. A lane with its own `order` replaces the main order (and its slots)."""
+    lane = check_lane(graph, lane_of(ctx))
+    order = lane.get("order") or graph["order"]
+    return [n for n in order if when_matches(graph["nodes"][n].get("when"), ctx)]
 
 
 def dependents(graph: dict[str, Any], order: list[str], start: str) -> list[str]:

@@ -15,9 +15,11 @@ from . import gitid
 from . import graph as G
 from . import onboard as OB
 from . import rules as R
+from . import usage as U
 from .errors import HarnessError
-from .profile import (LOCALE_KEYS, _abs, artifact_languages, build_context, language, language_source, load_profile,
-                      parse_lang_settings, resolve_adapters, worktree_path, worktree_root, worktree_root_errors)
+from .profile import (LOCALE_KEYS, _abs, artifact_languages, build_context, context_window, language, language_source,
+                      load_profile, parse_lang_settings, resolve_adapters, tier_model, worktree_path, worktree_root,
+                      worktree_root_errors)
 from .state import (Ticket, check_receipts, issue_receipts, missing_prerequisites, new_node_record,
                     next_pending, now, repo_subject, settled, sha256_file, sha256_text)
 
@@ -78,7 +80,10 @@ class Session:
     def spec(self, node: str) -> dict[str, Any]:
         if node not in self.order:
             raise HarnessError(f"{node} is not in this ticket's trace: {self.order}")
-        return self.graph["nodes"][node]
+        spec = self.graph["nodes"][node]
+        if G.is_inline(self.graph, self.ctx, node):  # this lane: the controller does it, no subagent, no reviewer
+            spec = {**{k: v for k, v in spec.items() if k != "reviewer"}, "units": [], "pattern": "controller-inline"}
+        return spec
 
     def artifacts(self, node: str) -> list[str]:
         names = []
@@ -90,7 +95,56 @@ class Session:
         return names
 
     def model(self, tier: str) -> str:
-        return self.profile["models"][tier]
+        return tier_model(self.profile, tier)
+
+    def units(self, node: str) -> list[dict[str, Any]]:
+        """Planned units of a node, the reviewer included, as graph specs."""
+        spec = self.spec(node)
+        units = [dict(u) for u in spec.get("units", [])]
+        if spec.get("reviewer"):
+            units.append({"id": "reviewer", "role": "reviewer", "tier": spec["reviewer"]["tier"]})
+        return units
+
+    def unit(self, node: str, unit_id: str) -> dict[str, Any]:
+        found = next((u for u in self.units(node) if u["id"] == unit_id), None)
+        if found is None:
+            raise HarnessError(f"{node} has no unit {unit_id}; planned: {[u['id'] for u in self.units(node)]}")
+        return found
+
+    def failed_rounds(self, review_node: str) -> int:
+        """Generations of a review node in which any unit recorded FAIL / NEEDS CHANGES."""
+        rec = self.state["nodes"].get(review_node) or {"units": []}
+        return len({u["generation"] for u in rec["units"] if u.get("verdict") in ("FAIL", "NEEDS CHANGES")})
+
+    def tier(self, node: str, unit_id: str) -> tuple[str, str | None]:
+        """Effective tier of a unit and, when it moved up, why. A unit with `escalate` runs on the stronger tier once
+        its review node has failed it `afterFails` rounds (light coding that keeps failing review moves to routine)."""
+        u = self.unit(node, unit_id)
+        esc = u.get("escalate")
+        if not esc:
+            return u["tier"], None
+        review = esc.get("reviewNode") or next((n for n in self.order if self.graph["nodes"][n].get("loopBackTo") == node), None)
+        after = esc.get("afterFails") or self.profile.get("gates", {}).get("escalateAfter", 2)
+        fails = self.failed_rounds(review) if review else 0
+        if fails >= after:
+            return esc["tier"], f"{review} failed {fails} round(s) (escalates after {after})"
+        return u["tier"], None
+
+    def stage_problem(self, node: str, unit_id: str) -> str | None:
+        """A staged unit (`after`) runs only once its predecessor recorded PASS at the current generation."""
+        before = self.unit(node, unit_id).get("after")
+        if not before:
+            return None
+        rec = self.state["nodes"][node]
+        prev = [u for u in rec["units"] if u["unit"] == before and u["generation"] == rec["generation"]]
+        if not prev:
+            return f"{node}/{unit_id} is staged after {before}, which has no record at generation {rec['generation']}"
+        if prev[-1].get("verdict") is None and prev[-1]["status"] == "ok":
+            return f"{node}/{unit_id} is staged after {before}, which was recorded without --verdict PASS|FAIL; re-record it"
+        if prev[-1].get("verdict") not in ("PASS", "APPROVED") or prev[-1]["status"] != "ok":
+            return (f"{node}/{unit_id} is staged after {before}, whose last verdict is {prev[-1].get('verdict')}: "
+                    f"close {node} with needs-changes instead (the {unit_id} tier is not spent on a failed round)")
+        return None
 
     def save(self) -> None:
         self.ticket.save(self.state)
@@ -179,26 +233,70 @@ def cmd_init(args: argparse.Namespace) -> None:
     if ticket.exists() and not args.force:
         raise HarnessError(f"ticket already initialised at {ticket.dir}; use status (never re-init to recover)")
     ctx = build_context(profile, args.ticket, args.kind, args.repo, args.family, args.surface)
+    ctx["lane"] = args.lane
+    if args.lane != G.DEFAULT_LANE and ctx["families"]:
+        raise HarnessError(f"lane {args.lane} has no extension slots; families {ctx['families']} need --lane full")
     override = parse_lang_settings(args.lang)
     if override:
         ctx["locale"] = override
     graph = G.load_graph(HOME, profile, path.parent)
     resolve_adapters(HOME, path.parent, profile, ctx)  # fail-closed now, not at node 6 (G7)
-    wt_errors = worktree_root_errors(profile, path.parent)
+    G.check_lane(graph, args.lane)
+    wt_errors = worktree_root_errors(profile, path.parent) if G.graph_uses_worktree(graph, ctx) else []
     if wt_errors:
         raise HarnessError("G7: " + "; ".join(wt_errors))
     order = G.trace(graph, ctx)
+    warnings = []
     for repo in ctx["repositories"]:
-        head = gitid.run(repo["path"], ["rev-parse", "HEAD"], gitid.identity(profile, repo["id"]))
+        ident = gitid.identity(profile, repo["id"])
+        head = gitid.run(repo["path"], ["rev-parse", "HEAD"], ident)
         if head.returncode != 0:
             raise HarnessError(f"G7: {repo['id']}: not a git checkout with a commit: {repo['path']}")
         repo["startHead"] = head.stdout.strip()
+        if not G.graph_uses_worktree(graph, ctx):  # in-place lanes: the checkout itself is the ticket's workspace
+            repo["worktree"] = repo["path"]
+            repo["worktreeRel"] = portable(Path(repo["path"]), path.parent)
+            dirty = gitid.run(repo["path"], ["status", "--porcelain"], ident).stdout.strip()
+            if dirty:
+                warnings.append(f"{repo['id']}: the checkout has uncommitted changes; they will show up in the ship "
+                                "file list (stash them first, or drop them from the list when you approve)")
+            branch = gitid.run(repo["path"], ["rev-parse", "--abbrev-ref", "HEAD"], ident).stdout.strip()
+            if branch == repo["baseBranch"]:
+                warnings.append(f"{repo['id']}: on the base branch {branch}; the change node creates "
+                                f"{profile['paths'].get('branchPrefix', 'ticket/')}{args.ticket} before editing")
     state = {"schemaVersion": 1, "graphId": graph["graphId"], "profilePath": portable(path, ticket.dir), "createdAt": now(),
              "context": ctx, "nodes": {n: new_node_record() for n in order}, "receipts": {}}
     ticket.save(state)
-    ticket.log({"event": "init", "kind": args.kind, "families": ctx["families"], "surfaces": ctx["surfaces"],
+    ticket.log({"event": "init", "kind": args.kind, "lane": args.lane, "families": ctx["families"], "surfaces": ctx["surfaces"],
                 **({"locale": override} if override else {})})
-    out({"ok": True, "ticketDir": str(ticket.dir), "trace": order, "nextPending": order[0]})
+    out({"ok": True, "ticketDir": str(ticket.dir), "lane": args.lane, "trace": order, "nextPending": order[0],
+         **({"warnings": warnings} if warnings else {})})
+
+
+def cmd_lane(args: argparse.Namespace) -> None:
+    """Show the lane, or move a ticket to another lane (normally lite -> full when the change turns out bigger).
+    Nodes already closed keep their records; nodes of the new lane that never ran become pending."""
+    s = Session(args)
+    if not args.set:
+        out({"ticket": s.ctx["ticket"], "lane": G.lane_of(s.ctx), "lanes": {k: v["description"] for k, v in s.graph["lanes"].items()}})
+        return
+    if not args.reason:
+        raise HarnessError("--reason is required: say why the lane changes")
+    G.check_lane(s.graph, args.set)
+    old = G.lane_of(s.ctx)
+    if old == args.set:
+        raise HarnessError(f"ticket is already on lane {old}")
+    if args.set != G.DEFAULT_LANE and s.ctx["families"]:
+        raise HarnessError(f"lane {args.set} has no extension slots; this ticket uses families {s.ctx['families']}")
+    s.ctx["lane"] = args.set
+    s.order = G.trace(s.graph, s.ctx)
+    for node in s.order:
+        s.state["nodes"].setdefault(node, new_node_record())
+    s.save()
+    s.ticket.log({"event": "lane", "lane": args.set, "from": old, "reason": args.reason})
+    out({"ok": True, "lane": args.set, "from": old, "trace": s.order, "nextPending": next_pending(s.state, s.order),
+         "note": "repositories stay bound to their current checkout; prepare keeps it (sdlc worktree --path <repo>)"
+                 if old != G.DEFAULT_LANE else None})
 
 
 def cmd_status(args: argparse.Namespace) -> None:
@@ -219,7 +317,7 @@ def cmd_status(args: argparse.Namespace) -> None:
                      "generation": rec["generation"], "verdict": rec["verdict"], "tokens": toks,
                      "models": sorted({u["model"] for u in rec["units"] if u["generation"] == rec["generation"]})})
     nxt = next_pending(s.state, s.order)
-    res = {"ticket": s.ctx["ticket"], "kind": s.ctx["kind"], "reviewRound": s.ctx["reviewRound"],
+    res = {"ticket": s.ctx["ticket"], "kind": s.ctx["kind"], "lane": G.lane_of(s.ctx), "reviewRound": s.ctx["reviewRound"],
            "settled": sum(1 for n in s.order if settled(s.state, n)), "traceLength": len(s.order),
            "nextPending": nxt, "tokensTotal": tokens_total}
     if nxt:
@@ -227,6 +325,13 @@ def cmd_status(args: argparse.Namespace) -> None:
     if not args.compact:
         res["nodes"] = rows
     out(res)
+
+
+AGENT_TYPES = {"light": "kaneki-light", "routine": "kaneki-worker", "deep": "kaneki-deep"}
+
+
+def agent_type(tier: str) -> str:
+    return AGENT_TYPES[tier]
 
 
 def cmd_plan(args: argparse.Namespace) -> None:
@@ -238,15 +343,20 @@ def cmd_plan(args: argparse.Namespace) -> None:
     spec = s.spec(node)
     adapters = resolve_adapters(HOME, s.pdir, s.profile, s.ctx)
     rules = R.select(R.load_rulepacks(HOME, s.pdir, s.profile, s.ctx), s.ctx, spec.get("rulePhases", []))
-    units = [{**u, "model": s.model(u["tier"]), "agentType": "kaneki-deep" if u["tier"] == "deep" else "kaneki-worker"}
-             for u in spec.get("units", [])]
-    if spec.get("reviewer"):
-        tier = spec["reviewer"]["tier"]
-        units.append({"id": "reviewer", "role": "reviewer", "tier": tier, "model": s.model(tier),
-                      "agentType": "kaneki-deep" if tier == "deep" else "kaneki-worker"})
+    units = []
+    for u in s.units(node):
+        tier, why = s.tier(node, u["id"])
+        row = {k: v for k, v in u.items() if k != "escalate"}
+        row.update({"tier": tier, "model": s.model(tier), "agentType": agent_type(tier)})
+        if why:
+            row["escalated"] = {"from": u["tier"], "why": why}
+        if u.get("after"):
+            row["ready"] = s.stage_problem(node, u["id"]) is None
+        units.append(row)
     rec = s.state["nodes"][node]
     plan = {
-        "node": node, "layer": spec["layer"], "purpose": spec["purpose"], "generation": rec["generation"],
+        "node": node, "lane": G.lane_of(s.ctx), "executor": "controller" if not units else "subagents",
+        "layer": spec["layer"], "purpose": spec["purpose"], "generation": rec["generation"],
         "status": rec["status"], "missing": missing_prerequisites(s.graph, s.order, s.state, node),
         "units": units, "pattern": spec.get("pattern", "worker-only" if not spec.get("reviewer") else "worker+reviewer"),
         "boundary": spec["boundary"] if not (spec["boundary"] == "user" and node in ("fix-plan", "feature-plan")
@@ -267,10 +377,10 @@ def cmd_plan(args: argparse.Namespace) -> None:
 def _adapters_for(node: str, spec: dict[str, Any], adapters: dict[str, Any]) -> dict[str, Any]:
     """Only the adapter sections a node needs, as instruction file paths (the unit reads them)."""
     picked: dict[str, Any] = {}
-    if node in ("prepare",):
+    if node in ("prepare", "scope"):
         picked["tracker"] = adapters["tracker"]["_path"]
         picked["stacks"] = {k: v["_path"] for k, v in adapters["stacks"].items()}
-    if spec.get("mutability") == "source" or node in ("code-review", "final-review", "investigate"):
+    if spec.get("mutability") == "source" or node in ("code-review", "final-review", "investigate", "check"):
         picked["stacks"] = {k: v["_path"] for k, v in adapters["stacks"].items()}
     if node in ("execute-and-evidence", "testcase", "testcase-review") or spec.get("family"):
         picked["surfaces"] = {k: v.get("_path", v.get("notApplicable")) for k, v in adapters["surfaces"].items()}
@@ -284,10 +394,11 @@ def cmd_packet(args: argparse.Namespace) -> None:
     s = Session(args)
     spec = s.spec(args.node)
     rec = s.state["nodes"][args.node]
-    unit_ids = [u["id"] for u in spec.get("units", [])] + (["reviewer"] if spec.get("reviewer") else [])
-    if args.unit not in unit_ids:
-        raise HarnessError(f"{args.node} has no unit {args.unit}; planned: {unit_ids}")
-    unit = next((u for u in spec["units"] if u["id"] == args.unit), {"id": "reviewer", "role": "reviewer", "tier": spec.get("reviewer", {}).get("tier", "deep")})
+    unit = s.unit(args.node, args.unit)
+    staged = s.stage_problem(args.node, args.unit)
+    if staged:
+        raise HarnessError(staged)
+    tier, escalated = s.tier(args.node, args.unit)
     facts = json.loads(Path(args.facts).read_text(encoding="utf-8")) if args.facts else {}
     from . import schema
     schema.validate(facts, "facts.schema.json", f"facts {args.facts}")
@@ -300,6 +411,10 @@ def cmd_packet(args: argparse.Namespace) -> None:
     rules_path.write_text(json.dumps(rules, indent=2, ensure_ascii=False), encoding="utf-8")
     result_path = s.ticket.dir / "results" / f"{dispatch}.md"
     adapters = _adapters_for(args.node, spec, resolve_adapters(HOME, s.pdir, s.profile, s.ctx))
+    inputs = packet_inputs(s, args.node, pdir / f"{dispatch}.inputs")
+    window = context_window(s.profile, tier)
+    logs_dir = s.ticket.dir / "logs"
+    logs_dir.mkdir(exist_ok=True)
     template = (HOME / "skills" / "kaneki-flow" / "scripts" / "packet-template.md").read_text(encoding="utf-8")
     values = {
         "ticket": s.ctx["ticket"], "node": args.node, "generation": str(rec["generation"]), "unit": args.unit,
@@ -309,7 +424,9 @@ def cmd_packet(args: argparse.Namespace) -> None:
         "rulesPath": str(rules_path), "ruleCount": str(len(rules)), "resultPath": str(result_path),
         "adapters": json.dumps(adapters, indent=2, ensure_ascii=False),
         "inputs": NL.join(f"- `{i['file']}` ({i['token']}, from `{i['from']}`, sha256 `{i['sha256'][:12]}`)"
-                          for i in node_inputs(s, args.node)) or "- none (first node, or only the ticket and the repositories)",
+                          + (f" — live round only; full history in `{i['original']}`" if i.get("original") else "")
+                          for i in inputs) or "- none (first node, or only the ticket and the repositories)",
+        "contextWindow": f"{window:,}", "logsDir": str(logs_dir),
         "checks": _checks_block(s.spec(args.node)),
         "repositories": _repositories_block(s),
         "weakestClaim": facts.get("weakestClaim", "(controller: name it)"),
@@ -324,8 +441,18 @@ def cmd_packet(args: argparse.Namespace) -> None:
         text = text.replace("{{" + key + "}}", val)
     path = pdir / f"{dispatch}.md"
     path.write_text(text, encoding="utf-8")
-    out({"path": str(path), "packetDigest": sha256_file(path), "agentType": "kaneki-deep" if unit["tier"] == "deep" else "kaneki-worker",
-         "model": s.model(unit["tier"]), "resultPath": str(result_path), "dispatchId": dispatch})
+    # what the harness hands the unit, in tokens (~4 chars each): the packet, its inputs, the rules and the card
+    handed = [path, rules_path, Path(values["card"])] + [Path(i["file"]) for i in inputs]
+    estimate = sum(f.stat().st_size for f in handed if f.is_file()) // 4
+    res = {"path": str(path), "packetDigest": sha256_file(path), "agentType": agent_type(tier), "tier": tier,
+           "model": s.model(tier), "resultPath": str(result_path), "dispatchId": dispatch,
+           "handedTokens": estimate, "contextWindow": window}
+    if escalated:
+        res["escalated"] = {"from": unit["tier"], "why": escalated}
+    if estimate > window // 4:
+        res["contextWarning"] = (f"the packet and its inputs are ~{estimate:,} tokens, over a quarter of the {window:,}-token "
+                                 f"window assumed for {tier}; trim the inputs or split the unit before dispatching")
+    out(res)
 
 
 def _repositories_block(s: Session) -> str:
@@ -394,23 +521,25 @@ def cmd_record(args: argparse.Namespace) -> None:
     s = Session(args)
     spec = s.spec(args.node)
     rec = s.state["nodes"][args.node]
-    unit_ids = [u["id"] for u in spec.get("units", [])] + (["reviewer"] if spec.get("reviewer") else [])
-    if args.unit not in unit_ids:
-        raise HarnessError(f"{args.node} has no unit {args.unit}")
+    s.unit(args.node, args.unit)
     result = Path(args.result)
     if not result.is_file():
         raise HarnessError(f"G7: result file missing: {result} (the controller never fills a missing unit)")
-    tier = next((u["tier"] for u in spec.get("units", []) if u["id"] == args.unit), spec.get("reviewer", {}).get("tier"))
+    staged = s.stage_problem(args.node, args.unit)
+    if staged:
+        raise HarnessError(staged)
+    tier, _ = s.tier(args.node, args.unit)
     if args.model != s.model(tier):
         raise HarnessError(f"{args.node}/{args.unit} is planned on {s.model(tier)} ({tier}); a {args.model} record is refused")
-    entry = {"unit": args.unit, "generation": rec["generation"], "model": args.model, "status": args.status,
+    entry = {"unit": args.unit, "generation": rec["generation"], "model": args.model, "tier": tier, "status": args.status,
              "result": str(result), "resultDigest": sha256_file(result), "tokens": args.tokens,
              "verdict": args.verdict, "failureClass": args.failure_class, "at": now()}
     rec["units"].append(entry)
     rec["status"] = "in_progress" if rec["status"] in ("pending", "stale") else rec["status"]
     s.save()
     s.ticket.log({"event": "record", "node": args.node, **entry})
-    out({"ok": True, "recorded": entry})
+    U.write_ticket_file(s.ticket.dir, s.ctx["ticket"], s.order, s.state["nodes"])
+    out({"ok": True, "recorded": entry, "nodeTokens": U.node_usage(rec)["total"]})
 
 
 def cmd_gate(args: argparse.Namespace) -> None:
@@ -441,7 +570,7 @@ def cmd_gate(args: argparse.Namespace) -> None:
         rec["attempts"] = attempts  # _invalidate resets dependents' counters; the looping node keeps its own
         result.update({"verdict": "needs-changes", "attempts": attempts, "reopened": back, "stale": stale})
     elif args.status == "approved":
-        planned = [u["id"] for u in spec.get("units", [])] + (["reviewer"] if spec.get("reviewer") else [])
+        planned = [u["id"] for u in s.units(node)]
         done_units = {u["unit"] for u in current if u["status"] == "ok"}
         lacking = [u for u in planned if u not in done_units]
         if lacking:
@@ -504,6 +633,10 @@ def cmd_gate(args: argparse.Namespace) -> None:
             problems = check_receipts(s.state, s.profile["delivery"].get("minHoursLeft", 24), s.excludes)
             if problems:
                 raise HarnessError("G7: receipts not shippable: " + "; ".join(problems))
+        usage = U.node_usage(rec)
+        result["tokenUsage"] = {"total": usage["total"], "agents": usage["agents"],
+                                "writtenTo": [a for a in s.artifacts(node) if U.writes_block(node, a)
+                                              and U.write_node_block(s.ticket.dir / a, node, usage)]}
         rec["artifactDigests"] = {a: sha256_file(s.ticket.dir / a) for a in s.artifacts(node)}
         rec["status"] = "done"
         rec["verdict"] = "approved"
@@ -519,6 +652,7 @@ def cmd_gate(args: argparse.Namespace) -> None:
     s.ticket.log({"event": "gate", "gate": args.gate, "actor": args.actor, "node": node,
                   "generation": rec["generation"], "verdict": result["verdict"], "note": args.note})
     s.save()
+    result["tokenUsageFile"] = str(U.write_ticket_file(s.ticket.dir, s.ctx["ticket"], s.order, s.state["nodes"]))
     result["nextPending"] = next_pending(s.state, s.order)
     out(result)
 
@@ -575,6 +709,28 @@ def node_inputs(s: "Session", node: str) -> list[dict[str, str]]:
 
 SUPERSEDED_HEADER = "## SUPERSEDED:"
 NL = chr(10)
+
+
+def packet_inputs(s: "Session", node: str, copy_dir: Path) -> list[dict[str, str]]:
+    """The node's inputs as the unit should read them. An input that carries superseded rounds or a token-usage
+    block is handed over as a live-only copy (the rounds a rerun invalidated are history nobody downstream needs,
+    and on a looped review they are most of the file); the original stays the record."""
+    out = []
+    for i in node_inputs(s, node):
+        src = Path(i["file"])
+        if src.suffix != ".md":
+            out.append(i)
+            continue
+        full = src.read_text(encoding="utf-8", errors="replace")
+        live = U.strip_live_block(live_text(src)).strip() + NL
+        if live.strip() == full.strip():
+            out.append(i)
+            continue
+        copy_dir.mkdir(parents=True, exist_ok=True)
+        dest = copy_dir / src.name
+        dest.write_text(live, encoding="utf-8")
+        out.append({**i, "file": str(dest), "sha256": sha256_file(dest), "original": str(src)})
+    return out
 
 
 def live_text(path: Path) -> str:
@@ -797,6 +953,46 @@ def cmd_install(args: argparse.Namespace) -> None:
     out(install(HOME, Path(args.target).resolve(), force=args.force, dry_run=args.dry_run))
 
 
+def cmd_tickets(args: argparse.Namespace) -> None:
+    from . import board
+    out({"tickets": board.list_tickets(profile_path(args))})
+
+
+def cmd_status_of(args: argparse.Namespace) -> None:
+    """The ticket a file belongs to (its ticket folder, or a ticket worktree `<repoId>-<ticket>`), as a board summary."""
+    from . import board
+    ppath = profile_path(args)
+    prof = load_profile(ppath)
+    root = ticket_root(prof, ppath.parent)
+    target = Path(args.path).resolve()
+    ticket = None
+    try:
+        ticket = target.relative_to(root.resolve()).parts[0]
+    except (ValueError, IndexError):
+        wt_root = worktree_root(prof, ppath.parent).resolve()
+        try:
+            folder = target.relative_to(wt_root).parts[0]
+            ticket = next((d.name for d in root.iterdir() if d.is_dir() and folder.endswith("-" + d.name)), None) if root.is_dir() else None
+        except (ValueError, IndexError):
+            pass
+    if not ticket or not (root / ticket / "state.json").is_file():
+        out({"ticket": None, "path": str(target), "hint": "not inside a ticket folder or ticket worktree; see `sdlc tickets`"})
+        return
+    summary = board.summarize_ticket(ppath, ticket)
+    summary.pop("events", None)
+    out(summary)
+
+
+def cmd_web(args: argparse.Namespace) -> None:
+    from . import web
+    out(web.serve(profile_path(args), args.port, args.open))
+
+
+def cmd_zed_setup(args: argparse.Namespace) -> None:
+    from . import zed
+    out(zed.setup(HOME, Path(args.target).resolve(), dry_run=args.dry_run))
+
+
 def cmd_digest(args: argparse.Namespace) -> None:
     path = Path(args.path)
     if not path.is_file():
@@ -826,7 +1022,13 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--surface", action="append", help="extra surface beyond the repositories' defaults")
     x.add_argument("--force", action="store_true")
     x.add_argument("--lang", action="append", help="explicit per-ticket language, e.g. delivery=ja (only when the user asked)")
+    x.add_argument("--lane", default="full", help="full (every node, worktree) or lite (small change: scope, change in place, quick review, drafts)")
     x.set_defaults(fn=cmd_init)
+
+    x = sub.add_parser("lane", parents=[ticketed], help="show the ticket's lane, or move it (lite -> full) with --set and --reason")
+    x.add_argument("--set")
+    x.add_argument("--reason")
+    x.set_defaults(fn=cmd_lane)
 
     x = sub.add_parser("status", parents=[ticketed], help="trace, node states, next pending node (read-only)")
     x.add_argument("--compact", action="store_true")
@@ -938,6 +1140,23 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--dry-run", action="store_true")
     x.set_defaults(fn=cmd_install)
 
+    x = sub.add_parser("tickets", parents=[common], help="every ticket under the profile: lane, progress, next step")
+    x.set_defaults(fn=cmd_tickets)
+
+    x = sub.add_parser("status-of", parents=[common], help="status of the ticket a file belongs to (for editor tasks)")
+    x.add_argument("--path", required=True)
+    x.set_defaults(fn=cmd_status_of)
+
+    x = sub.add_parser("web", parents=[common], help="local live board of every ticket (127.0.0.1, read-only); Ctrl-C stops it")
+    x.add_argument("--port", type=int, default=8765)
+    x.add_argument("--open", action="store_true", help="open it in the browser")
+    x.set_defaults(fn=cmd_web)
+
+    x = sub.add_parser("zed-setup", help="add kaneki tasks (board, tickets, status) to <target>/.zed/tasks.json")
+    x.add_argument("--target", required=True, help="the folder you open in Zed (the workspace with sdlc.profile.json)")
+    x.add_argument("--dry-run", action="store_true")
+    x.set_defaults(fn=cmd_zed_setup)
+
     x = sub.add_parser("digest", help="sha256 of a file (never prints content)")
     x.add_argument("--path", required=True)
     x.add_argument("--expect")
@@ -945,7 +1164,9 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
-READ_ONLY = {"status", "plan", "validate", "digest", "onboard-scan", "onboard-verify", "onboard-write", "install"}
+READ_ONLY = {"status", "plan", "validate", "digest", "onboard-scan", "onboard-verify", "onboard-write", "install",
+             "tickets", "status-of", "web", "zed-setup"}
+NO_STATUS_REFRESH = READ_ONLY | {"git"}
 
 
 def _ticket_lock(args: argparse.Namespace):
@@ -961,14 +1182,32 @@ def _ticket_lock(args: argparse.Namespace):
 
 
 def main(argv: list[str] | None = None) -> int:
+    # one JSON line in UTF-8 whatever the console code page (Windows defaults to cp1252 on a pipe)
+    if hasattr(sys.stdout, "reconfigure") and (sys.stdout.encoding or "").lower().replace("-", "") != "utf8":
+        try:
+            sys.stdout.reconfigure(encoding="utf-8")
+        except (ValueError, OSError):
+            pass
     args = build_parser().parse_args(argv)
     try:
         with _ticket_lock(args):
             rc = args.fn(args)
+            if args.cmd not in NO_STATUS_REFRESH and getattr(args, "ticket", None):
+                _refresh_status(args)
     except HarnessError as exc:
         out({"error": str(exc)})
         return 2
     return rc if isinstance(rc, int) else 0
+
+
+def _refresh_status(args: argparse.Namespace) -> None:
+    """STATUS.md next to state.json, rewritten after every command that changed the ticket. Best effort: a failure
+    here never fails the command that already succeeded."""
+    from . import board
+    try:
+        board.write_status(Session(argparse.Namespace(profile=args.profile, ticket=args.ticket)))
+    except (HarnessError, OSError):
+        pass
 
 
 if __name__ == "__main__":

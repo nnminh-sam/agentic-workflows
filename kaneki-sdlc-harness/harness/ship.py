@@ -62,6 +62,9 @@ def build_request(s: Any, repo_id: str, delivery: dict[str, Any]) -> dict[str, A
     branch = _git(path, ["rev-parse", "--abbrev-ref", "HEAD"], ident).strip()
     if branch == "HEAD":
         raise HarnessError("G7: the worktree is on a detached HEAD; ship needs the ticket branch")
+    if branch == repo.get("baseBranch", "main"):
+        raise HarnessError(f"G7: the checkout is on the base branch {branch}; create the ticket branch first "
+                           f"(sdlc git --ticket {s.ctx['ticket']} --repo {repo_id} -- switch -c <branch>)")
     msg_file = s.ticket.dir / "drafts" / "commit-msg.md"
     message = _live(msg_file) if msg_file.is_file() else ""
     if not message:

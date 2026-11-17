@@ -65,7 +65,21 @@ def artifact_languages(profile: dict[str, Any], node: str, artifacts: list[str],
         else:
             out[a] = language(profile, "artifacts", override)
     return out
-TIERS = ("routine", "deep")
+TIERS = ("routine", "deep")  # required in every profile
+ALL_TIERS = ("light", "routine", "deep")  # light is optional and falls back to routine
+DEFAULT_CONTEXT_WINDOW = 200_000
+
+
+def tier_model(profile: dict[str, Any], tier: str) -> str:
+    """The model a tier runs on. `light` falls back to `routine` when the profile does not set it."""
+    models = profile["models"]
+    if tier == "light" and not models.get("light"):
+        tier = "routine"
+    return models[tier]
+
+
+def context_window(profile: dict[str, Any], tier: str) -> int:
+    return int((profile.get("contextWindow") or {}).get(tier) or DEFAULT_CONTEXT_WINDOW)
 TESTCASE_FORMATS = ("markdown", "xlsx", "csv", "gherkin")
 
 
@@ -127,6 +141,9 @@ def validate_profile(p: dict[str, Any]) -> None:
     for tier in TIERS:
         if not models.get(tier):
             errors.append(f"models.{tier} is required")
+    for tier in models:
+        if tier not in ALL_TIERS:
+            errors.append(f"models.{tier} is not a tier (tiers: {', '.join(ALL_TIERS)})")
     if not p.get("paths", {}).get("ticketRoot"):
         errors.append("paths.ticketRoot is required")
     repo_ids = set()
@@ -159,7 +176,7 @@ def validate_profile(p: dict[str, Any]) -> None:
         elif not isinstance(val, str) or not LANG_RE.match(val):
             errors.append(f"locale.{key} must be a language tag such as en, vi, ja, pt-BR")
     known = {"schemaVersion", "meta", "project", "locale", "paths", "models", "tracker", "repositories", "rulepacks",
-             "testcase", "evidence", "delivery", "families", "gates", "environment", "git"}
+             "testcase", "evidence", "delivery", "families", "gates", "environment", "git", "contextWindow"}
     extra = sorted(k for k in p if k not in known and not k.startswith("_"))
     if extra:
         errors.append(f"unknown top-level keys {extra}")

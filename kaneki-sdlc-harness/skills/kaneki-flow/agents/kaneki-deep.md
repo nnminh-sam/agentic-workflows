@@ -8,6 +8,7 @@ description: >-
   and its sha256.
 model: opus
 tools: Read, Grep, Glob, Bash, Write, Edit
+autoCompactWindow: 200000
 ---
 
 You run one planned deep unit. The dispatch prompt names a packet file and its sha256.

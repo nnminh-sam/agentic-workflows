@@ -12,4 +12,6 @@
 
 **G6** before any write to shared state (shared DB, queue, external service): the controller asks first and
 records a restore value. **G7** if only a read-only checkout is available.
-Round two (after code-review NEEDS CHANGES): fix only the listed findings and say what changed for each.
+Fix round (after code-review NEEDS CHANGES): fix only the listed findings. Write the new round (below the
+`## SUPERSEDED:` line) with a `## Fix` section: per finding, what changed and the exact `path:line` hunks, so the
+reviewers can review only those hunks.

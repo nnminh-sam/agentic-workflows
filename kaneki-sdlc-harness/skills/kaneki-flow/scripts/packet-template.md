@@ -46,6 +46,17 @@ node, unit ids) into code, test names or customer-facing text.
 - "Verified" means you named, ran and read the check.
 - Locate with Grep first, then Read with offset/limit. Do not read whole large files.
 
+## Context budget
+
+Assume a context window of about **{{contextWindow}} tokens**, and spend it on judgment, not on output.
+
+- Send long command output (tests, builds, installs, container and server logs) to a file under
+  `{{logsDir}}` and read it with `rg` (or the last lines only), never the whole stream:
+  `<command> > "{{logsDir}}/<name>.log" 2>&1; echo "exit $?"`.
+- Do not read dependency folders (`node_modules`, `vendor`, `.venv`, build output) except one targeted
+  file when a framework behaviour is the question.
+- Read each input once; re-read only the lines you cite.
+
 ## Return contract
 
 Write the full result to the result file, then reply in ≤ 150 words: status, result file path, its

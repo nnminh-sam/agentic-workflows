@@ -97,7 +97,7 @@ class Base(unittest.TestCase):
             self.assertEqual(code, 0, pk)
             Path(pk["resultPath"]).parent.mkdir(parents=True, exist_ok=True)
             Path(pk["resultPath"]).write_text("status: ok\n")
-            verdict = ("--verdict", "PASS") if unit["role"] == "reviewer" else ()
+            verdict = ("--verdict", "PASS") if unit["role"] == "reviewer" or plan["pattern"].startswith("staged") else ()
             code, rec = run("record", "--ticket", ticket, "--node", node, "--unit", unit["id"],
                             "--result", pk["resultPath"], "--model", unit["model"], "--tokens", "1000", *verdict, *self.p)
             self.assertEqual(code, 0, rec)

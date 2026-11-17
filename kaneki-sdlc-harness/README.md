@@ -39,6 +39,34 @@ sh skills/kaneki-flow/scripts/sdlc install --target /path/to/project
 /kaneki-ship ISSUE-123        # the only step that commits, pushes and opens the PR (after you approve)
 ```
 
+## Lanes: small changes stay small
+
+| Lane | Trace | Subagents | Worktree |
+| --- | --- | --- | --- |
+| `lite` | scope (you approve) → change → check → delivery-drafts → deliverable-ready | 1 (routine reviewer) | no: in place, on a ticket branch |
+| `full` (default) | the whole graph (11 nodes for a bug) | ~12: coding on light (Haiku), reviews on routine, semantic review on deep | yes |
+
+```bash
+/kaneki-flow CSS-12 --lite        # or: sdlc init --ticket CSS-12 --kind feature --lane lite
+sdlc lane --ticket CSS-12 --set full --reason "touches the API"   # escalate when it turns out bigger
+```
+
+`lite` is for CSS, copy, a config value, a contained fix with a known cause: about 5 files or fewer, no
+data/schema/API/auth/shared-flow change. The controller writes the scope and makes the change itself; an
+independent reviewer still checks the diff before anything ships, and `/kaneki-ship` works the same way.
+It also works when the profile sits inside the repository (one repo open in the editor), which `full` refuses.
+
+## Tracking: STATUS.md, the web board, Zed
+
+- **`STATUS.md`** in every ticket folder is rewritten by the driver after each change: progress, next step,
+  who does it (you / inline / subagent), verdicts, models, tokens, links to every artifact, recent decisions.
+- **`sdlc web --open`** serves a live board of every ticket on `http://127.0.0.1:8765/`: progress strips, the
+  node table, artifact preview, the decision log, and **Open in Zed** (uses the `zed` CLI, or `SDLC_EDITOR`).
+  Read-only: approvals still happen in Claude Code, so the log records who approved.
+- **`sdlc tickets`** / **`sdlc status-of --path <file>`** give the same view as JSON.
+- **`sdlc zed-setup --target .`** adds Zed tasks (`task: spawn` → `kaneki: board (web)`, `kaneki: tickets`,
+  `kaneki: ticket status (from open file)`, `kaneki: validate profile`). Your own tasks are kept.
+
 ## Workspace layout
 
 Run the harness from a workspace folder that holds the repositories, not from inside a repository. Every ticket

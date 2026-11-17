@@ -151,8 +151,11 @@
         "routine",
         "deep"
       ],
-      "description": "Model per capability tier. routine = extraction/coding/drafting; deep = diagnosis, planning, review.",
+      "description": "Model per capability tier. light = mechanical coding from an approved plan, intake, drafts (optional; falls back to routine); routine = analysis, test cases, technical review, evidence; deep = diagnosis, planning, semantic review.",
       "properties": {
+        "light": {
+          "type": "string"
+        },
         "routine": {
           "type": "string"
         },
@@ -378,6 +381,12 @@
         "autoSkipPlanApproval": {
           "type": "boolean",
           "default": false
+        },
+        "escalateAfter": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 2,
+          "description": "Default for a unit's `escalate.afterFails` when the graph leaves it out."
         }
       }
     },
@@ -396,6 +405,24 @@
             "type": "string"
           },
           "description": "Shared resources whose mutation needs G6."
+        }
+      }
+    },
+    "contextWindow": {
+      "type": "object",
+      "description": "Context window (tokens) to assume per tier, e.g. on a plan whose window is smaller than the model's native one. `packet` warns when what it hands a unit (packet, inputs, rules) is over a quarter of it. Default 200000 for every tier.",
+      "properties": {
+        "light": {
+          "type": "integer",
+          "minimum": 10000
+        },
+        "routine": {
+          "type": "integer",
+          "minimum": 10000
+        },
+        "deep": {
+          "type": "integer",
+          "minimum": 10000
         }
       }
     }

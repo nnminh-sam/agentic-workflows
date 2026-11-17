@@ -22,6 +22,7 @@ prepare
  ├─ bug:     investigate → fix-plan ─────────────────────────────┐   (user approves the plan)
  └─ feature: requirement-analysis → impact-analysis → feature-plan ┘
 coding ⇄ code-review                    (needs-changes loops; cap → G4)
+        technical-review (routine) ─PASS─► semantic-review (deep)
   [@slot after-code-review: family nodes, e.g. IF registration]
 testcase ⇄ testcase-review              (from the plan, not the code)
 execute-and-evidence                    (one surface adapter per surface)
@@ -35,6 +36,32 @@ The after-PR layer adds no fix/rerun nodes: `triage-review` reopens the earliest
 driver's token walk stales only the nodes that consume its output. Their trace order makes them the next
 pending nodes, so the normal graph reruns that part, then `respond-review` runs.
 
+## Model tiers
+
+Units name a tier, never a model. The profile maps `models.light|routine|deep` to models (`light` is optional and
+falls back to `routine`). The default graph puts coding, intake and drafts on `light`; analysis, test cases, the
+technical review, evidence and the final rule pass on `routine`; diagnosis, bug plans, requirement review, the
+semantic review and triage on `deep`.
+
+- **Staged units.** A unit with `after: <unit>` runs only once that unit recorded PASS at the current generation:
+  `packet` and `record` refuse it otherwise. `code-review` uses it so a technically broken round loops back to
+  coding without spending the deep tier.
+- **Escalation.** A unit with `escalate: {tier, afterFails, reviewNode}` runs on the stronger tier once the review
+  node has failed `afterFails` generations (any FAIL / NEEDS CHANGES record). `coding` moves from `light` to
+  `routine` after two failed code-review rounds; `plan`, `packet` and `record` all use the effective tier.
+- **Context.** `packet` estimates what it hands over (packet, rules, card, inputs; ~4 chars per token) and warns
+  over a quarter of the profile's `contextWindow.<tier>` (default 200k). Inputs that carry superseded rounds or a
+  token-usage block are handed over as live-only copies under `packets/<dispatch>.inputs/`. The packet tells units
+  to send long command output to `<ticket>/logs/` and search it.
+
+## Lanes
+
+`graph.lanes` names alternative traces. A lane with `order` replaces the main order (no extension slots);
+`inline` names nodes the controller does itself in that lane (the driver drops their units and reviewer);
+`inPlace` binds every repository to its own checkout instead of a worktree. `lite` uses three lite-only nodes
+(`scope`, `change`, `check`) plus the shared delivery and after-PR nodes, so receipts, drafts, the user
+approval and `kaneki-ship` work unchanged. The context records the lane; a ticket without one is `full`.
+
 ## Driver (`harness/`, stdlib Python)
 
 | Command | Does |
@@ -44,12 +71,16 @@ pending nodes, so the normal graph reruns that part, then `respond-review` runs.
 | `status` | node states, next pending, missing prerequisites, tokens |
 | `plan` | units (model, agent type), boundary, gates, artifacts, card, adapters, rules |
 | `packet` | renders the dispatch packet + the node's rules file, prints path + sha256 |
-| `record` | appends a unit result (digest, model check, tokens, verdict) |
-| `gate` | closes a node: readiness, units, reviewer verdict, artifacts, user boundary, subject digest, receipts, loop-back, reopen |
+| `record` | appends a unit result (digest, model check, tokens, verdict); refreshes `token-usage.md` |
+| `gate` | closes a node: readiness, units, reviewer verdict, artifacts, user boundary, subject digest, receipts, loop-back, reopen; on approval appends the `## Token usage` block (per agent, node total) to the node's artifacts, except drafts and the PR reply |
 | `invalidate` | stales a node and its token dependents, keeps the rest |
 | `worktree` | binds a repo to the ticket worktree; only `<paths.worktreeRoot>/<repoId>-<ticket>` (or the repo itself) is accepted |
 | `handback` | starts a review round |
 | `receipts` | shows / re-issues receipts |
+| `lane` | shows the lane, or moves a ticket to another lane (`--set full --reason`) |
+| `tickets` / `status-of` | board summaries (all tickets / the ticket a file belongs to) |
+| `web` | local read-only live board (127.0.0.1), artifact preview, open-in-editor |
+| `zed-setup` | adds kaneki tasks to `<workspace>/.zed/tasks.json` |
 | `digest` | sha256 of a file |
 
 State: `<ticketRoot>/<ticket>/state.json` (current view) and `decisions.jsonl` (append-only log).

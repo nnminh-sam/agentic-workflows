@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "graphId": "sdlc-lifecycle@1",
-  "description": "Generic ticket lifecycle. Layers 1-2 (analysis, implementation) port wms-flow almost 1:1; layers 3-4 keep only the generic delivery and after-PR nodes. Project specifics come from the project profile and adapters, never from this file. Each node's `checks` names the sections and parsers its gate verifies on the live text of each artifact.",
+  "description": "Generic ticket lifecycle. Layers 1-2 (analysis, implementation) port wms-flow almost 1:1; layers 3-4 keep only the generic delivery and after-PR nodes. Project specifics come from the project profile and adapters, never from this file. Each node's `checks` names the sections and parsers its gate verifies on the live text of each artifact. `lanes` picks a shorter trace for small changes: a lane with its own `order` replaces the main order; nodes in its `inline` list are done by the controller itself (no subagent). Tiers: `light` (optional profile model, falls back to routine) codes from the approved plan and does intake and drafts; `routine` analyses, writes and reviews test cases, does the technical review and the evidence; `deep` diagnoses, plans and does the semantic review, which runs only after the technical review passed.",
   "layers": [
     {
       "id": "analysis",
@@ -41,6 +41,29 @@
     "triage-review",
     "respond-review"
   ],
+  "lanes": {
+    "full": {
+      "description": "Every node of the graph: analysis, approved plan, worktree, staged code review (technical on routine, semantic on deep), test cases, real-surface evidence, final review. For bugs with an unknown cause, features, shared flows, data/API/schema changes."
+    },
+    "lite": {
+      "description": "Small, well-understood change (e.g. a CSS or copy tweak): scope (approved by the user) -> change in place -> one quick review -> drafts -> deliverable-ready. No worktree, no test-case documents, no surface evidence, no deep tier, no families. Escalate with `sdlc lane --set full`.",
+      "order": [
+        "scope",
+        "change",
+        "check",
+        "delivery-drafts",
+        "deliverable-ready",
+        "read-review",
+        "triage-review",
+        "respond-review"
+      ],
+      "inline": [
+        "delivery-drafts",
+        "read-review"
+      ],
+      "inPlace": true
+    }
+  },
   "nodes": {
     "prepare": {
       "layer": "analysis",
@@ -56,7 +79,7 @@
         {
           "id": "worker",
           "role": "worker",
-          "tier": "routine"
+          "tier": "light"
         }
       ],
       "boundary": "controller",
@@ -306,7 +329,12 @@
         {
           "id": "worker",
           "role": "worker",
-          "tier": "routine"
+          "tier": "light",
+          "escalate": {
+            "tier": "routine",
+            "afterFails": 2,
+            "reviewNode": "code-review"
+          }
         }
       ],
       "boundary": "controller",
@@ -337,7 +365,7 @@
     },
     "code-review": {
       "layer": "implementation",
-      "purpose": "Two independent deep reviewers (mechanical rules, semantic correctness) over the real diff; controller judges. NEEDS CHANGES reopens coding; round two reviews only the fix.",
+      "purpose": "Staged review over the real diff. technical-review (routine) builds, lints, tests, runs the app and judges every code-phase rule; only on its PASS does semantic-review (deep) check plan conformance, negative cases and the weakest claim on the running app. Either FAIL reopens coding; a fix round reviews only the fix.",
       "requires": [
         "source-change"
       ],
@@ -347,17 +375,18 @@
       "mutability": "findings-only",
       "units": [
         {
-          "id": "mechanical-review",
+          "id": "technical-review",
           "role": "worker",
-          "tier": "deep"
+          "tier": "routine"
         },
         {
           "id": "semantic-review",
           "role": "worker",
-          "tier": "deep"
+          "tier": "deep",
+          "after": "technical-review"
         }
       ],
-      "pattern": "parallel-units-controller-judged",
+      "pattern": "staged-units-controller-judged",
       "boundary": "controller",
       "gates": [
         "G4"
@@ -428,7 +457,7 @@
         {
           "id": "worker",
           "role": "worker",
-          "tier": "deep"
+          "tier": "routine"
         }
       ],
       "boundary": "controller",
@@ -472,7 +501,7 @@
         }
       ],
       "reviewer": {
-        "tier": "deep"
+        "tier": "routine"
       },
       "boundary": "controller",
       "gates": [
@@ -503,7 +532,7 @@
         {
           "id": "worker",
           "role": "worker",
-          "tier": "deep"
+          "tier": "routine"
         }
       ],
       "boundary": "controller",
@@ -546,7 +575,7 @@
         {
           "id": "worker",
           "role": "worker",
-          "tier": "routine"
+          "tier": "light"
         }
       ],
       "boundary": "controller",
@@ -673,6 +702,121 @@
         "review-reply.md"
       ],
       "card": "references/nodes/respond-review.md"
+    },
+    "scope": {
+      "layer": "analysis",
+      "purpose": "Lite lane. The controller itself reads the request and the code it touches, then writes a short scope: what changes, which files, how we know it is done, and why it is small enough for the lite lane. The user approves it (one question).",
+      "requires": [],
+      "produces": [
+        "context",
+        "environment",
+        "ticket-authority",
+        "analysis",
+        "approved-plan",
+        "review-scope"
+      ],
+      "mutability": "artifacts",
+      "units": [],
+      "boundary": "user",
+      "gates": [
+        "G1",
+        "G3",
+        "G7"
+      ],
+      "artifacts": [
+        "scope.md"
+      ],
+      "card": "references/nodes/scope.md",
+      "checks": {
+        "scope.md": {
+          "sections": [
+            "## Change",
+            "## Files",
+            "## Done when",
+            "## Why lite"
+          ]
+        }
+      }
+    },
+    "change": {
+      "layer": "implementation",
+      "purpose": "Lite lane. The controller edits the files the scope names, in place on the ticket branch (no worktree), and runs the stack's fast checks (format/lint/build).",
+      "requires": [
+        "approved-plan",
+        "review-scope"
+      ],
+      "produces": [
+        "source-change"
+      ],
+      "mutability": "source",
+      "units": [],
+      "boundary": "controller",
+      "gates": [
+        "G6",
+        "G7"
+      ],
+      "rulePhases": [
+        "code"
+      ],
+      "artifacts": [
+        "change.md"
+      ],
+      "card": "references/nodes/change.md",
+      "checks": {
+        "change.md": {
+          "sections": [
+            "## Changes",
+            "## Checks"
+          ]
+        }
+      }
+    },
+    "check": {
+      "layer": "implementation",
+      "purpose": "Lite lane. One routine reviewer reads the real diff against the scope and the code rules, reruns the checks, and gives a verdict. NEEDS CHANGES reopens change. Closing issues the receipts kaneki-ship needs.",
+      "requires": [
+        "approved-plan",
+        "source-change"
+      ],
+      "produces": [
+        "code-reviewed",
+        "evidence",
+        "receipts"
+      ],
+      "mutability": "findings-only",
+      "units": [
+        {
+          "id": "quick-review",
+          "role": "worker",
+          "tier": "routine"
+        }
+      ],
+      "boundary": "controller",
+      "gates": [
+        "G4",
+        "G7"
+      ],
+      "loopBackTo": "change",
+      "rulePhases": [
+        "code"
+      ],
+      "artifacts": [
+        "check.md"
+      ],
+      "subjectNode": true,
+      "issuesReceipts": true,
+      "card": "references/nodes/check.md",
+      "checks": {
+        "check.md": {
+          "sections": [
+            "## Diff vs scope",
+            "## Checks"
+          ],
+          "parsers": [
+            "verdict"
+          ]
+        }
+      }
     }
   },
   "gates": {

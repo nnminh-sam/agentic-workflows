@@ -133,10 +133,11 @@ class ContentCheckTests(Flow):
         run("init", "--ticket", "C-2", "--kind", "bug", *self.p)
         self.to("C-2", "coding")
         self.write_artifacts("C-2", "code-review", verdict="NEEDS CHANGES")
-        for unit in ("mechanical-review", "semantic-review"):
+        for unit, model in (("technical-review", "sonnet"), ("semantic-review", "opus")):
             code, pk = run("packet", "--ticket", "C-2", "--node", "code-review", "--unit", unit, *self.p)
             Path(pk["resultPath"]).write_text("ok")
-            run("record", "--ticket", "C-2", "--node", "code-review", "--unit", unit, "--result", pk["resultPath"], "--model", "opus", *self.p)
+            run("record", "--ticket", "C-2", "--node", "code-review", "--unit", unit, "--result", pk["resultPath"],
+                "--model", model, "--verdict", "PASS", *self.p)
         code, res = run("gate", "--ticket", "C-2", "--node", "code-review", "--status", "approved", *self.p)
         self.assertEqual(code, 2)
         self.assertIn("verdict is NEEDS CHANGES", res["error"])

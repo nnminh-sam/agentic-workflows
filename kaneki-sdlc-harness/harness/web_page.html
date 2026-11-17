@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kaneki Board</title>
+<style>
+:root {
+  --bg: #f7f7f5; --panel: #ffffff; --ink: #1d1d1b; --muted: #6b6b66; --line: #e4e4df;
+  --accent: #2f6fdb; --done: #2e9d5b; --run: #d98b16; --stale: #b0479b; --pend: #a3a39c; --bad: #d1453b;
+  --chip: #f0f0ec; --code: #f4f4f0;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161615; --panel: #1f1f1d; --ink: #ecece8; --muted: #9a9a93; --line: #31312e;
+    --accent: #6ea0ff; --done: #4cc382; --run: #f0aa3c; --stale: #d77ac2; --pend: #6d6d67; --bad: #f06b61;
+    --chip: #2a2a27; --code: #1a1a18;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 2; }
+header h1 { font-size: 15px; margin: 0; font-weight: 650; }
+header .live { width: 8px; height: 8px; border-radius: 50%; background: var(--done); }
+header .live.off { background: var(--bad); }
+header .meta { color: var(--muted); font-size: 12px; margin-left: auto; }
+main { display: grid; grid-template-columns: minmax(260px, 340px) 1fr; min-height: calc(100vh - 49px); }
+#list { border-right: 1px solid var(--line); padding: 10px; overflow: auto; }
+#detail { padding: 16px 20px; overflow: auto; min-width: 0; }
+.card { display: block; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); margin-bottom: 8px; cursor: pointer; color: inherit; text-decoration: none; }
+.card.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.card .top { display: flex; gap: 6px; align-items: center; }
+.card .id { font-weight: 650; }
+.card .hint { color: var(--muted); font-size: 12px; margin-top: 4px; }
+.badge { font-size: 11px; padding: 1px 7px; border-radius: 10px; background: var(--chip); color: var(--muted); }
+.badge.lite { background: color-mix(in srgb, var(--done) 18%, transparent); color: var(--done); }
+.badge.full { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
+.strip { display: flex; gap: 2px; margin-top: 8px; }
+.strip i { flex: 1; height: 5px; border-radius: 2px; background: var(--pend); }
+.s-done { background: var(--done) !important; } .s-in_progress { background: var(--run) !important; }
+.s-stale { background: var(--stale) !important; } .s-pending { background: var(--pend) !important; }
+h2 { margin: 0 0 4px; font-size: 20px; }
+.sub { color: var(--muted); margin-bottom: 14px; }
+.next { padding: 10px 14px; border-left: 3px solid var(--accent); background: var(--panel); border-radius: 6px; margin-bottom: 16px; }
+.warn { padding: 10px 14px; border-left: 3px solid var(--bad); background: var(--panel); border-radius: 6px; margin-bottom: 16px; }
+table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12px; color: var(--muted); font-weight: 600; }
+tr:last-child td { border-bottom: none; }
+tr.cur td { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
+.node { font-weight: 600; }
+.purpose { color: var(--muted); font-size: 12px; max-width: 46ch; }
+.chip { display: inline-block; font: 12px ui-monospace, Consolas, monospace; padding: 2px 7px; border-radius: 5px; background: var(--chip); margin: 0 4px 4px 0; cursor: pointer; border: 1px solid transparent; color: inherit; }
+.chip:hover, .chip.on { border-color: var(--accent); }
+.chip.missing { opacity: .45; cursor: default; }
+.num { font-variant-numeric: tabular-nums; }
+section { margin-top: 18px; }
+section h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 8px; }
+#preview { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+#preview .bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+#preview .bar .name { font: 12px ui-monospace, Consolas, monospace; }
+#preview pre { margin: 0; padding: 12px; max-height: 60vh; overflow: auto; background: var(--code); white-space: pre-wrap; word-break: break-word; font: 12.5px/1.5 ui-monospace, Consolas, monospace; }
+button { font: inherit; font-size: 12px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--chip); color: var(--ink); cursor: pointer; }
+button:hover { border-color: var(--accent); }
+.spacer { flex: 1; }
+.events { list-style: none; padding: 0; margin: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+.events li { padding: 6px 12px; border-bottom: 1px solid var(--line); font-size: 13px; }
+.events li:last-child { border-bottom: none; }
+.events time { color: var(--muted); font: 12px ui-monospace, Consolas, monospace; margin-right: 8px; }
+.empty { color: var(--muted); padding: 40px 0; text-align: center; }
+.toast { position: fixed; bottom: 16px; right: 16px; background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: 6px; font-size: 13px; opacity: 0; transition: opacity .2s; }
+.toast.show { opacity: .92; }
+@media (max-width: 760px) {
+  main { grid-template-columns: 1fr; }
+  #list { border-right: none; border-bottom: 1px solid var(--line); max-height: 40vh; }
+  .purpose, .hide-sm { display: none; }
+  #detail { padding: 12px 16px; }
+}
+</style>
+</head>
+<body>
+<header>
+  <span class="live" id="live"></span>
+  <h1 id="project">Kaneki Board</h1>
+  <span class="meta" id="meta"></span>
+</header>
+<main>
+  <nav id="list"></nav>
+  <div id="detail"><div class="empty">Pick a ticket.</div></div>
+</main>
+<div class="toast" id="toast"></div>
+<script>
+const TOKEN = "__TOKEN__";
+const PROJECT = __PROJECT__;
+const COLORS = { done: "var(--done)", in_progress: "var(--run)", stale: "var(--stale)", pending: "var(--pend)" };
+let selected = decodeURIComponent(location.hash.slice(2)) || null;
+let lastList = "", lastDetail = "", preview = null, hasEditor = false;
+
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const $ = id => document.getElementById(id);
+document.getElementById("project").textContent = PROJECT + " · Kaneki Board";
+
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 2200); }
+
+async function getJSON(url) { const r = await fetch(url, { cache: "no-store" }); return r.json(); }
+
+async function openInEditor(path) {
+  if (!hasEditor) { navigator.clipboard?.writeText(path); toast("No editor CLI found — path copied"); return; }
+  const r = await fetch("/api/open", { method: "POST", headers: { "X-Kaneki-Token": TOKEN, "Content-Type": "application/json" }, body: JSON.stringify({ path }) });
+  const j = await r.json(); toast(j.ok ? "Opened in editor" : j.error);
+}
+
+function renderList(data) {
+  hasEditor = data.editor;
+  const tickets = data.tickets;
+  if (!tickets.length) { $("list").innerHTML = '<div class="empty">No tickets yet.<br>Start one with /kaneki-flow</div>'; return; }
+  if (!selected) selected = tickets[0].ticket;
+  $("list").innerHTML = tickets.map(t => `
+    <a class="card ${t.ticket === selected ? "sel" : ""}" href="#/${encodeURIComponent(t.ticket)}">
+      <div class="top"><span class="id">${esc(t.ticket)}</span>
+        <span class="badge ${esc(t.lane)}">${esc(t.lane || "?")}</span>
+        <span class="badge">${esc(t.kind || "")}</span>
+        <span class="spacer"></span><span class="num hint">${t.error ? "⚠" : `${t.settled}/${t.traceLength}`}</span></div>
+      ${t.error ? `<div class="hint">${esc(t.error).slice(0, 140)}</div>` : `
+      <div class="strip">${(t.strip || []).map(n => `<i class="s-${n.status}" title="${esc(n.node)}: ${n.status}"></i>`).join("")}</div>
+      <div class="hint">${esc(t.next)}</div>`}
+    </a>`).join("");
+}
+
+function renderDetail(t) {
+  if (t.error) { $("detail").innerHTML = `<h2>${esc(t.ticket)}</h2><div class="warn">${esc(t.error)}</div>`; return; }
+  const rows = t.nodes.map((n, i) => {
+    const who = (n.boundary === "user" ? "you approve · " : "") + (n.executor === "controller" ? "inline" : `${n.unitsDone.length}/${n.units.length} units`);
+    const arts = n.artifacts.map(a => `<span class="chip ${a.exists ? "" : "missing"} ${preview && preview.name === a.name ? "on" : ""}" ${a.exists ? `data-name="${esc(a.name)}" data-path="${esc(a.path)}"` : ""}>${esc(a.name)}</span>`).join("");
+    return `<tr class="${n.node === t.nextPending ? "cur" : ""}">
+      <td class="num">${i + 1}</td>
+      <td><span class="dot" style="background:${COLORS[n.status]}"></span><span class="node">${esc(n.node)}</span>${n.generation > 1 ? ` <span class="badge">gen ${n.generation}</span>` : ""}
+        <div class="purpose">${esc(n.purpose)}</div></td>
+      <td>${esc(n.status)}${n.verdict || n.lastUnitVerdict ? `<div class="purpose">${esc(n.verdict || n.lastUnitVerdict)}</div>` : ""}</td>
+      <td class="hide-sm">${esc(who)}</td>
+      <td class="hide-sm">${esc(n.models.join(", ") || "—")}</td>
+      <td class="num hide-sm">${n.tokens || ""}</td>
+      <td>${arts || "—"}</td></tr>`;
+  }).join("");
+  const events = [...t.events].reverse().map(e => {
+    const bits = ["node", "unit", "verdict", "actor", "lane", "from"].filter(k => e[k]).map(k => `${k}=${esc(e[k])}`);
+    if (e.stale) bits.push("stale=" + esc(e.stale.join(",")));
+    const note = e.note || e.reason;
+    return `<li><time>${esc((e.at || "").slice(0, 19).replace("T", " "))}</time><b>${esc(e.event)}</b> ${bits.join(" ")}${note ? ` — ${esc(String(note).slice(0, 200))}` : ""}</li>`;
+  }).join("");
+  const repos = t.repositories.map(r => `<span class="chip" data-path="${esc(r.worktree || r.path)}">${esc(r.id)} · ${esc(r.worktree || r.path)}</span>`).join("");
+  $("detail").innerHTML = `
+    <h2>${esc(t.ticket)}</h2>
+    <div class="sub"><span class="badge ${esc(t.lane)}">${esc(t.lane)}</span> <span class="badge">${esc(t.kind)}</span>
+      · ${t.settled}/${t.traceLength} nodes · ${t.tokensTotal} tokens${t.reviewRound ? ` · review round ${t.reviewRound}` : ""}
+      · updated ${esc((t.updatedAt || "").slice(0, 19).replace("T", " "))}</div>
+    ${t.integrity ? `<div class="warn"><b>Integrity problem:</b> ${esc(t.integrity.join("; "))}</div>` : ""}
+    <div class="next"><b>Next:</b> ${esc(t.next)}</div>
+    <table><thead><tr><th>#</th><th>Node</th><th>Status</th><th class="hide-sm">Who</th><th class="hide-sm">Model</th><th class="hide-sm">Tokens</th><th>Artifacts</th></tr></thead><tbody>${rows}</tbody></table>
+    <section id="pv"></section>
+    <section><h3>Files</h3>
+      <span class="chip" data-path="${esc(t.ticketDir)}/STATUS.md">STATUS.md</span>
+      ${t.questions.exists ? `<span class="chip" data-name="questions.md" data-path="${esc(t.questions.path)}">questions.md</span>` : ""}
+      ${repos}</section>
+    <section><h3>Decisions</h3><ul class="events">${events || "<li>none yet</li>"}</ul></section>`;
+  renderPreview();
+}
+
+async function renderPreview() {
+  const el = $("pv"); if (!el) return;
+  if (!preview) { el.innerHTML = ""; return; }
+  const r = await fetch(`/api/file?id=${encodeURIComponent(selected)}&name=${encodeURIComponent(preview.name)}`, { cache: "no-store" });
+  const text = r.ok ? await r.text() : "(cannot read this file)";
+  el.innerHTML = `<div id="preview"><div class="bar"><span class="name">${esc(preview.name)}</span><span class="spacer"></span>
+    <button data-open="${esc(preview.path)}">Open in Zed</button><button data-close>Close</button></div><pre>${esc(text)}</pre></div>`;
+}
+
+document.addEventListener("click", e => {
+  const open = e.target.closest("[data-open]");
+  if (open) { openInEditor(open.dataset.open); return; }
+  if (e.target.closest("[data-close]")) { preview = null; renderPreview(); document.querySelectorAll(".chip.on").forEach(c => c.classList.remove("on")); return; }
+  const chip = e.target.closest(".chip[data-path]");
+  if (!chip) return;
+  if (chip.dataset.name && !e.altKey) {
+    preview = { name: chip.dataset.name, path: chip.dataset.path };
+    document.querySelectorAll(".chip.on").forEach(c => c.classList.remove("on")); chip.classList.add("on");
+    renderPreview();
+  } else openInEditor(chip.dataset.path);
+});
+
+window.addEventListener("hashchange", () => { selected = decodeURIComponent(location.hash.slice(2)) || null; preview = null; lastDetail = ""; lastList = ""; tick(); });
+
+async function tick() {
+  try {
+    const list = await getJSON("/api/tickets");
+    const ls = JSON.stringify(list) + selected;
+    if (ls !== lastList) { lastList = ls; renderList(list); }
+    if (selected) {
+      const d = await getJSON(`/api/ticket?id=${encodeURIComponent(selected)}`);
+      const ds = JSON.stringify(d);
+      if (ds !== lastDetail) { lastDetail = ds; renderDetail(d); }
+    }
+    $("live").classList.remove("off");
+    $("meta").textContent = "live · " + new Date().toLocaleTimeString();
+  } catch (err) {
+    $("live").classList.add("off");
+    $("meta").textContent = "board server not reachable";
+  }
+}
+tick();
+setInterval(tick, 2500);
+</script>
+</body>
+</html>

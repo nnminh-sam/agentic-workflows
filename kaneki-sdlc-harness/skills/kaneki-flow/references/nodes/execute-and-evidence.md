@@ -9,4 +9,4 @@
 5. A surface whose adapter is `none` is `N/A` with the profile's reason.
 
 **G6** before mutating shared state, before using a real device, or when runtime config is missing.
-The deep reviewer audits that each OK has a captured expected state.
+The reviewer audits that each OK has a captured expected state.

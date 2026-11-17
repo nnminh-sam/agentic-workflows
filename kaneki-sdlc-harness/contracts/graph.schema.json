@@ -131,9 +131,40 @@
                 },
                 "tier": {
                   "enum": [
+                    "light",
                     "routine",
                     "deep"
                   ]
+                },
+                "after": {
+                  "type": "string",
+                  "description": "Staged unit: runs only after this unit of the same node recorded PASS at the current generation."
+                },
+                "escalate": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "tier",
+                    "afterFails"
+                  ],
+                  "description": "Move this unit to a stronger tier once the node's reviewers have failed it `afterFails` times (all generations).",
+                  "properties": {
+                    "tier": {
+                      "enum": [
+                        "light",
+                        "routine",
+                        "deep"
+                      ]
+                    },
+                    "afterFails": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "reviewNode": {
+                      "type": "string",
+                      "description": "Review node whose FAIL records count (default: the node that loops back here)."
+                    }
+                  }
                 }
               }
             }
@@ -147,6 +178,7 @@
             "properties": {
               "tier": {
                 "enum": [
+                  "light",
                   "routine",
                   "deep"
                 ]
@@ -263,6 +295,38 @@
       "additionalProperties": {
         "type": "string"
       }
+    },
+    "lanes": {
+      "type": "object",
+      "description": "Named lanes. A lane with `order` uses it instead of the main order (no extension slots); `inline` lists nodes the controller does itself in that lane.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "description"
+        ],
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "order": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "inline": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "inPlace": {
+            "type": "boolean",
+            "description": "Work in the repository checkout on a branch; no worktree."
+          }
+        }
+      }
     }
   },
   "$defs": {
@@ -348,9 +412,40 @@
               },
               "tier": {
                 "enum": [
+                  "light",
                   "routine",
                   "deep"
                 ]
+              },
+              "after": {
+                "type": "string",
+                "description": "Staged unit: runs only after this unit of the same node recorded PASS at the current generation."
+              },
+              "escalate": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "tier",
+                  "afterFails"
+                ],
+                "description": "Move this unit to a stronger tier once the node's reviewers have failed it `afterFails` times (all generations).",
+                "properties": {
+                  "tier": {
+                    "enum": [
+                      "light",
+                      "routine",
+                      "deep"
+                    ]
+                  },
+                  "afterFails": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "reviewNode": {
+                    "type": "string",
+                    "description": "Review node whose FAIL records count (default: the node that loops back here)."
+                  }
+                }
               }
             }
           }
@@ -364,6 +459,7 @@
           "properties": {
             "tier": {
               "enum": [
+                "light",
                 "routine",
                 "deep"
               ]

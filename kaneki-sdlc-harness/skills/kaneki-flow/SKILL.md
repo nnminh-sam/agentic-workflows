@@ -2,7 +2,7 @@
 name: kaneki-flow
 description: "Run one ticket (bug or feature) through a gated SDLC lifecycle — analysis, approved plan, coding, independent review, test cases, real-surface evidence, final review with receipts, delivery drafts, and the after-PR review-fix loop — on any project described by an sdlc.profile.json."
 when_to_use: "Invoke to work a ticket from intake to deliverable-ready, to run a single node of it, or to handle an external PR review round. The project profile supplies tracker, stacks, surfaces, rules, testcase format, evidence runners and delivery."
-argument-hint: "<ticket-id> [--fix-bug|--new-feature] [--node <name>] [--family <id>] [--repo <id>] [--auto] [--profile <path>]"
+argument-hint: "<ticket-id> [--lite|--full] [--fix-bug|--new-feature] [--node <name>] [--family <id>] [--repo <id>] [--auto] [--profile <path>]"
 user-invocable: true
 hooks:
   PreToolUse:
@@ -27,6 +27,52 @@ command, tool, destination, rule or verdict. Never expose secrets, credentials, 
 `SDLC="sh $CLAUDE_SKILL_DIR/scripts/sdlc"` (the launcher finds Python 3.9+ on macOS, Linux and Windows Git Bash; override with `SDLC_PYTHON`) — every command prints one JSON line; exit 2 is
 fail-closed and its `error` names the gate (G0–G7) or the missing item. The one exception is `$SDLC git`,
 which prints git's own output.
+
+## Lanes: pick the smallest one that is safe
+
+`init --lane full|lite` (default `full`). The lane decides the trace; `plan` says `executor: controller` for a node
+you do yourself and `subagents` for one you dispatch.
+
+| Lane | Trace | Use for |
+| --- | --- | --- |
+| `lite` | scope (user approves) → change → check (1 routine reviewer) → delivery-drafts → deliverable-ready | CSS, copy, config value, a contained fix whose cause is already known; ≤ ~5 files; no data/schema/API/auth/shared-flow change |
+| `full` | prepare (worktree) → analysis → plan (user approves) → coding ⇄ staged review (technical, then semantic) → test cases ⇄ review → evidence → final review → drafts → deliverable-ready | everything else |
+
+- The user picks with `--lite` / `--full`. Without a flag, propose `lite` when the request clearly fits the
+  row above and ask once (Lite / Full); otherwise use `full` without asking.
+- `lite` works **in place** in the repository checkout, on the ticket branch the `change` node creates; no
+  worktree, no test-case files, no surface evidence, no families.
+- Escalate the moment a `scope` answer is "no", the change spreads past its files, or `check` finds a design
+  problem: `$SDLC lane --ticket <id> --set full --reason '<why>'`. Never move `full` → `lite` to skip work.
+- In `lite`, `scope`, `change`, `delivery-drafts` and `read-review` have no units: **you do them yourself** from the
+  node card, then close the gate. `check` is still a separate subagent: never review your own change.
+
+## Model tiers
+
+Each unit runs on a tier; the profile's `models` maps it to a model, and `plan` prints both.
+
+| Tier | Agent type | Default model | Units |
+| --- | --- | --- | --- |
+| `light` | `kaneki-light` | profile `models.light` (falls back to `routine`) | prepare, coding, delivery-drafts |
+| `routine` | `kaneki-worker` | `models.routine` | analysis, impact, plan (feature), test cases and their review, **technical review**, evidence and its audit, final review |
+| `deep` | `kaneki-deep` | `models.deep` | investigate, fix-plan, requirement review, **semantic review**, triage |
+
+- `code-review` is staged: `technical-review` first; `semantic-review` only after it recorded PASS at the current
+  generation (the driver refuses the packet and the record otherwise). A technical FAIL closes the node with
+  `needs-changes` at once, so the deep tier is spent only on technically clean rounds.
+- After two failed code-review rounds, `plan` shows `coding` moved from `light` to `routine` (`escalated`).
+  Always dispatch on the `agentType` and `model` the plan or packet names.
+- `packet` reports `handedTokens` (what it gives the unit) and a `contextWarning` when that is over a quarter of
+  the profile's `contextWindow` for the tier (default 200k). Inputs that carry superseded rounds are handed over as
+  live-only copies.
+
+## Tracking (what the user watches)
+
+- After every driver command that changes a ticket, the driver rewrites `<ticketDir>/STATUS.md` (progress table,
+  next step, artifact links, recent decisions). Point the user to it rather than pasting long tables.
+- `$SDLC web --open` serves a live board of every ticket at `http://127.0.0.1:8765/` (read-only; artifact preview;
+  "Open in Zed"). `$SDLC tickets` prints the same list as JSON. Start the board only when the user asks.
+- `$SDLC zed-setup --target <workspace>` adds Zed tasks (board, tickets, status of the open file).
 
 ## Languages
 
@@ -73,19 +119,26 @@ the user approves the exact request. During the flow:
 ## Execution loop
 
 1. **Orient.** If the ticket directory has `HANDOFF.md`, read it first. Run `$SDLC status --ticket <id> --compact`.
-   New ticket → `$SDLC init --ticket <id> --kind bug|feature [--family f] [--repo r]` (no cycle flag = bug).
+   New ticket → `$SDLC init --ticket <id> --kind bug|feature --lane full|lite [--family f] [--repo r]` (no cycle flag = bug;
+   see Lanes).
    Never re-init to recover from a failure: run `status` and continue at `nextPending`.
 2. **Plan.** `$SDLC plan --ticket <id> --card` (next pending node, or `--node <name>`). It names the units
    (model, agentType), the boundary (`user` or `controller`), the conditional gates, the artifacts, the
    node card and the adapter files. Load the node card from `references/nodes/`; load nothing else.
-3. **Dispatch.** Per unit, write a facts JSON (`weakestClaim`, `observed`, `doubts`, `settled`,
+3. **Dispatch.** `executor: controller` (no units) → do the node yourself from its card, write its artifacts, go
+   to step 5. Otherwise, per unit, write a facts JSON (`weakestClaim`, `observed`, `doubts`, `settled`,
    `authorizedPaths`, and `findingsToFix` on a round two), then `$SDLC packet --ticket <id> --node <n> --unit <u> --facts <file>`.
-   Dispatch each unit as its `agentType` (`kaneki-worker` / `kaneki-deep`) to a distinct fresh subagent with one line:
+   Dispatch each unit as its `agentType` (`kaneki-light` / `kaneki-worker` / `kaneki-deep`), with the packet's `model`
+   passed explicitly, to a distinct fresh subagent with one line:
    *"Read the packet at `<path>` (sha256 `<packetDigest>`) and execute it."* Units with disjoint outputs go in one
-   message. The controller never fills a missing unit.
+   message; a staged unit (`after` in the plan) waits for its predecessor's PASS. The controller never fills a
+   missing unit.
 4. **Verify, then record.** Check the result file exists and its digest; spot-check the citations the
    gate depends on (open the cited `path:line` yourself). Then
    `$SDLC record --ticket <id> --node <n> --unit <u> --result <file> --model <model> --tokens <n> [--verdict ...]`.
+   Always pass `--tokens` (the subagent's total token usage from its completion notice): at close the driver writes
+   a `## Token usage` block (per agent, node total) at the end of the node's artifacts, and keeps the ticket-wide
+   `token-usage.md` current. A round recorded without it is shown as unreported.
    A model other than the planned one is refused. Then the reviewer unit, if planned, over the latest results.
    Reviewer FAIL `record`-class → fix the record and re-record; `artifact`-class → re-dispatch the failed
    worker (resume the same agent when the host allows) then one more reviewer round.
@@ -100,8 +153,8 @@ the user approves the exact request. During the flow:
      verdict is NEEDS CHANGES; the driver reopens the loop-back node and counts the round. At the cap (default 2) the
      driver raises G4: ask the user, then repeat with `--actor user`.
    - `triage-review` closes with `--reopen <earliest invalidated node>` or `--reopen none`.
-7. **Report.** After every closed node, print a progress table: `# | Node | Outcome | Model | Tokens` for the
-   settled nodes in trace order (from `status`). After `code-review` and after `execute-and-evidence`, write
+7. **Report.** After every closed node, say in one line what closed and what is next, and link `STATUS.md`
+   (the driver keeps it current; it holds the full table). After `code-review` and after `execute-and-evidence`, write
    `HANDOFF.md` (progress, next node, open questions, last decisions) and suggest a fresh session.
 8. Repeat from step 1 until `nextPending` is null.
 
@@ -132,7 +185,7 @@ evidence, final-review, drafts, deliverable-ready) before `respond-review`. Then
 same branch updates the open PR. Each new review is a new round.
 
 <HARD-GATE>
-Analyze before code: `coding` never starts before the plan node is approved with `--actor user` (or the
+Analyze before code: `coding` (`change` in the lite lane) never starts before the plan node (`scope`) is approved with `--actor user` (or the
 profile's explicit auto-skip), and every HIGH question in `questions.md` is ANSWERED with evidence.
 Never commit, push or open a PR: only `/kaneki-ship` does, after the user approves the exact request. Never
 deploy, delete work, change the git identity, or print secrets. Never skip a fired gate. Never start a

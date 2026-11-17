@@ -109,6 +109,10 @@
           "additionalProperties": {
             "type": "string"
           }
+        },
+        "lane": {
+          "type": "string",
+          "description": "Lane picked at init (`full` when absent: tickets created before lanes existed)."
         }
       }
     },

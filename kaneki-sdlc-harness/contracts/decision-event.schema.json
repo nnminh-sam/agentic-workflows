@@ -28,7 +28,8 @@
         "lock-broken",
         "ship-request",
         "ship",
-        "review-fetch"
+        "review-fetch",
+        "lane"
       ]
     },
     "prev": {
