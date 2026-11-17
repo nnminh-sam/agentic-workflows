@@ -1,4 +1,4 @@
-# kaneki-sdlc-harness
+# kaneki harness
 
 A generic, gated SDLC ticket harness for Claude Code, ported from `wms-flow` 1.22.4.
 One ticket (bug or feature) goes from intake through analysis, approved plan, coding, independent
