@@ -1175,7 +1175,6 @@ if (-not $?) { exit 1 }</code></pre>
   <h3 id="usage-blocked">What a block looks like</h3>
 <pre><code>$ mygit lint cmd 'git commit -m "Added stuff."'
 ✗ deny  CM003  header must be '&lt;type&gt;(&lt;scope&gt;)!: &lt;subject&gt;'
-✗ deny  CM008  subject must not end with a period
   try:  git commit -m "feat: add stuff"
 $ echo $?
 2</code></pre>

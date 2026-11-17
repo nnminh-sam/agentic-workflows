@@ -20,17 +20,18 @@ import (
 func init() { register(130, newLintCmd) }
 
 func newLintCmd(a *App) *cobra.Command {
+	s := newSession(a)
 	cmd := &cobra.Command{
 		Use:   "lint",
 		Short: "check a commit message, a pull request or a shell command against the active rules",
 		Long: "lint runs the same rules as the agent guard and the git hooks, without changing anything.\n" +
 			"Exit code: 0 ok or warnings only, 1 ask, 2 deny.",
 	}
-	cmd.AddCommand(newLintMsgCmd(a), newLintPRCmd(a), newLintCmdCmd(a))
+	cmd.AddCommand(newLintMsgCmd(a, s), newLintPRCmd(a, s), newLintCmdCmd(a, s))
 	return cmd
 }
 
-func newLintMsgCmd(a *App) *cobra.Command {
+func newLintMsgCmd(a *App, s *session) *cobra.Command {
 	var file string
 	var title bool
 	cmd := &cobra.Command{
@@ -60,7 +61,7 @@ func newLintMsgCmd(a *App) *cobra.Command {
 			default:
 				text = args[0]
 			}
-			cfg, err := guardResolve(a, "")
+			_, cfg, err := s.config(cmd)
 			if err != nil {
 				return err
 			}
@@ -76,7 +77,7 @@ func newLintMsgCmd(a *App) *cobra.Command {
 	return cmd
 }
 
-func newLintPRCmd(a *App) *cobra.Command {
+func newLintPRCmd(a *App, s *session) *cobra.Command {
 	var title, bodyFile, base, head string
 	cmd := &cobra.Command{
 		Use:     "pr --title <title> --body-file <file|-> [--base BRANCH] [--head BRANCH]",
@@ -94,7 +95,7 @@ func newLintPRCmd(a *App) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			cfg, err := guardResolve(a, "")
+			_, cfg, err := s.config(cmd)
 			if err != nil {
 				return err
 			}
@@ -119,7 +120,7 @@ func newLintPRCmd(a *App) *cobra.Command {
 	return cmd
 }
 
-func newLintCmdCmd(a *App) *cobra.Command {
+func newLintCmdCmd(a *App, s *session) *cobra.Command {
 	var dialect string
 	cmd := &cobra.Command{
 		Use:     `cmd "<shell command>" [--dialect bash|powershell]`,
@@ -140,11 +141,11 @@ func newLintCmdCmd(a *App) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			cfg, err := guardResolve(a, cwd)
+			env, cfg, err := s.config(cmd)
 			if err != nil {
 				return err
 			}
-			v := engine.Evaluate(engine.Request{Command: args[0], Dialect: d, Cwd: cwd}, cfg.Policy, guardEngineDeps(a))
+			v := engine.Evaluate(engine.Request{Command: args[0], Dialect: d, Cwd: cwd}, cfg.Policy, env.EngineDeps())
 			return lintReport(a, v)
 		},
 	}
