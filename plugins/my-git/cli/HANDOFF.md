@@ -27,19 +27,26 @@ There are also two High findings in `branch`: `switch -c` sets up tracking of th
 - `push` adds `-u` automatically for a new branch.
 - `pr release` does not fetch; it uses `<remote>/<head>`.
 
-**Fix status:**
-- `fix/branchcommit` (3b70de2) and `fix/repo` (eca3600) are merged here as daedb89 and 8289336. Every High and Medium finding in branch, commit and repo is fixed. The only thing skipped is the shared engine-deps helper (L14).
-- After those merges, `gofmt -s -l .` is clean, and `go vet ./...` and `go test ./...` pass.
-- Behaviour change: if the ID005 gh account check denies, `branch prune` now exits 2 instead of skipping the lookup of merged PRs.
-- **Pending:** `fix/pushpr` (`.claude/worktrees/fix-pushpr`) was still running at handoff. It covers the push and pr findings, including the three blocking pr bugs, and replaces `pr.PushArgs` with `app.PlanPush`.
+**Fix status:** every High and Medium review finding is fixed and merged into this branch:
+- daedb89: branch/commit fixes
+- 8289336: repo fixes
+- e9b500e: push/pr fixes, including the three blocking pr bugs, and `pr` now uses `app.PlanPush`
+
+The only finding skipped is L14, a low-priority shared helper for setting up the rules engine. After the merges, `gofmt -s -l .` is clean, `go vet ./...` and `go test ./...` pass, and `GOOS=windows go build ./...` passes.
+
+**Behaviour changes from the fixes:**
+- pr: failing test or lint now exits 1 (Ask finding `PR-CHECKS`); `--allow-failing-checks` overrides it.
+- pr: a head that is behind its remote branch gets an Ask finding (`PR-SYNC`).
+- pr: test and lint commands always run through `sh -c` or `cmd /S /C`.
+- push: a new branch gets `-u` automatically.
+- push: the ssh key in the push command is always quoted, and a leading `~` is expanded.
+- branch prune: exits 2 if the ID005 account check denies.
+- repo create: also pushes the long-lived branches (prod and staging).
 
 **Next steps:**
-1. Check `fix/pushpr` for a commit (`git -C .claude/worktrees/fix-pushpr log -1`; the base is e5073da's parent, 7608fe0).
-   - If it has one, cherry-pick it onto the integration branch.
-   - Otherwise finish the push/pr items in `docs/review-2026-11-17.md`.
-2. On the integration branch, run `gofmt -s -l .`, `go vet ./...` and `go test ./...`. Then merge or open a PR into `develop/feat/my-git-cli`.
-3. Remove the agent worktrees (`git worktree remove`). Coder branches: `worktree-agent-*`.
-4. Then continue with the "Not done" list below. Item 1 is now done; items 2–6 remain.
+1. Merge or open a PR from `develop/feat/my-git-cli-commands` into `develop/feat/my-git-cli`.
+2. Remove the agent worktrees and branches under `.claude/worktrees/`: `agent-*` (branches `worktree-agent-*`), `fix-*` (branches `fix/*`), and `integration` once merged.
+3. Continue with the "Not done" list below. Item 1 is done; items 2–6 remain. Also open: L14, the shared engine-deps helper.
 
 **Correction:** the default workflow template is `defaults/workflows/default.json`. `branching.json` is the BR rules contract, whose verdicts the default template must reproduce. The table below is the 2026-11-14 state.
 
