@@ -9,6 +9,7 @@ import (
 	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/config"
 	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/engine"
 	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/policy"
+	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/profile"
 	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/rules"
 	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/shell"
 	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/shellfmt"
@@ -90,35 +91,38 @@ func CommitGitArgs(e *Env, c *config.Resolved) (args []string, signed bool) {
 	if len(g.Email) > 0 {
 		pin("user.email", g.Email[0])
 	}
-	sg := g.Signing
-	switch sg.Format {
-	case "":
-	case sign.Default:
-		signed = true
-	case sign.None:
-		pin("commit.gpgsign", "false")
-	default:
-		pin("gpg.format", sg.Format)
-		pin("user.signingkey", sign.ExpandHome(sg.Key, e.Home))
-		switch sg.Format {
-		case sign.OpenPGP:
-			pin("gpg.program", sg.Program)
-		case sign.X509:
-			pin("gpg.x509.program", sg.Program)
+	for _, kv := range profile.SigningConfig(g.Signing) {
+		switch {
+		case kv[0] == "commit.gpgsign" && kv[1] == "true":
+			// -S signs this commit; no need to pin the setting
+		case kv[0] == "user.signingkey":
+			pin(kv[0], sign.ExpandHome(kv[1], e.Home))
+		default:
+			pin(kv[0], kv[1])
 		}
+	}
+	switch g.Signing.Format {
+	case "", sign.None:
+	default:
 		signed = true
 	}
 	return args, signed
 }
 
-// CommitStepArgs returns the arguments of the planned `git commit` step.
-func CommitStepArgs(pinned []string, signed bool, msgPath string) []string {
+// CommitArgs returns the arguments of a planned `git commit`: the pinned
+// -c pairs, commit, -S when signed, then the trailing arguments.
+func CommitArgs(pinned []string, signed bool, trailing ...string) []string {
 	out := append([]string{}, pinned...)
 	out = append(out, "commit")
 	if signed {
 		out = append(out, "-S")
 	}
-	return append(out, "-F", msgPath)
+	return append(out, trailing...)
+}
+
+// CommitStepArgs returns the arguments of the planned `git commit -F` step.
+func CommitStepArgs(pinned []string, signed bool, msgPath string) []string {
+	return CommitArgs(pinned, signed, "-F", msgPath)
 }
 
 // CommitEvaluate runs the whole rule engine (CM*, ID001, ID002, ID006,

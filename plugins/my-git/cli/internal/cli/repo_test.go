@@ -116,10 +116,19 @@ func (e *repoEnv) ghLogin(login string) {
 
 func (e *repoEnv) run(args ...string) (stdout string, code int) {
 	e.t.Helper()
+	return e.runEnv(nil, args...)
+}
+
+// runEnv is run with extra environment variables.
+func (e *repoEnv) runEnv(env map[string]string, args ...string) (stdout string, code int) {
+	e.t.Helper()
 	var out, errb bytes.Buffer
 	io := IO{
 		In: strings.NewReader(""), Out: &out, Err: &errb,
 		Getenv: func(k string) string {
+			if v, ok := env[k]; ok {
+				return v
+			}
 			switch k {
 			case "HOME":
 				return e.home
@@ -160,7 +169,12 @@ func (e *repoEnv) flat(args ...string) (string, int) {
 			Checks []struct{ Message string }
 		}
 	}
-	if code != 0 || json.Unmarshal([]byte(out), &o) != nil {
+	// stderr notes ("mygit: ...") trail the JSON document in the combined output
+	doc := out
+	if i := strings.LastIndex(out, "\n}\n"); i >= 0 {
+		doc = out[:i+3]
+	}
+	if code != 0 || json.Unmarshal([]byte(doc), &o) != nil {
 		return out, code
 	}
 	var b strings.Builder
@@ -350,15 +364,21 @@ func TestRepoProtect(t *testing.T) {
 			list: `[]`,
 			want: []string{
 				"gh api -X POST repos/acme/api/rulesets --input",
-				"gh api -X PATCH repos/acme/api -f default_branch=develop/base -F delete_branch_on_merge=true",
+				"gh api -X PATCH repos/acme/api -f default_branch=develop/base",
 				"create ruleset my-git: protect main and develop/base",
 			},
-			notWant: []string{"-X PUT"},
+			notWant: []string{"-X PUT", "delete_branch_on_merge"},
 		},
 		{
 			name:    "update when the named ruleset exists",
 			list:    rulesetList,
 			want:    []string{"gh api -X PUT repos/acme/api/rulesets/42 --input", "update ruleset"},
+			notWant: []string{"-X POST"},
+		},
+		{
+			name:    "renamed set: the my-git: ruleset is updated, not duplicated",
+			list:    `[{"id":5,"name":"unrelated"},{"id":77,"name":"my-git: protect main"}]`,
+			want:    []string{"gh api -X PUT repos/acme/api/rulesets/77 --input"},
 			notWant: []string{"-X POST"},
 		},
 		{
@@ -446,8 +466,8 @@ func TestRepoProtectBodyAndDefaultBranchMissing(t *testing.T) {
 func TestRepoProtectConfigApprovalsAndRepoFlag(t *testing.T) {
 	cfg := strings.Replace(repoConfig, `"defaultProfile"`, `"github": {"ruleset": {"approvals": 3}}, "defaultProfile"`, 1)
 	e := newRepoEnv(t, cfg)
-	e.ghLogin("octo")
 	e.runner.on("gh api repos/acme/other/rulesets", execx.Result{Stdout: `[]`})
+	e.ghLogin("octo-work")                                         // --repo picks the profile by owner (acme -> work)
 	out, code := e.flat("repo", "protect", "--repo", "acme/other") // outside a repository
 	if code != 0 || !strings.Contains(out, `"required_approving_review_count": 3`) {
 		t.Fatalf("exit %d\n%s", code, out)
@@ -622,5 +642,118 @@ func TestRepoBootstrapApplyAndJSON(t *testing.T) {
 	}
 	if o.Status != "planned" || o.Extra.Production != "main" || o.Extra.Staging != "develop/base" || len(o.Extra.Steps) != 2 || o.Extra.AlreadyDone {
 		t.Errorf("unexpected json: %+v", o)
+	}
+}
+
+func TestRepoProtectDeleteBranchOnMergeConfig(t *testing.T) {
+	cfg := strings.Replace(repoConfig, `"defaultProfile"`, `"github": {"deleteBranchOnMerge": true}, "defaultProfile"`, 1)
+	e := newRepoEnv(t, cfg)
+	e.inRepo("abc123", "develop/base")
+	e.runner.on("git remote get-url origin", execx.Result{Stdout: "git@github.com:acme/api.git\n"})
+	e.ghLogin("octo-work")
+	e.runner.on("gh api repos/acme/api/rulesets", execx.Result{Stdout: `[]`})
+	e.runner.on("gh api repos/acme/api/branches/develop/base --silent", execx.Result{})
+	out, code := e.flat("repo", "protect")
+	if code != 0 || !strings.Contains(out, "-f default_branch=develop/base -F delete_branch_on_merge=true") {
+		t.Fatalf("exit %d\n%s", code, out)
+	}
+}
+
+func TestRepoProtectNoPatchWhenNothingToSet(t *testing.T) {
+	e := protectEnv(t, `[]`, 0)
+	e.runner.prefixes = nil
+	delete(e.runner.Responses, "gh api repos/acme/api/branches/develop/base --silent")
+	e.inRepo("abc123", "develop/base")
+	e.runner.on("git remote get-url origin", execx.Result{Stdout: "git@github.com:acme/api.git\n"})
+	e.ghLogin("octo-work")
+	e.runner.on("gh api repos/acme/api/rulesets", execx.Result{Stdout: `[]`})
+	out, code := e.flat("repo", "protect")
+	if code != 0 || strings.Contains(out, "-X PATCH") {
+		t.Fatalf("exit %d, want no PATCH step\n%s", code, out)
+	}
+}
+
+func TestRepoProtectListFailureNotesOnStderr(t *testing.T) {
+	e := protectEnv(t, ``, 1)
+	out, code := e.run("repo", "protect")
+	if code != 0 || !strings.Contains(out, "mygit: could not list rulesets") {
+		t.Fatalf("exit %d\n%s", code, out)
+	}
+}
+
+func TestRepoProtectManualRender(t *testing.T) {
+	e := protectEnv(t, `[]`, 0)
+	out, code := e.run("repo", "protect", "--mode", "manual", "--shell", "bash")
+	if code != 0 {
+		t.Fatalf("exit %d\n%s", code, out)
+	}
+	for _, w := range []string{"gh api -X POST repos/acme/api/rulesets --input", "mygit-", ".ruleset.json"} {
+		if !strings.Contains(out, w) {
+			t.Errorf("manual script lacks %q:\n%s", w, out)
+		}
+	}
+}
+
+func TestRepoCreatePushesLongLivedBranches(t *testing.T) {
+	e := newRepoEnv(t, repoConfig)
+	e.inRepo("abc123", "main")
+	e.ghLogin("octo")
+	e.runner.on("git show-ref --verify --quiet refs/heads/", execx.Result{})
+	out, code := e.flat("repo", "create", "octo/site", "--public")
+	if code != 0 || !strings.Contains(out, "git push -u origin main develop/base") {
+		t.Fatalf("exit %d\n%s", code, out)
+	}
+}
+
+func TestRepoCreateEnvProfileBeatsOwnerMatch(t *testing.T) {
+	e := newRepoEnv(t, repoConfig)
+	e.inRepo("abc123", "main")
+	e.ghLogin("octo")
+	out, code := e.runEnv(map[string]string{"MYGIT_PROFILE": "personal"}, "repo", "create", "acme/api", "--private", "--json")
+	if code != 0 || !strings.Contains(out, `"profile": "personal"`) {
+		t.Fatalf("exit %d, want profile personal (env var beats owner match)\n%s", code, out)
+	}
+}
+
+func TestRepoBootstrapSigningNoneAndHome(t *testing.T) {
+	none := strings.Replace(repoConfig, `"email": ["octo@home.io"]`, `"email": ["octo@home.io"], "signing": {"format": "none"}`, 1)
+	e := newRepoEnv(t, none)
+	e.inRepo("", "main")
+	out, code := e.flat("repo", "bootstrap")
+	if code != 0 || !strings.Contains(out, "commit.gpgsign=false") || strings.Contains(out, " -S ") {
+		t.Fatalf("none: exit %d\n%s", code, out)
+	}
+	tilde := strings.Replace(repoConfig, `"key": "/k/work.pub"`, `"key": "~/.ssh/work.pub"`, 1)
+	e = newRepoEnv(t, tilde)
+	e.inRepo("", "main")
+	out, code = e.flat("repo", "bootstrap", "--profile", "work")
+	if code != 0 || !strings.Contains(out, "user.signingkey="+e.home+"/.ssh/work.pub") {
+		t.Fatalf("tilde: exit %d\n%s", code, out)
+	}
+}
+
+func TestRepoBootstrapManualQuoting(t *testing.T) {
+	e := newRepoEnv(t, repoConfig)
+	e.inRepo("", "main")
+	out, code := e.run("repo", "bootstrap", "--mode", "manual", "--shell", "bash")
+	if code != 0 {
+		t.Fatalf("exit %d\n%s", code, out)
+	}
+	if !strings.Contains(out, "'Octo'") && !strings.Contains(out, "user.name=Octo") {
+		t.Errorf("identity not rendered:\n%s", out)
+	}
+	if !strings.Contains(out, "'chore: bootstrap repository'") {
+		t.Errorf("commit subject must be quoted:\n%s", out)
+	}
+}
+
+func TestRepoCreateAskSeverityID005IsPlanCheck(t *testing.T) {
+	cfg := strings.Replace(repoConfig, `"defaultProfile"`, `"rules": {"ID005": "ask"}, "defaultProfile"`, 1)
+	e := newRepoEnv(t, cfg)
+	e.inRepo("abc123", "main")
+	e.ghLogin("octo") // not octo-work
+	out, code := e.run("repo", "create", "acme/api", "--private")
+	if code != 0 || !strings.Contains(out, "ID005") || !strings.Contains(out, "ask") {
+		t.Fatalf("exit %d, want a plan with an ask-level ID005 check\n%s", code, out)
 	}
 }

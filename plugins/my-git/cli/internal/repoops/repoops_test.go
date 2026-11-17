@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/defaults"
-	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/profile"
 	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/repoops"
 	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/workflow"
 )
@@ -179,25 +178,16 @@ func TestExistingAndDefaultBranch(t *testing.T) {
 	}
 }
 
-func TestIdentityConfig(t *testing.T) {
-	p := profile.Profile{}
-	p.Git.Name, p.Git.Email = "Octo", profile.StringList{"o@x.io", "b@x.io"}
-	p.Git.Signing = profile.Signing{Format: "ssh", Key: "/k.pub"}
-	kv, sign := repoops.IdentityConfig(p)
-	want := [][2]string{{"user.name", "Octo"}, {"user.email", "o@x.io"}, {"gpg.format", "ssh"}, {"user.signingkey", "/k.pub"}}
-	if !sign || !reflect.DeepEqual(kv, want) {
-		t.Errorf("kv=%v sign=%v", kv, sign)
+func TestFindRuleset(t *testing.T) {
+	l := []repoops.Existing{{ID: 7, Name: "other"}, {ID: 9, Name: "my-git: protect main"}, {ID: 11, Name: "my-git: protect main and develop/base"}}
+	if id, ok := repoops.FindRuleset(l, "my-git: protect main and develop/base"); !ok || id != 11 {
+		t.Errorf("exact: %d %v", id, ok)
 	}
-	p.Git.Signing = profile.Signing{Format: "none"}
-	if kv, sign := repoops.IdentityConfig(p); sign || len(kv) != 2 {
-		t.Errorf("none: kv=%v sign=%v", kv, sign)
+	if id, ok := repoops.FindRuleset(l, "my-git: protect main, staging and develop"); !ok || id != 9 {
+		t.Errorf("prefix fallback: %d %v", id, ok)
 	}
-	if kv, sign := repoops.IdentityConfig(profile.Profile{}); sign || kv != nil {
-		t.Errorf("empty: kv=%v sign=%v", kv, sign)
-	}
-	got := repoops.GitArgs([][2]string{{"user.name", "O"}}, "commit", "-m", "x")
-	if !reflect.DeepEqual(got, []string{"-c", "user.name=O", "commit", "-m", "x"}) {
-		t.Errorf("GitArgs = %v", got)
+	if _, ok := repoops.FindRuleset(l[:1], "my-git: protect main"); ok {
+		t.Error("foreign ruleset matched")
 	}
 }
 
@@ -220,6 +210,9 @@ func TestPlan(t *testing.T) {
 			want: [][]string{{"commit", "-m", msg}, {"branch", "develop/base", "main"}}},
 		{name: "bootstrap commit exists, staging missing", f: with(func(f *repoops.Facts) {
 			f.HasCommits, f.ProductionRef, f.ProductionLen, f.ProductionRoot = true, true, 1, repoops.BootstrapMessage
+		}), want: [][]string{{"branch", "develop/base", "main"}}},
+		{name: "legacy python bootstrap subject counts too", f: with(func(f *repoops.Facts) {
+			f.HasCommits, f.ProductionRef, f.ProductionLen, f.ProductionRoot = true, true, 1, repoops.LegacyBootstrapMessage
 		}), want: [][]string{{"branch", "develop/base", "main"}}},
 		{name: "everything exists", f: with(func(f *repoops.Facts) {
 			f.HasCommits, f.ProductionRef, f.StagingRef, f.ProductionLen, f.ProductionRoot = true, true, true, 1, repoops.BootstrapMessage

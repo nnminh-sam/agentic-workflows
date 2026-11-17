@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/app"
+	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/config"
 	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/engine"
 	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/execx"
 	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/gitx"
@@ -95,6 +96,38 @@ func repoGate(a *App, p *app.Planner, cmds ...execx.Cmd) error {
 	return nil
 }
 
+// repoByOwner re-resolves the profile from the repository owner (config
+// "match" with remoteOwner). It applies only when no more specific source
+// (--profile, MYGIT_PROFILE, local config) chose the profile: the current
+// reason is a match, the default profile or no selection at all.
+func repoByOwner(a *App, cmd *cobra.Command, e *app.Env, c *config.Resolved, owner string) (*app.Env, *config.Resolved, string, error) {
+	reason := c.ProfileReason
+	generic := strings.HasPrefix(reason, "match") || reason == "defaultProfile" || c.ProfileName == ""
+	if a.Opts.Profile != "" || !generic {
+		return e, c, reason, nil
+	}
+	dir, _ := a.Cwd()
+	pick := func(m profile.Match) string { return m.Profile }
+	name, why := profile.FindMatch(c.File.Match, profile.Where{RemoteOwner: owner, Dir: dir, Home: e.Home, GOOS: e.GOOS}, pick)
+	if name == "" {
+		return e, c, reason, nil
+	}
+	if name != c.ProfileName {
+		deps := depsOf(a)
+		deps.Flags.Profile = name
+		ne, err := app.Load(cmd.Context(), deps)
+		if err != nil {
+			return nil, nil, "", err
+		}
+		nc, err := ne.Require()
+		if err != nil {
+			return nil, nil, "", err
+		}
+		return ne, nc, why, nil
+	}
+	return e, c, why, nil
+}
+
 // ---------------------------------------------------------------- create
 
 func repoCreateCmd(a *App, s *session) *cobra.Command {
@@ -121,23 +154,9 @@ func repoCreateCmd(a *App, s *session) *cobra.Command {
 			if err := e.RequireRepo(); err != nil {
 				return fmt.Errorf("%w: run it in the local repository to publish", err)
 			}
-			reason := c.ProfileReason
-			if a.Opts.Profile == "" {
-				dir, _ := a.Cwd()
-				pick := func(m profile.Match) string { return m.Profile }
-				if name, why := profile.FindMatch(c.File.Match, profile.Where{RemoteOwner: owner, Dir: dir, Home: e.Home, GOOS: e.GOOS}, pick); name != "" {
-					reason = why
-					if name != c.ProfileName {
-						deps := depsOf(a)
-						deps.Flags.Profile = name
-						if e, err = app.Load(cmd.Context(), deps); err != nil {
-							return err
-						}
-						if c, err = e.Require(); err != nil {
-							return err
-						}
-					}
-				}
+			e, c, reason, err := repoByOwner(a, cmd, e, c, owner)
+			if err != nil {
+				return err
 			}
 			p := e.NewPlanner(planArgv(cmd, args))
 			remote := "origin"
@@ -168,6 +187,21 @@ func repoCreateCmd(a *App, s *session) *cobra.Command {
 				p.Note("profile %s (%s)", c.ProfileName, reason)
 			}
 			p.Gh("create "+args[0]+" ("+strings.TrimPrefix(vis, "--")+") and push", ghArgs...)
+			if c.Workflow != nil {
+				var long []string
+				for _, br := range []string{c.Workflow.Production, c.Workflow.Staging} {
+					if ok, _ := e.Git.BranchExists(cmd.Context(), br); ok && br != "" {
+						long = append(long, br)
+					}
+				}
+				if len(long) > 0 {
+					pushArgs := append([]string{"push", "-u", remote}, long...)
+					if err := repoGate(a, p, e.Git.Cmd(pushArgs...)); err != nil {
+						return err
+					}
+					p.Git("push the long-lived branches ("+strings.Join(long, ", ")+") and set upstream", pushArgs...)
+				}
+			}
 			return s.runExtra(cmd, p, nil, map[string]any{
 				"repo": args[0], "visibility": strings.TrimPrefix(vis, "--"),
 				"profile": c.ProfileName, "profileReason": reason,
@@ -191,18 +225,24 @@ func repoProtectCmd(a *App, s *session) *cobra.Command {
 		Short: "apply the workflow's branch protection as a GitHub ruleset (plan)",
 		Long: "protect builds a ruleset from the active workflow template's protected branches (PR required, no force-push, " +
 			"no deletion, signed commits with --require-signed), creates it or updates the mygit ruleset of the same name, " +
-			"sets the GitHub default branch and turns on deleting merged head branches.",
+			"sets the GitHub default branch and, with config github.deleteBranchOnMerge, turns on deleting merged head branches.",
 		Example: "  mygit repo protect --approvals 1 --require-signed",
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			p, e, err := s.planner(cmd, args)
+			e, c, err := s.config(cmd)
 			if err != nil {
 				return err
 			}
-			c, err := e.Require()
-			if err != nil {
-				return err
+			if repoFlag != "" {
+				owner, _, err := repoops.ParseSlug(repoFlag)
+				if err != nil {
+					return err
+				}
+				if e, c, _, err = repoByOwner(a, cmd, e, c, owner); err != nil {
+					return err
+				}
 			}
+			p := e.NewPlanner(planArgv(cmd, args))
 			if c.Workflow == nil {
 				return fmt.Errorf("no workflow template is active")
 			}
@@ -260,8 +300,9 @@ func repoProtectCmd(a *App, s *session) *cobra.Command {
 			} else {
 				p.Note("could not list rulesets (%s); planning a new one. Rulesets on private repositories need GitHub Pro/Team/Enterprise",
 					strings.TrimSpace(firstLine(res.Stderr)))
+				fmt.Fprintf(a.Err, "mygit: could not list rulesets: %s\n", strings.TrimSpace(firstLine(res.Stderr)))
 			}
-			id, found := repoops.FindByName(existing, rs.Name)
+			id, found := repoops.FindRuleset(existing, rs.Name)
 
 			// default branch: only when it already exists on GitHub
 			def := repoops.DefaultBranch(c.Workflow)
@@ -286,23 +327,32 @@ func repoProtectCmd(a *App, s *session) *cobra.Command {
 			}
 			bodyPath := p.File("ruleset.json", rs.JSON())
 			rulesetCmd := e.Gh.Cmd("api", "-X", method, endpoint, "--input", bodyPath)
+			delOnMerge := c.File.GitHub.DeleteBranchOnMerge
 			patch := []string{"api", "-X", "PATCH", "repos/" + slug}
+			var patchWhat []string
 			if defOnRemote {
 				patch = append(patch, "-f", "default_branch="+def)
+				patchWhat = append(patchWhat, "default branch "+def)
 			} else {
 				p.Note("branch %s is not on GitHub yet: push it, then re-run to set it as the default branch", def)
 			}
-			patch = append(patch, "-F", "delete_branch_on_merge=true")
-			patchCmd := e.Gh.Cmd(patch...)
-			if err := repoGate(a, p, rulesetCmd, patchCmd); err != nil {
+			if delOnMerge {
+				patch = append(patch, "-F", "delete_branch_on_merge=true")
+				patchWhat = append(patchWhat, "delete merged head branches")
+			}
+			cmds := []execx.Cmd{rulesetCmd}
+			var patchCmd execx.Cmd
+			if len(patchWhat) > 0 {
+				patchCmd = e.Gh.Cmd(patch...)
+				cmds = append(cmds, patchCmd)
+			}
+			if err := repoGate(a, p, cmds...); err != nil {
 				return err
 			}
 			p.Gh(desc, rulesetCmd.Args...)
-			patchDesc := "delete merged head branches"
-			if defOnRemote {
-				patchDesc = "default branch " + def + ", delete merged head branches"
+			if len(patchWhat) > 0 {
+				p.Gh(strings.Join(patchWhat, ", "), patchCmd.Args...)
 			}
-			p.Gh(patchDesc, patchCmd.Args...)
 			var approvalsOut any
 			for _, r := range rs.Rules {
 				if pp, ok := r.Parameters.(repoops.PullRequestParams); ok {
@@ -405,7 +455,7 @@ func repoBootstrapCmd(a *App, s *session) *cobra.Command {
 			if done {
 				p.Note("%s and %s already exist: nothing to bootstrap", f.Production, f.Staging)
 			}
-			kv, sign := repoops.IdentityConfig(c.Profile)
+			pinned, signed := app.CommitGitArgs(e, c)
 			var checked []execx.Cmd
 			type planned struct {
 				desc string
@@ -415,13 +465,9 @@ func repoBootstrapCmd(a *App, s *session) *cobra.Command {
 			for _, st := range steps {
 				args := st.Args
 				if st.Commit {
-					sub := []string{"commit"}
-					if sign {
-						sub = append(sub, "-S")
-					}
-					args = repoops.GitArgs(kv, append(sub, st.Args[1:]...)...)
-					checked = append(checked, e.Git.Cmd(args...))
+					args = app.CommitArgs(pinned, signed, st.Args[1:]...)
 				}
+				checked = append(checked, e.Git.Cmd(args...))
 				plannedSteps = append(plannedSteps, planned{st.Description, args})
 			}
 			if len(checked) > 0 {

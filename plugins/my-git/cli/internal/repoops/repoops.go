@@ -10,12 +10,19 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/profile"
 	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/workflow"
 )
 
 // BootstrapMessage is the subject of the first commit.
 const BootstrapMessage = "chore: bootstrap repository"
+
+// LegacyBootstrapMessage is the subject the Python gitguard used; a first
+// commit with it counts as the bootstrap commit too.
+const LegacyBootstrapMessage = "chore: initialize repository"
+
+func isBootstrapMessage(s string) bool {
+	return s == BootstrapMessage || s == LegacyBootstrapMessage
+}
 
 var slugRe = regexp.MustCompile(`^([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)$`)
 
@@ -170,6 +177,24 @@ func FindByName(l []Existing, name string) (int64, bool) {
 	return 0, false
 }
 
+// RulesetPrefix starts the name of every ruleset mygit creates.
+const RulesetPrefix = "my-git: "
+
+// FindRuleset returns the ruleset to update: the one named exactly name,
+// else the first whose name starts with RulesetPrefix (the protected set
+// changed since it was created).
+func FindRuleset(l []Existing, name string) (int64, bool) {
+	if id, ok := FindByName(l, name); ok {
+		return id, true
+	}
+	for _, e := range l {
+		if strings.HasPrefix(e.Name, RulesetPrefix) {
+			return e.ID, true
+		}
+	}
+	return 0, false
+}
+
 // DefaultBranch returns the branch GitHub should use as default: the one
 // marked githubDefault (staging first), else the staging branch.
 func DefaultBranch(c *workflow.Compiled) string {
@@ -179,41 +204,6 @@ func DefaultBranch(c *workflow.Compiled) string {
 		}
 	}
 	return c.Staging
-}
-
-// ---------------------------------------------------------------- identity
-
-// IdentityConfig returns the -c pairs that pin the profile's author on a
-// commit: user.name, user.email (first address) and, when the profile signs,
-// gpg.format / user.signingkey / program. It also reports whether commits
-// must be signed (-S).
-func IdentityConfig(p profile.Profile) (kv [][2]string, sign bool) {
-	if p.Git.Name != "" {
-		kv = append(kv, [2]string{"user.name", p.Git.Name})
-	}
-	if len(p.Git.Email) > 0 && p.Git.Email[0] != "" {
-		kv = append(kv, [2]string{"user.email", p.Git.Email[0]})
-	}
-	switch p.Git.Signing.Format {
-	case "", profile.SignNone:
-		return kv, false
-	}
-	for _, e := range profile.SigningConfig(p.Git.Signing) {
-		if e[0] != "commit.gpgsign" {
-			kv = append(kv, e)
-		}
-	}
-	return kv, true
-}
-
-// GitArgs prefixes sub (the git arguments after the program name) with the
-// -c pairs.
-func GitArgs(kv [][2]string, sub ...string) []string {
-	var out []string
-	for _, e := range kv {
-		out = append(out, "-c", e[0]+"="+e[1])
-	}
-	return append(out, sub...)
 }
 
 // ---------------------------------------------------------------- bootstrap
@@ -257,7 +247,7 @@ func Plan(f Facts) (steps []Step, done bool, err error) {
 		if !f.ProductionRef {
 			return nil, false, fmt.Errorf("the repository has commits but no %q branch; bootstrap starts a fresh repository (create or rename %s yourself first)", prod, prod)
 		}
-		ours := f.ProductionLen == 1 && f.ProductionRoot == BootstrapMessage
+		ours := f.ProductionLen == 1 && isBootstrapMessage(f.ProductionRoot)
 		switch {
 		case ours:
 		case f.StagingRef:
