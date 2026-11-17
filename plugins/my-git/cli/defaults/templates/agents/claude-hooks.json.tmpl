@@ -1,0 +1,29 @@
+{
+  "description": "mygit guard: check git/gh commands against the active profile and rules; brief the agent at session start",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": {{json (printf "%s guard --agent claude" .Command)}},
+            "timeout": {{.Timeout}}
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": {{json (printf "%s guard --agent claude --session-start" .Command)}},
+            "timeout": {{.Timeout}}
+          }
+        ]
+      }
+    ]
+  }
+}

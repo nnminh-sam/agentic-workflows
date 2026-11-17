@@ -1,0 +1,591 @@
+{
+ "parse_remote": [
+  {
+   "url": "git@github.com:octocat/repo.git",
+   "kind": "ssh",
+   "host": "github.com",
+   "owner": "octocat"
+  },
+  {
+   "url": "ssh://git@github.com/octocat/repo.git",
+   "kind": "ssh",
+   "host": "github.com",
+   "owner": "octocat"
+  },
+  {
+   "url": "git+ssh://git@GitHub.com:22/o/r",
+   "kind": "ssh",
+   "host": "github.com",
+   "owner": "o"
+  },
+  {
+   "url": "https://github.com/octocat/repo.git",
+   "kind": "https",
+   "host": "github.com",
+   "owner": "octocat"
+  },
+  {
+   "url": "http://github.com/o/r",
+   "kind": "http",
+   "host": "github.com",
+   "owner": "o"
+  },
+  {
+   "url": "git://github.com/o/r",
+   "kind": "git",
+   "host": "github.com",
+   "owner": "o"
+  },
+  {
+   "url": "https://x:tok@github.com/o/r.git",
+   "kind": "https",
+   "host": "github.com",
+   "owner": "o"
+  },
+  {
+   "url": "https://github.com/",
+   "kind": "https",
+   "host": "github.com",
+   "owner": ""
+  },
+  {
+   "url": "ftp://example.com/x",
+   "kind": "other",
+   "host": "example.com",
+   "owner": ""
+  },
+  {
+   "url": "../other",
+   "kind": "other",
+   "host": "",
+   "owner": ""
+  },
+  {
+   "url": "D:/repos/x",
+   "kind": "other",
+   "host": "",
+   "owner": ""
+  },
+  {
+   "url": "file:///tmp/x",
+   "kind": "other",
+   "host": "",
+   "owner": ""
+  },
+  {
+   "url": "/abs/path",
+   "kind": "other",
+   "host": "",
+   "owner": ""
+  },
+  {
+   "url": "relative",
+   "kind": "other",
+   "host": "",
+   "owner": ""
+  },
+  {
+   "url": "github.com:owner",
+   "kind": "other",
+   "host": "",
+   "owner": ""
+  },
+  {
+   "url": "C:\\repos\\x",
+   "kind": "other",
+   "host": "",
+   "owner": ""
+  },
+  {
+   "url": "user@host:path/to/repo",
+   "kind": "ssh",
+   "host": "host",
+   "owner": "path"
+  }
+ ],
+ "is_local_url": [
+  {
+   "url": "git@github.com:octocat/repo.git",
+   "local": false
+  },
+  {
+   "url": "ssh://git@github.com/octocat/repo.git",
+   "local": false
+  },
+  {
+   "url": "git+ssh://git@GitHub.com:22/o/r",
+   "local": false
+  },
+  {
+   "url": "https://github.com/octocat/repo.git",
+   "local": false
+  },
+  {
+   "url": "http://github.com/o/r",
+   "local": false
+  },
+  {
+   "url": "git://github.com/o/r",
+   "local": false
+  },
+  {
+   "url": "https://x:tok@github.com/o/r.git",
+   "local": false
+  },
+  {
+   "url": "https://github.com/",
+   "local": false
+  },
+  {
+   "url": "ftp://example.com/x",
+   "local": false
+  },
+  {
+   "url": "../other",
+   "local": true
+  },
+  {
+   "url": "D:/repos/x",
+   "local": true
+  },
+  {
+   "url": "file:///tmp/x",
+   "local": true
+  },
+  {
+   "url": "/abs/path",
+   "local": true
+  },
+  {
+   "url": "relative",
+   "local": true
+  },
+  {
+   "url": "github.com:owner",
+   "local": false
+  },
+  {
+   "url": "C:\\repos\\x",
+   "local": true
+  },
+  {
+   "url": "user@host:path/to/repo",
+   "local": false
+  }
+ ],
+ "is_gh_helper": [
+  {
+   "helper": "!gh auth git-credential",
+   "gh": true
+  },
+  {
+   "helper": "!/opt/homebrew/bin/gh auth git-credential",
+   "gh": true
+  },
+  {
+   "helper": "!\"C:\\Program Files\\GitHub CLI\\gh.exe\" auth git-credential",
+   "gh": true
+  },
+  {
+   "helper": "osxkeychain",
+   "gh": false
+  },
+  {
+   "helper": "manager",
+   "gh": false
+  },
+  {
+   "helper": "!ghost auth git-credential",
+   "gh": false
+  },
+  {
+   "helper": "",
+   "gh": false
+  },
+  {
+   "helper": "!gh.exe auth git-credential",
+   "gh": true
+  },
+  {
+   "helper": "gh auth git-credential",
+   "gh": true
+  },
+  {
+   "helper": "!'gh' auth git-credential",
+   "gh": true
+  }
+ ],
+ "ssh_problems": [
+  {
+   "cmd": "ssh -i \"D:/keys/gh/id_ed25519\" -o IdentitiesOnly=yes",
+   "key": "keys/gh/id_ed25519",
+   "n": 0
+  },
+  {
+   "cmd": "ssh -i \"D:\\keys\\gh\\id_ed25519\" -oIdentitiesOnly=YES",
+   "key": "keys/gh/id_ed25519",
+   "n": 0
+  },
+  {
+   "cmd": "ssh -i D:\\keys\\gh\\id_ed25519 -o IdentitiesOnly=yes",
+   "key": "keys/gh/id_ed25519",
+   "n": 1
+  },
+  {
+   "cmd": "ssh -i ~/.ssh/id_rsa -o IdentitiesOnly=yes",
+   "key": "keys/gh/id_ed25519",
+   "n": 1
+  },
+  {
+   "cmd": "ssh -i \"D:/keys/gh/id_ed25519\"",
+   "key": "keys/gh/id_ed25519",
+   "n": 1
+  },
+  {
+   "cmd": "ssh -o IdentitiesOnly=yes",
+   "key": "keys/gh/id_ed25519",
+   "n": 1
+  },
+  {
+   "cmd": "ssh -o IdentitiesOnly=yes -i/k/gh/id_ed25519",
+   "key": "gh/id_ed25519",
+   "n": 0
+  },
+  {
+   "cmd": "ssh -i k -o IdentitiesOnly=yes",
+   "key": "",
+   "n": 0
+  },
+  {
+   "cmd": "ssh",
+   "key": "",
+   "n": 2
+  },
+  {
+   "cmd": "ssh -o 'IdentitiesOnly yes' -i k",
+   "key": "k",
+   "n": 0
+  },
+  {
+   "cmd": "ssh -i 'unterminated",
+   "key": "k",
+   "n": 2
+  }
+ ],
+ "cleanup": [
+  {
+   "in": "\n\nfeat: add x   \n\n\n\nbody\n\n",
+   "out": "feat: add x\n\nbody"
+  },
+  {
+   "in": "a\r\nb\r\n",
+   "out": "a\nb"
+  },
+  {
+   "in": "",
+   "out": ""
+  },
+  {
+   "in": "  \n",
+   "out": ""
+  },
+  {
+   "in": "x\n\n\ny",
+   "out": "x\n\ny"
+  }
+ ],
+ "check_message": [
+  {
+   "msg": "feat: add login",
+   "decision": "allow",
+   "rules": [],
+   "header_warn_decision": "allow",
+   "header_rules": []
+  },
+  {
+   "msg": "Added stuff.",
+   "decision": "deny",
+   "rules": [
+    "CM003"
+   ],
+   "header_warn_decision": "warn",
+   "header_rules": [
+    "CM003"
+   ]
+  },
+  {
+   "msg": "feat: add stuff.",
+   "decision": "deny",
+   "rules": [
+    "CM008"
+   ],
+   "header_warn_decision": "warn",
+   "header_rules": [
+    "CM008"
+   ]
+  },
+  {
+   "msg": "feat:add",
+   "decision": "deny",
+   "rules": [
+    "CM003"
+   ],
+   "header_warn_decision": "warn",
+   "header_rules": [
+    "CM003"
+   ]
+  },
+  {
+   "msg": "feat(API)!: X.",
+   "decision": "deny",
+   "rules": [
+    "CM005",
+    "CM006",
+    "CM008",
+    "CM009"
+   ],
+   "header_warn_decision": "warn",
+   "header_rules": [
+    "CM005",
+    "CM006",
+    "CM008",
+    "CM009"
+   ]
+  },
+  {
+   "msg": "Fix: Typo.",
+   "decision": "deny",
+   "rules": [
+    "CM004",
+    "CM008",
+    "CM009"
+   ],
+   "header_warn_decision": "warn",
+   "header_rules": [
+    "CM004",
+    "CM008",
+    "CM009"
+   ]
+  },
+  {
+   "msg": "feat: WIP xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "decision": "deny",
+   "rules": [
+    "CM007",
+    "CM014"
+   ],
+   "header_warn_decision": "warn",
+   "header_rules": [
+    "CM007",
+    "CM014"
+   ]
+  },
+  {
+   "msg": "fixup! anything",
+   "decision": "allow",
+   "rules": [],
+   "header_warn_decision": "allow",
+   "header_rules": []
+  },
+  {
+   "msg": "Merge pull request #1 from x",
+   "decision": "allow",
+   "rules": [],
+   "header_warn_decision": "allow",
+   "header_rules": []
+  },
+  {
+   "msg": "chore(release): v1.0.0",
+   "decision": "allow",
+   "rules": [],
+   "header_warn_decision": "allow",
+   "header_rules": []
+  },
+  {
+   "msg": "feat: add x\nbody",
+   "decision": "deny",
+   "rules": [
+    "CM011"
+   ],
+   "header_warn_decision": "allow",
+   "header_rules": []
+  },
+  {
+   "msg": "feat: add x\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+   "decision": "deny",
+   "rules": [
+    "CM016"
+   ],
+   "header_warn_decision": "allow",
+   "header_rules": []
+  },
+  {
+   "msg": "feat: add x\n\nGenerated with Claude Code",
+   "decision": "deny",
+   "rules": [
+    "CM016"
+   ],
+   "header_warn_decision": "allow",
+   "header_rules": []
+  },
+  {
+   "msg": "revert: feat: add x",
+   "decision": "allow",
+   "rules": [],
+   "header_warn_decision": "allow",
+   "header_rules": []
+  },
+  {
+   "msg": "feat(a,b): x y",
+   "decision": "deny",
+   "rules": [
+    "CM005"
+   ],
+   "header_warn_decision": "warn",
+   "header_rules": [
+    "CM005"
+   ]
+  },
+  {
+   "msg": "docs(readme): add usage",
+   "decision": "allow",
+   "rules": [],
+   "header_warn_decision": "allow",
+   "header_rules": []
+  },
+  {
+   "msg": "feat: added login",
+   "decision": "warn",
+   "rules": [
+    "CM010"
+   ],
+   "header_warn_decision": "warn",
+   "header_rules": [
+    "CM010"
+   ]
+  },
+  {
+   "msg": "style: format",
+   "decision": "allow",
+   "rules": [],
+   "header_warn_decision": "allow",
+   "header_rules": []
+  },
+  {
+   "msg": "BREAKING: x",
+   "decision": "deny",
+   "rules": [
+    "CM004",
+    "CM006"
+   ],
+   "header_warn_decision": "warn",
+   "header_rules": [
+    "CM004",
+    "CM006"
+   ]
+  },
+  {
+   "msg": "feat!: drop node 16\n\nBREAKING CHANGE: node 18+",
+   "decision": "allow",
+   "rules": [],
+   "header_warn_decision": "allow",
+   "header_rules": []
+  }
+ ],
+ "body_sections": [
+  {
+   "body": "## Summary\nAdd x.\n\n## Detailed changes\n- add x\n\n## Explanation\nNeeded.\n\n## Test results\n### Unit\n`npm test`: 3 passed\n### Lint\n`npm run lint`: clean\n",
+   "problems": []
+  },
+  {
+   "body": "",
+   "problems": [
+    "missing section '## Summary'",
+    "missing section '## Detailed changes'",
+    "missing section '## Explanation'",
+    "missing section '## Test results (local)'"
+   ]
+  },
+  {
+   "body": "nothing",
+   "problems": [
+    "missing section '## Summary'",
+    "missing section '## Detailed changes'",
+    "missing section '## Explanation'",
+    "missing section '## Test results (local)'"
+   ]
+  },
+  {
+   "body": "## Summary\nAdd x.\n\n## Detailed changes\n- add x\n\n## Explanation\n<!-- why -->\nTODO\n\n## Test results\n### Unit\n`npm test`: 3 passed\n### Lint\n`npm run lint`: clean\n",
+   "problems": [
+    "section 'Explanation' is empty"
+   ]
+  },
+  {
+   "body": "## Summary\nAdd x.\n\n## Detailed changes\n- add x\n\n## Explanation\nNeeded.\n\n## Test results\n### Unit\n`npm test`: 3 passed\n",
+   "problems": [
+    "section 'Test results (local)' must report 'lint' results"
+   ]
+  },
+  {
+   "body": "# Summary\nAdd x.\n\n# Detailed changes\n- add x\n\n# Explanation\nNeeded.\n\n# Test results\n## Unit\n`npm test`: 3 passed\n## Lint\n`npm run lint`: clean\n",
+   "problems": []
+  },
+  {
+   "body": "## summary\nAdd x.\n\n## Detailed changes\n- add x\n\n## Explanation\nNeeded.\n\n## Test results\n### Unit\n`npm test`: 3 passed\n### Lint\n`npm run lint`: clean\n",
+   "problems": []
+  },
+  {
+   "body": "## Summary\nAdd x.\n\n## Detailed changes\n- add x\n\n## Explanation\nNeeded.\n\n## Test results\n### Unit\n`npm test`: 3 passed\n### Lint\n`npm run lint`: clean\n\n## Extra\nx\n",
+   "problems": []
+  },
+  {
+   "body": "## Summary\n### sub\n\n## Detailed changes\n- a\n## Explanation\nb\n## Test results\nunit lint\n",
+   "problems": [
+    "section 'Summary' is empty"
+   ]
+  }
+ ],
+ "pr_target": [
+  {
+   "base": "develop/base",
+   "head": "develop/feat/x",
+   "problem": false
+  },
+  {
+   "base": "main",
+   "head": "develop/base",
+   "problem": false
+  },
+  {
+   "base": "main",
+   "head": "develop/feat/x",
+   "problem": true
+  },
+  {
+   "base": "main",
+   "head": "",
+   "problem": true
+  },
+  {
+   "base": "develop/feat/y",
+   "head": "develop/feat/x",
+   "problem": true
+  },
+  {
+   "base": "",
+   "head": "x",
+   "problem": true
+  },
+  {
+   "base": "main",
+   "head": "octocat:develop/base",
+   "problem": false
+  },
+  {
+   "base": "develop/base",
+   "head": "",
+   "problem": false
+  }
+ ]
+}

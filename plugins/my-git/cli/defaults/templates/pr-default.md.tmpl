@@ -1,0 +1,14 @@
+{{- range $i, $s := .Sections}}{{if $i}}
+
+{{end}}## {{$s.Name}}
+
+{{if $s.Content}}{{$s.Content}}
+{{- else if eq $s.Name "Summary"}}<!-- One or two sentences: what this PR does, at a glance. -->
+{{- else if eq $s.Name "Detailed changes"}}<!-- Bullet list of the concrete changes, grouped by area/file. -->
+-
+{{- else if eq $s.Name "Explanation"}}<!-- Why these changes: the problem, the approach chosen, alternatives rejected, risks. -->
+{{- else if eq $s.Name "Test results"}}<!-- Run locally before opening the PR. Paste the command and the outcome. -->
+- Unit tests: `<command>` → <N passed / failed>
+- Lint: `<command>` → <clean / N issues>
+{{- else}}<!-- {{$s.Name}} -->
+{{- end}}{{end}}

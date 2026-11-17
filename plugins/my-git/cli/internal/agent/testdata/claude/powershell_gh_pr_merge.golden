@@ -1,0 +1,2 @@
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"mygit: [GH002] gh pr merge: Merging a pull request.\nRule details: mygit rules explain GH002"}}
+exit=0

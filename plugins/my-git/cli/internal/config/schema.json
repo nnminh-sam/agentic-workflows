@@ -1,0 +1,235 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/nnminh-sam/agentic-workflows/plugins/my-git/schema/v1.json",
+  "title": "mygit config",
+  "description": "One schema for every layer: global (~/.config/mygit/config.json), project (.mygit.json) and local (.mygit.local.json).",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "type": "integer", "const": 1 },
+    "defaultProfile": { "type": "string", "description": "Global only. Profile used when nothing else selects one." },
+    "profile": { "type": "string", "description": "Local only. The profile for this repository." },
+    "profiles": {
+      "type": "object",
+      "description": "Global or local only; never in the committed project file.",
+      "additionalProperties": { "$ref": "#/$defs/profile" }
+    },
+    "match": {
+      "type": "array",
+      "description": "Global only. First hit wins (remoteOwner rules before path rules).",
+      "items": { "$ref": "#/$defs/match" }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "enum": ["auto", "manual"] },
+        "shell": { "enum": ["auto", "powershell", "cmd", "gitbash", "bash", "zsh"] },
+        "agentApply": { "enum": ["ask", "allow"] }
+      }
+    },
+    "rules": { "$ref": "#/$defs/ruleMap" },
+    "rulesets": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "extends": { "type": "string" },
+          "rules": { "$ref": "#/$defs/ruleMap" }
+        }
+      }
+    },
+    "ruleset": { "type": "string", "description": "Project or local. The active rule set." },
+    "defaultRuleset": { "type": "string", "description": "Global only." },
+    "locked": {
+      "type": "array",
+      "description": "Global only. Rules lower layers and rule sets may make stricter but never weaker.",
+      "items": { "$ref": "#/$defs/ruleId" }
+    },
+    "workflows": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/workflow" }
+    },
+    "workflow": { "type": "string", "description": "Project or local. The active workflow template." },
+    "defaultWorkflow": { "type": "string", "description": "Global only." },
+    "commit": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "convention": { "enum": ["conventional", "none"] },
+        "types": { "$ref": "#/$defs/strings" },
+        "scopes": { "$ref": "#/$defs/strings", "description": "Empty = any scope." },
+        "headerMax": { "type": "integer", "minimum": 0 },
+        "forbidAiAttribution": { "type": "boolean" },
+        "template": { "type": "string" }
+      }
+    },
+    "pr": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "base": { "type": "string", "description": "\"auto\" = from the workflow's transitions." },
+        "sections": { "$ref": "#/$defs/strings" },
+        "template": { "type": "string" },
+        "checks": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "test": { "type": "string" }, "lint": { "type": "string" } }
+        }
+      }
+    },
+    "github": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "owners": { "$ref": "#/$defs/strings" },
+        "ruleset": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "approvals": { "type": "integer", "minimum": 0 } }
+        }
+      }
+    },
+    "agents": { "type": "array", "items": { "enum": ["claude", "codex", "agy", "json"] } }
+  },
+  "$defs": {
+    "strings": { "type": "array", "items": { "type": "string" } },
+    "stringOrList": {
+      "oneOf": [{ "type": "string" }, { "$ref": "#/$defs/strings" }]
+    },
+    "severity": { "enum": ["off", "warn", "ask", "deny"] },
+    "ruleId": { "type": "string", "pattern": "^(ID|CM|GH|BR)[0-9]{3}$" },
+    "ruleMap": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/ruleId" },
+      "additionalProperties": {
+        "oneOf": [
+          { "$ref": "#/$defs/severity" },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "severity": { "$ref": "#/$defs/severity" },
+              "params": { "type": "object" }
+            }
+          }
+        ]
+      }
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "git": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": { "type": "string" },
+            "email": { "$ref": "#/$defs/stringOrList" },
+            "signing": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "format": { "enum": ["ssh", "openpgp", "x509", "default", "none"] },
+                "key": { "type": "string" },
+                "program": { "type": "string" }
+              }
+            }
+          }
+        },
+        "github": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "user": { "type": "string" },
+            "orgs": { "$ref": "#/$defs/stringOrList" },
+            "transport": { "enum": ["ssh", "gh"] },
+            "sshKey": { "type": "string" }
+          }
+        }
+      }
+    },
+    "match": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "remoteOwner": { "type": "string" },
+        "path": { "type": "string", "description": "Glob; ~ = home, * = one segment, ** = any depth." },
+        "profile": { "type": "string" },
+        "ruleset": { "type": "string" },
+        "workflow": { "type": "string" }
+      },
+      "anyOf": [{ "required": ["remoteOwner"] }, { "required": ["path"] }]
+    },
+    "branch": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "protected": { "type": "boolean" },
+        "githubDefault": { "type": "boolean" },
+        "pattern": { "type": "boolean", "description": "true when name has {placeholders}." }
+      }
+    },
+    "transition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string" },
+        "from": { "type": "string" },
+        "to": { "$ref": "#/$defs/stringOrList" },
+        "via": { "enum": ["pr", "branch"] },
+        "mergeMethod": { "enum": ["squash", "merge", "rebase"] },
+        "prTemplate": { "type": "string" },
+        "deleteHead": { "type": "boolean" },
+        "tag": { "type": "string" },
+        "work": { "type": "string" },
+        "remove": { "type": "boolean" }
+      }
+    },
+    "workflow": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "extends": { "type": "string" },
+        "remote": { "type": "string" },
+        "branches": { "type": "object", "additionalProperties": { "$ref": "#/$defs/branch" } },
+        "work": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "pattern": { "type": "string" },
+            "types": { "oneOf": [{ "const": "{commit.types}" }, { "$ref": "#/$defs/strings" }] },
+            "from": { "type": "string" }
+          }
+        },
+        "transitions": { "type": "array", "items": { "$ref": "#/$defs/transition" } },
+        "protection": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "requirePr": { "type": "boolean" },
+            "approvals": { "type": "integer", "minimum": 0 },
+            "forcePush": { "type": "boolean" },
+            "deletion": { "type": "boolean" },
+            "requireSigned": { "type": "boolean" },
+            "linearHistory": { "type": "boolean" }
+          }
+        },
+        "prTemplates": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": { "sections": { "$ref": "#/$defs/strings" } }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{{- range $i, $s := .Sections}}{{if $i}}
+
+{{end}}## {{$s.Name}}
+
+{{if $s.Content}}{{$s.Content}}
+{{- else if eq $s.Name "Summary"}}<!-- Release{{if $.Version}} {{$.Version}}{{end}}: promote {{$.Head}} to {{$.Base}}. One or two sentences on what ships. -->
+{{- else if eq $s.Name "Detailed changes"}}<!-- The pull requests and commits included in this release, one per line. -->
+-
+{{- else if eq $s.Name "Explanation"}}<!-- Why release now: risks, migrations, rollout and rollback notes. -->
+{{- else if eq $s.Name "Test results"}}<!-- Run on {{$.Head}} before opening the PR. Paste the command and the outcome. -->
+- Unit tests: `<command>` → <N passed / failed>
+- Lint: `<command>` → <clean / N issues>
+{{- else}}<!-- {{$s.Name}} -->
+{{- end}}{{end}}

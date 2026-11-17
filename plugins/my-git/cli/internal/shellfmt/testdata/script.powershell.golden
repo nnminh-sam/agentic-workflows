@@ -1,0 +1,18 @@
+﻿# plan 1c9e04 · manual · shell powershell · run these, then: mygit plan verify 1c9e04
+# identity
+# from profile work
+git config user.name 'Octo O''Cat'
+if (-not $?) { exit 1 }
+git config core.sshCommand 'ssh -i ~/.ssh/id_acme -o IdentitiesOnly=yes'
+if (-not $?) { exit 1 }
+gh auth switch --user octo-acme
+if (-not $?) { exit 1 }
+git commit -m '100% & done | a^b <x>'
+if (-not $?) { exit 1 }
+$env:GIT_SSH_COMMAND='ssh -i C:\keys\id'
+git push
+if (-not $?) { exit 1 }
+Set-Location -LiteralPath 'D:\work dir'
+if (-not $?) { exit 1 }
+make test
+if (-not $?) { exit 1 }

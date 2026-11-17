@@ -1,0 +1,2 @@
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"mygit: [agentApply] the agent wants to run a mygit plan (--apply abc123) without you confirming it: check that it showed you this plan first. Set execution.agentApply to \"allow\" to skip this question\nRule details: mygit rules list"}}
+exit=0

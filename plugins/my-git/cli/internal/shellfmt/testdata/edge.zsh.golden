@@ -1,0 +1,6 @@
+set -e
+git commit --allow-empty -m ''
+git tag -a v1 -m 'café ünïcødé — 日本'
+git commit -m 'line1
+line2'
+git log --format='%H %s' -- 'dir with space/file.go'
