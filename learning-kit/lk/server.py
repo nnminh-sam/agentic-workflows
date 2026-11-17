@@ -16,6 +16,7 @@ GET  /api/sessions?topic=&mode=&limit=             history
 POST /api/sessions {kind, topic|path, milestone, n, limit}
 GET  /api/sessions/<id>                            questions without answers + saved answers
 POST /api/sessions/<id>/answer {uid, response, confidence, time_ms}
+POST /api/sessions/<id>/pieces/<piece>/check       lesson: grade one answered piece now, return its results
 POST /api/sessions/<id>/finish                     grade in the background
 GET  /api/sessions/<id>/result                     poll until status applied / grade_failed
 POST /api/sessions/<id>/done                       learner closed it (ends `lk serve`)
@@ -75,6 +76,7 @@ ROUTES = [
         n=b.get("n", 10), limit=b.get("limit"))),
     ("POST", rf"/api/sessions/{SEG}/answer", lambda s, m, q, b: service.answer(
         m[1], b["uid"], b.get("response"), b.get("confidence"), b.get("time_ms"))),
+    ("POST", rf"/api/sessions/{SEG}/pieces/{SEG}/check", lambda s, m, q, b: service.check_piece(m[1], m[2], s.grade_fn)),
     ("POST", rf"/api/sessions/{SEG}/finish", lambda s, m, q, b: s.start_grading(m[1])),
     ("POST", rf"/api/sessions/{SEG}/done", lambda s, m, q, b: s.close(m[1])),
 ]

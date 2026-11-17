@@ -82,7 +82,7 @@ class Base(unittest.TestCase):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def topic(self, md=DOC):
-        topics.create("web", "Web", "use")
+        topics.create("web", "Web", "use", mode="doc")
         d = topics.tdir("web")
         (d / "prior.md").write_text("I think DNS turns names into addresses.", encoding="utf-8")
         topics.advance("web", "research")

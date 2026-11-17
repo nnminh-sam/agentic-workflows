@@ -242,6 +242,7 @@ const MODE_INFO = {
   review: ["Spaced recall", "Questions are due today across your topics, often reworded. Your answers set when each one comes back."],
   placement: ["Placement", "Before the path starts: which steps do you already know? Not knowing is the expected answer for most of these. Press \"I don't know\" freely; guessing only puts you in steps too early."],
   checkpoint: ["Checkpoint", "A mixed quiz across the steps of a finished milestone. Bar: 80%. Answers update your recall schedule, and a miss sends its concept back for relearning."],
+  lesson: ["Bite-sized lesson", "Piece by piece: question, paragraph, your own words, a quick check. The lesson is the gate (80%)."],
 };
 const MULTI_TOPIC = new Set(["review", "placement", "checkpoint"]);
 
@@ -378,10 +379,12 @@ function viewFailed(r) {
 
 function nextStep(r) {
   const slug = S.session.topic;
-  if (r.mode === "gate" && r.gate) {
+  if (r.gate) {
     const ns = r.gate.next_stage;
     const msg = {
-      reteach: ["Below the bar. That's normal on a first round.", `Next: a targeted reteach on the concepts you missed, then a fresh round. In the terminal: \`/learn ${slug}\``],
+      reteach: ["Below the bar. That's normal on a first round.", r.mode === "lesson"
+        ? `Next: fresh pieces on just the ideas you missed, taught from a different angle. In the terminal: \`/learn ${slug}\``
+        : `Next: a targeted reteach on the concepts you missed, then a fresh round. In the terminal: \`/learn ${slug}\``],
       note: ["Passed.", `Next: write your note in your own words: \`/note ${slug}\``],
       lab: ["Passed.", `Next: the lab. Predict, run, compare: \`/learn ${slug}\``],
       scheduled: ["Passed.", "These concepts are now in spaced recall. Come back with `/recall` when they're due."],
@@ -452,6 +455,7 @@ function viewResults(r) {
     const cls = res.correct ? "ok" : (res.score >= 0.5 ? "part" : "bad");
     const d = h("details", { class: "res", open: !res.correct && it.confident_wrong ? true : null },
       h("summary", {}, h("span", { class: "dot " + cls }), h("span", { class: "q" }, `${it.n}. ${plain(it.prompt)}`),
+        it.role === "recall" ? chip("own words") : null, it.peeked ? chip("peeked", "warn") : null,
         it.confident_wrong ? h("span", { class: "chip bad" }, "sure & wrong") : null, h("span", { class: "small muted" }, pct(res.score))),
       h("div", { class: "body" },
         h("div", { class: "prompt", style: "margin-top:10px", html: md(it.prompt) }),
@@ -485,16 +489,289 @@ function kv(k, v) {
   return h("div", { class: "kv" }, h("div", { class: "k" }, k), h("div", { class: "v" }, v || "—"));
 }
 
+// ------------------------------------------------------------------ lesson (bite-sized mode)
+// One piece at a time: question -> one paragraph -> answer it in your own words (the paragraph is hidden;
+// a peek is allowed and noted) -> a small check -> feedback right away (POST /pieces/<id>/check grades the
+// piece). Stop between any two pieces: answers are saved and the lesson resumes where you left off.
+// The lesson is the topic's gate: when every piece is done, "Finish" applies the 80% rule.
+const L = { pi: 0, phase: "question", ci: 0, peeked: false, results: {} };
+const PHASES = [["question", "Question"], ["read", "Read"], ["answer", "Your words"], ["check", "Check"], ["feedback", "Feedback"]];
+const itemOf = (uid) => S.session.items.find((i) => i.uid === uid);
+
+function lessonProgress() {
+  const ps = S.session.pieces;
+  const done = ps.filter((p) => p.checked).length;
+  document.getElementById("progress-fill").style.width = `${(done / ps.length) * 100}%`;
+  document.getElementById("progress-text").textContent = `${done}/${ps.length} pieces`;
+}
+
+function lessonMinutes(pieces) {
+  const words = pieces.reduce((a, p) => a + p.body.split(/\s+/).length, 0);
+  return Math.max(1, Math.round(words / 200 + pieces.length * 1.5));
+}
+
+// Where a piece picks up: checked -> its feedback; else the first step not answered yet.
+function entryPhase(pi) {
+  const p = S.session.pieces[pi];
+  if (p.checked) return ["feedback", 0];
+  if (!S.answers[p.recall]) return ["question", 0];
+  const ci = p.checks.findIndex((u) => !S.answers[u]);
+  return ci < 0 ? ["feedback", 0] : ["check", ci];
+}
+
+function resumePiece() {
+  const i = S.session.pieces.findIndex((p) => !p.checked);
+  return i < 0 ? S.session.pieces.length : i;
+}
+
+function citeHtml(html, sources) {
+  const by = Object.fromEntries((sources || []).map((s) => [s.id, s]));
+  return html.replace(/\[(S\d{4,})\]/g, (m, id) => {
+    const s = by[id];
+    const title = esc(s?.title || id);
+    return s?.url && /^https?:\/\//i.test(s.url)
+      ? `<a class="cite" href="${esc(s.url)}" target="_blank" rel="noopener" title="${title}">${id}</a>`
+      : `<span class="cite" title="${title}">${id}</span>`;
+  });
+}
+
+function lessonIntro() {
+  S.view = "lintro";
+  const s = S.session;
+  const n = s.pieces.length;
+  const at = resumePiece();
+  const started = s.items.some((i) => S.answers[i.uid]);
+  const concepts = [...new Set(s.pieces.map((p) => p.concept_name))];
+  app.replaceChildren(h("div", { class: "card" },
+    h("div", { class: "meta" }, chip("Bite-sized lesson"), s.round > 1 ? chip(`round ${s.round}`) : null),
+    h("h1", {}, s.title),
+    h("p", {}, `${n} piece${n === 1 ? "" : "s"} on ${concepts.length} idea${concepts.length === 1 ? "" : "s"}, about ${lessonMinutes(s.pieces)} minutes in all. Each piece is short:`),
+    h("ol", { class: "lesson-how" },
+      h("li", {}, h("strong", {}, "A question. "), "Read it and take a few seconds to think. A guess is fine."),
+      h("li", {}, h("strong", {}, "One paragraph "), "that answers it."),
+      h("li", {}, h("strong", {}, "Your own words. "), "Answer the question with the paragraph hidden. You can peek if you're stuck, and the peek is noted."),
+      h("li", {}, h("strong", {}, "A quick check, "), "then feedback straight away.")),
+    h("p", { class: "muted small" }, "This lesson is the topic's gate: 80% across all pieces, and every core idea needs a good own-words answer. You can stop between any two pieces. It picks up where you left off."),
+    h("div", { class: "actions" }, h("a", { class: "btn ghost", href: `#/topic/${enc(s.topic)}` }, "Back to topic"),
+      h("button", { class: "btn primary", id: "next", onclick: () => (at >= n ? lessonDone() : lessonGo(at, ...entryPhase(at))) },
+        at >= n ? "Finish the lesson" : started ? `Resume at piece ${at + 1} of ${n}` : "Start"))));
+  lessonProgress();
+}
+
+function stepper(phase) {
+  const k = PHASES.findIndex(([p]) => p === phase);
+  return h("ol", { class: "stepper", "aria-label": "Steps in this piece" },
+    ...PHASES.map(([p, t], i) => h("li", { class: i < k ? "done" : i === k ? "on" : "", "aria-current": i === k ? "step" : null }, t)));
+}
+
+function pieceHead(p) {
+  return [h("div", { class: "meta" }, h("span", {}, `Piece ${L.pi + 1} of ${S.session.pieces.length}`), chip(p.concept_name)),
+    stepper(L.phase)];
+}
+
+function confRow() {
+  const btns = [[1, "Guessing"], [2, "Unsure"], [3, "Sure"]].map(([v, t]) =>
+    h("button", { type: "button", class: current.confidence === v ? "sel" : "", onclick: (e) => {
+      current.confidence = v; e.target.parentNode.querySelectorAll("button").forEach((b) => b.classList.remove("sel"));
+      e.target.classList.add("sel"); changed();
+    } }, t));
+  return h("div", { class: "confidence" }, h("span", { class: "muted small" }, "How sure?"), h("div", { class: "seg" }, ...btns));
+}
+
+async function postUid(uid, response, confidence) {
+  const prev = S.answers[uid];
+  const time_ms = (prev?.time_ms || 0) + (Date.now() - S.shownAt);
+  await api(`/api/sessions/${enc(S.sid)}/answer`, { uid, response, confidence, time_ms });
+  S.answers[uid] = { response, confidence, time_ms };
+}
+
+function lessonGo(pi, phase = "question", ci = 0) {
+  const ps = S.session.pieces;
+  if (pi >= ps.length) return lessonDone();
+  const fresh = L.pi !== pi || !["answer", "check"].includes(L.phase);
+  Object.assign(L, { pi, phase, ci });
+  S.view = "lesson"; current = null; S.shownAt = Date.now();
+  const p = ps[pi];
+  if (phase === "answer" && fresh) L.peeked = !!S.answers[p.recall]?.response?.peeked;
+  ({ question: phaseQuestion, read: phaseRead, answer: phaseAnswer, check: phaseCheck, feedback: phaseFeedback })[phase](p);
+  lessonProgress();
+  window.scrollTo(0, 0);
+}
+
+function phaseQuestion(p) {
+  const recall = itemOf(p.recall);
+  app.replaceChildren(h("div", { class: "card" }, ...pieceHead(p),
+    h("div", { class: "lesson-q big", html: md(recall.prompt) }),
+    h("p", { class: "muted small" }, "Take a few seconds to think about it. What would you say right now?"),
+    h("div", { class: "actions" },
+      h("a", { class: "btn ghost", href: `#/topic/${enc(S.session.topic)}` }, "Take a break"),
+      h("button", { class: "btn primary", id: "next", onclick: () => lessonGo(L.pi, "read") }, "Read the paragraph"))));
+  document.getElementById("next").focus();
+}
+
+function phaseRead(p) {
+  const recall = itemOf(p.recall);
+  app.replaceChildren(h("div", { class: "card" }, ...pieceHead(p),
+    h("div", { class: "lesson-q", html: md(recall.prompt) }),
+    h("h2", { class: "lesson-title" }, p.title),
+    h("div", { class: "lesson-body", html: citeHtml(md(p.body), p.sources) }),
+    p.sources.length ? h("div", { class: "small muted lesson-src" }, "Sources: ",
+      ...p.sources.map((s, i) => [i ? " · " : "", s.url && /^https?:\/\//i.test(s.url)
+        ? h("a", { href: s.url, target: "_blank", rel: "noopener" }, `[${s.id}] ${s.title}`) : `[${s.id}] ${s.title}`])) : null,
+    h("div", { class: "actions" },
+      h("button", { class: "btn ghost", onclick: () => lessonGo(L.pi, "question") }, "Back"),
+      h("button", { class: "btn primary", id: "next", onclick: () => lessonGo(L.pi, "answer") }, "Answer in my own words"))));
+  document.getElementById("next").focus();
+}
+
+function phaseAnswer(p) {
+  const recall = itemOf(p.recall);
+  const saved = S.answers[p.recall];
+  const widget = freeText(saved?.response && !saved.response.dont_know ? saved.response : null,
+    "Answer the question in your own words, as if explaining it to a colleague. Write or dictate.");
+  current = { widget, confidence: saved?.confidence ?? null };
+  const note = h("span", { class: "hint" }, L.peeked ? "You peeked. That's noted with your answer." : "");
+  const peek = h("details", { class: "peek" },
+    h("summary", {}, "Stuck? Peek at the paragraph"),
+    h("div", { class: "lesson-body", html: citeHtml(md(p.body), p.sources) }));
+  peek.addEventListener("toggle", () => { if (peek.open) { L.peeked = true; note.textContent = "You peeked. That's noted with your answer."; } });
+  const next = h("button", { class: "btn primary", id: "next", onclick: async () => {
+    const resp = current.widget.collect();
+    if (!resp || !current.confidence) return;
+    try { await postUid(p.recall, { ...resp, ...(L.peeked ? { peeked: true } : {}) }, current.confidence); }
+    catch (e) { return alert("Could not save: " + e.message); }
+    lessonGo(L.pi, p.checks.length ? "check" : "feedback", 0);
+  } }, "Next: quick check");
+  app.replaceChildren(h("div", { class: "card" }, ...pieceHead(p),
+    h("div", { class: "lesson-q", html: md(recall.prompt) }),
+    peek, widget.el, note, confRow(),
+    h("div", { class: "actions" },
+      h("button", { class: "btn ghost", onclick: async () => {
+        try { await postUid(p.recall, { dont_know: true }, 1); } catch (e) { return alert("Could not save: " + e.message); }
+        lessonGo(L.pi, p.checks.length ? "check" : "feedback", 0);
+      } }, "I don't know"),
+      next)));
+  widget.focus();
+  changed();
+}
+
+function phaseCheck(p) {
+  const uid = p.checks[L.ci];
+  const item = itemOf(uid);
+  const saved = S.answers[uid];
+  const T = TYPES[item.type];
+  const widget = T.render(item, saved?.response && !saved.response.dont_know ? saved.response : null);
+  current = { widget, confidence: saved?.confidence ?? null };
+  const last = L.ci === p.checks.length - 1;
+  const advance = () => lessonGo(L.pi, last ? "feedback" : "check", last ? 0 : L.ci + 1);
+  app.replaceChildren(h("div", { class: "card" }, ...pieceHead(p),
+    h("div", { class: "meta" }, h("span", {}, `Check ${L.ci + 1} of ${p.checks.length}`), chip(T.label)),
+    T.ownsPrompt ? null : h("div", { class: "prompt", html: md(item.prompt) }),
+    item.code ? h("pre", {}, h("code", {}, item.code)) : null,
+    widget.el, confRow(),
+    h("div", { class: "actions" },
+      h("div", { class: "right" },
+        h("button", { class: "btn ghost", onclick: () => (L.ci ? lessonGo(L.pi, "check", L.ci - 1) : lessonGo(L.pi, "answer")) }, "Back"),
+        h("button", { class: "btn ghost", onclick: async () => {
+          try { await postUid(uid, { dont_know: true }, 1); } catch (e) { return alert("Could not save: " + e.message); }
+          advance();
+        } }, "I don't know")),
+      h("button", { class: "btn primary", id: "next", onclick: async () => {
+        const resp = current.widget.collect();
+        if (!resp || !current.confidence) return;
+        try { await postUid(uid, resp, current.confidence); } catch (e) { return alert("Could not save: " + e.message); }
+        advance();
+      } }, last ? "See how I did" : "Next"))));
+  (widget.focus || (() => {}))();
+  changed();
+}
+
+async function phaseFeedback(p, gen = S.gen) {
+  const n = S.session.pieces.length;
+  app.replaceChildren(h("div", { class: "card", style: "text-align:center" }, ...pieceHead(p), h("div", { class: "spinner" }),
+    h("p", { class: "muted" }, "Checking your answers…")));
+  let r = L.results[p.id];
+  if (!r) {
+    try { r = await api(`/api/sessions/${enc(S.sid)}/pieces/${enc(p.id)}/check`, {}); }
+    catch (e) {
+      if (gen !== S.gen) return;
+      app.replaceChildren(h("div", { class: "card" }, ...pieceHead(p), h("h2", {}, "Couldn't check this piece"),
+        h("pre", {}, e.message),
+        h("div", { class: "actions" },
+          h("button", { class: "btn ghost", onclick: () => lessonGo(L.pi + 1) }, L.pi + 1 < n ? "Carry on without feedback" : "Go to finish"),
+          h("button", { class: "btn primary", id: "next", onclick: () => lessonGo(L.pi, "feedback") }, "Retry"))));
+      return;
+    }
+    if (gen !== S.gen) return;
+    L.results[p.id] = r;
+  }
+  p.checked = true;
+  lessonProgress();
+  const [own, ...checks] = r.results;
+  const res = own.result || {};
+  const ownCard = h("div", { class: "fb-own" },
+    h("div", { class: "fb-head" }, h("span", { class: "dot " + scoreClass(res) }), h("strong", {}, "Your own words"),
+      own.peeked ? chip("peeked", "warn") : null, h("span", { class: "grow" }), h("span", { class: "small num" }, pct(res.score))),
+    kv("You said", own.your_answer),
+    res.feedback ? kv("Feedback", res.feedback) : null,
+    res.wrong_claims?.length ? kv("Not quite right", res.wrong_claims.map((x) => "• " + x).join("\n")) : null,
+    res.missed?.length ? kv("Missing", res.missed.map((x) => "• " + x).join("\n")) : null,
+    kv("A model answer", res.expected));
+  const checkRows = checks.map((c) => {
+    const cr = c.result || {};
+    return h("details", { class: "res", open: cr.correct ? null : true },
+      h("summary", {}, h("span", { class: "dot " + scoreClass(cr) }), h("span", { class: "q" }, plain(c.prompt)),
+        c.confident_wrong ? chip("sure & wrong", "bad") : null, h("span", { class: "small muted" }, pct(cr.score))),
+      h("div", { class: "body" },
+        kv("Your answer", c.your_answer),
+        cr.correct ? null : kv("Expected", cr.expected),
+        cr.feedback && !cr.correct ? kv("Feedback", cr.feedback) : null,
+        cr.explanation ? kv("Why", cr.explanation) : null));
+  });
+  const last = L.pi + 1 >= n;
+  const breakEvery = S.session.break_every || 0;
+  const pause = !last && breakEvery && (L.pi + 1) % breakEvery === 0;
+  app.replaceChildren(h("div", { class: "card" }, ...pieceHead(p),
+    ownCard,
+    checkRows.length ? h("div", { class: "fb-checks" }, h("div", { class: "k small muted" }, "Quick check"), ...checkRows) : null,
+    pause ? h("div", { class: "next" }, h("strong", {}, `${L.pi + 1} pieces done. `),
+      "Good moment for a short break: stand up, look away from the screen. The lesson picks up right here.") : null,
+    h("div", { class: "actions" },
+      last ? h("span") : h("a", { class: "btn ghost", href: `#/topic/${enc(S.session.topic)}` }, "Take a break"),
+      h("button", { class: "btn primary", id: "next", onclick: () => lessonGo(L.pi + 1) }, last ? "Finish the lesson" : "Next piece"))));
+  document.getElementById("next").focus();
+}
+
+const scoreClass = (r) => (r.correct ? "ok" : (r.score >= 0.5 ? "part" : "bad"));
+
+function lessonDone() {
+  S.view = "lesson"; current = null;
+  const ps = S.session.pieces;
+  const unchecked = ps.filter((p) => !p.checked).length;
+  const missing = S.session.items.filter((i) => !S.answers[i.uid]).length;
+  app.replaceChildren(h("div", { class: "card" },
+    h("div", { class: "meta" }, chip("Bite-sized lesson")),
+    h("h2", {}, unchecked ? "Ready to finish?" : `All ${ps.length} pieces done`),
+    h("p", { class: "muted" }, missing ? `${missing} question(s) unanswered: they count as wrong. ` : "",
+      unchecked ? `${unchecked} piece(s) get their feedback now. ` : "",
+      "Finishing applies the gate: 80% across the lesson, and each core idea needs a good own-words answer."),
+    h("div", { class: "grid" }, ...ps.map((p, i) => h("button", { class: p.checked ? "done" : "", title: p.title,
+      onclick: () => lessonGo(i, ...entryPhase(i)) }, i + 1))),
+    h("div", { class: "actions" }, h("a", { class: "btn ghost", href: `#/topic/${enc(S.session.topic)}` }, "Not now"),
+      h("button", { class: "btn primary", id: "next", onclick: finish }, "Finish & see the result"))));
+  lessonProgress();
+}
+
 // ------------------------------------------------------------------ keyboard
 document.addEventListener("keydown", (e) => {
-  if (S.view !== "q" || !current || e.target.tagName === "BUTTON") return;
+  if (!["q", "lesson", "lintro"].includes(S.view) || /^(BUTTON|A|SUMMARY)$/.test(e.target.tagName)) return;
   const inText = /^(TEXTAREA|INPUT|SELECT)$/.test(e.target.tagName) && e.target.type !== "radio" && e.target.type !== "checkbox";
   if (e.key === "Enter" && (e.ctrlKey || e.metaKey || !inText)) {
     const btn = document.getElementById("next");
     if (btn && !btn.disabled) { e.preventDefault(); btn.click(); }
     return;
   }
-  if (!inText && /^[1-9]$/.test(e.key) && current.widget.key) current.widget.key(Number(e.key));
+  if (!inText && current && /^[1-9]$/.test(e.key) && current.widget.key) current.widget.key(Number(e.key));
 });
 
 
@@ -504,7 +781,7 @@ document.addEventListener("keydown", (e) => {
 const enc = encodeURIComponent;
 const link = (href, ...kids) => h("a", { href }, ...kids);
 const when = (iso) => (iso ? String(iso).slice(0, 16).replace("T", " ") : "");
-const STAGE_CLASS = { scheduled: "ok", quiz: "warn", reteach: "bad" };
+const STAGE_CLASS = { scheduled: "ok", quiz: "warn", lesson: "warn", reteach: "bad" };
 const STATUS_CLASS = { done: "ok", tested_out: "ok", in_progress: "warn", applied: "ok", grade_failed: "bad", open: "warn", grading: "warn" };
 const chip = (text, cls = "") => h("span", { class: "chip " + cls }, text);
 const meter = (x) => h("div", { class: "meter", title: pct(x) }, h("div", { style: `width:${Math.round((x || 0) * 100)}%` }));
@@ -556,7 +833,8 @@ async function viewHome() {
       const n = Object.values(t.concepts).reduce((a, b) => a + b, 0);
       return h("a", { class: "row", href: `#/topic/${enc(t.slug)}` },
         h("span", { class: "grow strong" }, t.title), t.concepts.lapsed ? chip(`${t.concepts.lapsed} lapsed`, "bad") : null,
-        chip(t.stage, STAGE_CLASS[t.stage] || ""), chip(t.depth), h("span", { class: "small num" }, `${t.concepts.mastered}/${n}`));
+        chip(t.stage, STAGE_CLASS[t.stage] || ""), t.mode === "bite" ? chip(MODE_LABEL.bite) : null, chip(t.depth),
+        h("span", { class: "small num" }, `${t.concepts.mastered}/${n}`));
     })) : h("p", { class: "muted" }, "No topics yet. Run ", cmd("/learn <topic>"), " in Claude Code."));
   const recent = o.recent_sessions.length ? h("div", { class: "card" }, h("h2", {}, "Recent sessions"),
     h("div", { class: "list" }, ...o.recent_sessions.map(sessionRow))) : null;
@@ -609,7 +887,8 @@ async function viewTopic(slug) {
   chrome(t.title, [["Library", "#/"]]);
   const total = t.concept_list.length;
   const head = h("div", { class: "card" },
-    h("div", { class: "meta" }, chip(t.stage, STAGE_CLASS[t.stage] || ""), chip(t.depth), chip(`v${t.version}`), t.round ? chip(`round ${t.round}`) : null,
+    h("div", { class: "meta" }, chip(t.stage, STAGE_CLASS[t.stage] || ""), chip(MODE_LABEL[t.mode] || t.mode), chip(t.depth),
+      chip(`v${t.version}`), t.round ? chip(`round ${t.round}`) : null,
       ...t.paths.map((x) => h("a", { class: "chip", href: `#/path/${enc(x.path)}` }, `${x.path_title} · ${x.node}`))),
     h("h1", {}, t.title),
     h("div", { class: "row flat" }, meter(total ? t.concepts.mastered / total : 0), h("span", { class: "small num" }, `${t.concepts.mastered}/${total} mastered`)),
@@ -638,7 +917,27 @@ async function viewTopic(slug) {
           "Start the gate round? It decides whether this topic moves on (bar: 80%). Answer from memory.") }, "Gate round") : null)));
   const hist = h("div", { class: "card" }, h("h2", {}, "Sessions"),
     t.sessions.length ? h("div", { class: "list" }, ...t.sessions.map(sessionRow)) : h("p", { class: "muted" }, "No quizzes yet."));
-  app.replaceChildren(head, docs, concepts, quizCard, hist);
+  app.replaceChildren(head, lessonCard(t), docs, concepts, quizCard, hist);
+}
+
+const MODE_LABEL = { bite: "bite-sized", doc: "doc + quiz" };
+
+function lessonCard(t) {
+  const l = t.lesson;
+  if (!l) return null;
+  const open = t.sessions.find((s) => s.mode === "lesson" && s.status === "open");
+  const names = Object.fromEntries(t.concept_list.map((c) => [c.id, c.name]));
+  return h("div", { class: "card" }, h("h2", {}, "Lesson"),
+    l.pieces ? h("p", {}, `${l.pieces} piece(s) written so far.`,
+      t.can_lesson ? ` ${l.current} for this round` + (open ? `, ${open.answered}/${open.items} answers in.` : ".") : "")
+      : h("p", { class: "muted" }, "Pieces appear after research: run ", cmd(`/learn ${t.slug}`), " in Claude Code."),
+    t.can_lesson && l.coverage_issues.length ? h("ul", { class: "small" }, ...l.coverage_issues.map((x) => h("li", {}, x))) : null,
+    t.can_lesson && Object.keys(l.by_concept).length ? h("div", { class: "chips" },
+      ...Object.entries(l.by_concept).map(([c, n]) => chip(`${names[c] || c} · ${n}`))) : null,
+    h("div", { class: "actions" },
+      h("span", { class: "small muted" }, l.has_page ? h("a", { href: `/read/${enc(t.slug)}?file=lesson.md` }, "Every piece on one page") : ""),
+      t.can_lesson ? h("button", { class: "btn primary", disabled: !!l.coverage_issues.length,
+        onclick: () => startSession({ kind: "lesson", topic: t.slug }) }, open ? "Resume lesson" : "Start lesson") : null));
 }
 
 async function viewMistakes() {
@@ -662,9 +961,15 @@ async function viewSession(sid, q) {
   chrome(S.session.title, crumbs);
   document.querySelector(".progress").hidden = false;
   S.answers = S.session.answers || {};
-  setProgress();
   if (S.session.status === "applied" || S.session.status === "grade_failed") return poll();
   if (S.session.status === "grading") return viewGrading();
+  if (S.session.mode === "lesson") {
+    Object.assign(L, { pi: -1, phase: "question", ci: 0, peeked: false, results: {} });
+    lessonProgress();
+    if (q) { const i = Math.min(Number(q), S.session.pieces.length) - 1; return lessonGo(i, ...entryPhase(i)); } // #/session/<id>/<piece>
+    return lessonIntro();
+  }
+  setProgress();
   if (q) return go(Math.min(Number(q), S.session.items.length) - 1); // deep link: #/session/<id>/3
   viewIntro();
 }

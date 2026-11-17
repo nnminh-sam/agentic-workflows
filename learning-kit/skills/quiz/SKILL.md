@@ -1,6 +1,6 @@
 ---
 name: quiz
-description: "Open the learning-kit quiz app in the browser for a topic: the gate quiz when the topic is at its quiz stage, or a no-stakes practice round with --practice. Triggers: /quiz <topic>, 'quiz me on X', 'practice X'."
+description: "Open the learning-kit quiz app in the browser for a topic: the gate quiz when the topic is at its quiz stage, the bite-sized lesson when it is at its lesson stage, or a no-stakes practice round with --practice. Triggers: /quiz <topic>, 'quiz me on X', 'practice X'."
 argument-hint: "<topic> [--practice] [--n 10]"
 ---
 
@@ -15,10 +15,13 @@ If the server prints `Open <url> in your browser.` (headless Linux, SSH, WSL wit
 
 1. Resolve the topic slug (`LK topic list --json`, fuzzy match, and ask if it's ambiguous).
 2. `LK topic status <slug>`:
-   - `--practice`, or the stage is not `quiz`: practice round. `LK serve --topic <slug> --practice --n <n>`.
+   - `--practice`, or the stage is not `quiz` / `lesson`: practice round. `LK serve --topic <slug> --practice --n <n>`.
      Practice never changes the stage or the schedule, but mistakes are still logged.
    - stage `quiz`: gate round. `LK serve --topic <slug>`.
-   - stage `quiz_gen` / `reteach`: there are no fresh items yet. Tell them to run `/learn <slug>`.
+   - stage `lesson` (bite mode): the lesson, which is that topic's gate. `LK serve --topic <slug>` opens it (an
+     unfinished lesson resumes where they left off). If `SESSION_RESULT` comes back still `open`, they took a
+     break: nothing is lost, `/quiz <slug>` or `/learn <slug>` resumes it.
+   - stage `quiz_gen` / `reteach`: there are no fresh items or pieces yet. Tell them to run `/learn <slug>`.
 3. Run it with Bash `run_in_background: true`. Read `QUIZ_URL=` from the output and give it to them.
 4. When it exits, read `SESSION_RESULT=` and report in ≤6 lines: score, the 80% bar (gate only), missed
    concepts, confident-wrong count, next step (`/learn <slug>` to continue the loop).
