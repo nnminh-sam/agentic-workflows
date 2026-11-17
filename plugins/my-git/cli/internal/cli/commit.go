@@ -61,8 +61,16 @@ func commitRun(a *App, s *session, f *commitFlags, cmd *cobra.Command, args []st
 	if err := env.RequireRepo(); err != nil {
 		return err
 	}
+	hadType, hadSubject := strings.TrimSpace(f.typ) != "", strings.TrimSpace(f.subject) != ""
 	if err := commitPrompt(a, f); err != nil {
 		return err
+	}
+	// Prompted values become flags, so the plan id and the --apply hint cover them.
+	if !hadType {
+		_ = cmd.Flags().Set("type", f.typ)
+	}
+	if !hadSubject {
+		_ = cmd.Flags().Set("message", f.subject)
 	}
 
 	msg, err := app.CommitRender(env, cfg, tmpl.CommitData{

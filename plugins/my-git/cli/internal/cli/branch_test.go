@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -31,7 +32,13 @@ func branchFake() *execx.Fake {
 // runBranch drives the cobra tree through Main with temp HOME/XDG dirs.
 func runBranch(t *testing.T, f *execx.Fake, args ...string) (code int, stdout, stderr string) {
 	t.Helper()
-	home := t.TempDir()
+	return runBranchHome(t, t.TempDir(), f, args...)
+}
+
+// runBranchHome is runBranch with a caller-owned HOME/XDG tree, so a second
+// run can find the plan the first one saved.
+func runBranchHome(t *testing.T, home string, f *execx.Fake, args ...string) (code int, stdout, stderr string) {
+	t.Helper()
 	var out, errb bytes.Buffer
 	io := IO{
 		In: strings.NewReader(""), Out: &out, Err: &errb,
@@ -70,25 +77,25 @@ func TestBranchNewDryRunPlansOnly(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d: %s%s", code, out, errs)
 	}
-	if !strings.Contains(out, "git switch -c develop/feat/login develop/base") {
+	if !strings.Contains(out, "git switch --no-track -c develop/feat/login develop/base") {
 		t.Errorf("plan lacks the switch step:\n%s", out)
 	}
 	if !strings.Contains(out, "not applied (dry run)") {
 		t.Errorf("not a dry run:\n%s", out)
 	}
-	if hasCall(f, "git switch -c develop/feat/login develop/base") {
+	if hasCall(f, "git switch --no-track -c develop/feat/login develop/base") {
 		t.Error("dry run executed the write")
 	}
 }
 
 func TestBranchNewYesApplies(t *testing.T) {
 	f := branchFake()
-	f.OnOut("git switch -c develop/feat/login develop/base", "")
+	f.OnOut("git switch --no-track -c develop/feat/login develop/base", "")
 	code, out, errs := runBranch(t, f, "branch", "new", "feat", "login", "--yes")
 	if code != 0 {
 		t.Fatalf("exit %d: %s%s", code, out, errs)
 	}
-	if !hasCall(f, "git switch -c develop/feat/login develop/base") {
+	if !hasCall(f, "git switch --no-track -c develop/feat/login develop/base") {
 		t.Errorf("switch not executed: %v", f.CallLines())
 	}
 	if !strings.Contains(out, "✓ develop/feat/login (from develop/base)") {
@@ -101,7 +108,7 @@ func TestBranchNewFallsBackToRemoteBase(t *testing.T) {
 	delete(f.Responses, "git show-ref --verify --quiet refs/heads/develop/base")
 	f.OnOut("git show-ref --verify --quiet refs/remotes/origin/develop/base", "")
 	code, out, errs := runBranch(t, f, "branch", "new", "fix", "crash")
-	if code != 0 || !strings.Contains(out, "git switch -c develop/fix/crash origin/develop/base") {
+	if code != 0 || !strings.Contains(out, "git switch --no-track -c develop/fix/crash origin/develop/base") {
 		t.Fatalf("exit %d:\n%s%s", code, out, errs)
 	}
 }
@@ -186,6 +193,7 @@ func TestBranchPrune(t *testing.T) {
 	f.OnOut("gh pr list --state merged --limit 200 --json number,headRefName",
 		`[{"number":7,"headRefName":"develop/feat/squashed"},{"number":3,"headRefName":"develop/feat/old"}]`)
 	f.OnOut("git show-ref --verify --quiet refs/heads/develop/feat/squashed", "")
+	f.OnOut("git merge-base --is-ancestor develop/feat/old HEAD", "")
 
 	code, out, errs := runBranch(t, f, "branch", "prune")
 	if code != 0 {
@@ -219,6 +227,7 @@ func TestBranchPruneYesDeletesAndJSONNothing(t *testing.T) {
 	f.OnOut("git branch --merged develop/base "+branchFmt, "develop/feat/old\ttip1\t\n")
 	f.OnOut("git branch --merged main "+branchFmt, "")
 	f.OnOut("git branch -d develop/feat/old", "")
+	f.OnOut("git merge-base --is-ancestor develop/feat/old HEAD", "")
 	code, out, errs := runBranch(t, f, "branch", "prune", "--yes")
 	if code != 0 || !strings.Contains(out, "✓ deleted develop/feat/old") || !hasCall(f, "git branch -d develop/feat/old") {
 		t.Fatalf("exit %d:\n%s%s\n%v", code, out, errs, f.CallLines())
@@ -254,15 +263,89 @@ func TestBranchPruneSkipsWrongGhAccount(t *testing.T) {
 	f.OnOut("gh --version", "gh version 2.50.0 (2024-01-01)\n")
 	// gh not logged in: ID005 reports it, so the merged-PR query must not run.
 	code, out, errs := runBranch(t, f, "branch", "prune")
-	if code != 0 {
-		t.Fatalf("exit %d: %s%s", code, out, errs)
+	if code != 2 || !strings.Contains(out, "ID005") {
+		t.Fatalf("a denied ID005 must be reported with exit 2, got %d: %s%s", code, out, errs)
 	}
 	for _, c := range f.CallLines() {
 		if strings.HasPrefix(c, "gh pr list") {
 			t.Errorf("gh pr list ran despite ID005: %s", c)
 		}
 	}
-	if !strings.Contains(out, "gh account check failed") {
-		t.Errorf("no note about the skipped PR lookup:\n%s", out)
+}
+
+// A branch merged into the base but not into HEAD would make `git branch -d`
+// refuse, so prune keeps it instead of planning a failing delete.
+func TestBranchPruneKeepsBranchNotMergedIntoHead(t *testing.T) {
+	f := branchFake()
+	f.Responses["git remote get-url origin"] = execx.Result{ExitCode: 1}
+	f.OnOut("git rev-parse develop/base", "tipbase\n")
+	f.OnOut("git rev-parse main", "tipmain\n")
+	f.OnOut("git branch --merged develop/base "+branchFmt, "develop/feat/old\ttip1\t\n")
+	f.OnOut("git branch --merged main "+branchFmt, "")
+	// merge-base --is-ancestor <b> HEAD and the upstream lookup fall to the exit-1 default.
+	code, out, errs := runBranch(t, f, "branch", "prune", "--yes")
+	if code != 0 {
+		t.Fatalf("exit %d: %s%s", code, out, errs)
+	}
+	if hasCall(f, "git branch -d develop/feat/old") || strings.Contains(out, "✓ deleted") {
+		t.Errorf("planned a delete git would refuse:\n%s", out)
+	}
+	if !strings.Contains(out, "kept develop/feat/old") || !strings.Contains(out, "not into HEAD") {
+		t.Errorf("missing kept note:\n%s", out)
+	}
+}
+
+// dry run -> --apply <id> reaches the same plan and runs the write.
+func TestBranchNewApplyByID(t *testing.T) {
+	home := t.TempDir()
+	code, out, errs := runBranchHome(t, home, branchFake(), "branch", "new", "feat", "login")
+	id := planID(out)
+	if code != 0 || id == "" {
+		t.Fatalf("dry run: exit %d, no plan id:\n%s%s", code, out, errs)
+	}
+	f := branchFake()
+	f.OnOut("git switch --no-track -c develop/feat/login develop/base", "")
+	code, out, errs = runBranchHome(t, home, f, "branch", "new", "feat", "login", "--apply", id)
+	if code != 0 || !hasCall(f, "git switch --no-track -c develop/feat/login develop/base") {
+		t.Fatalf("apply: exit %d:\n%s%s\n%v", code, out, errs, f.CallLines())
+	}
+}
+
+// planID extracts the id from the "plan <id>   dry-run" header.
+func planID(out string) string {
+	_, rest, ok := strings.Cut(out, "plan ")
+	if !ok {
+		return ""
+	}
+	id, _, _ := strings.Cut(rest, " ")
+	return id
+}
+
+const branchReleaseTrain = `{"name":"release-train","extends":"default",
+ "branches":{"staging":{"name":"develop"},"release":{"name":"release/{version}","protected":true,"pattern":true}},
+ "transitions":[{"id":"merge","from":"work","to":"staging","via":"pr"},
+  {"id":"cut","from":"staging","to":"release","via":"branch"},
+  {"id":"release","from":"release","to":"production","via":"pr"}]}`
+
+// branch cut through the CLI with a custom workflow: the branch comes from the
+// transition's source branch and starts untracked.
+func TestBranchCutCustomWorkflow(t *testing.T) {
+	home := t.TempDir()
+	dir := home + "/config/mygit/workflows"
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(dir+"/release-train.json", []byte(branchReleaseTrain), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f := branchFake()
+	f.OnOut("git show-ref --verify --quiet refs/heads/develop", "")
+	f.OnOut("git switch --no-track -c release/1.2.0 develop", "")
+	code, out, errs := runBranchHome(t, home, f, "--workflow", "release-train", "branch", "cut", "cut", "1.2.0", "--yes")
+	if code != 0 {
+		t.Fatalf("exit %d:\n%s%s", code, out, errs)
+	}
+	if !hasCall(f, "git switch --no-track -c release/1.2.0 develop") || !strings.Contains(out, "✓ release/1.2.0 (from develop)") {
+		t.Errorf("cut not applied:\n%s\n%v", out, f.CallLines())
 	}
 }

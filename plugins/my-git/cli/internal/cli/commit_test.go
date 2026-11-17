@@ -285,7 +285,7 @@ func TestCommitPromptsOnTerminal(t *testing.T) {
 	if !strings.Contains(out, "type: ") || !strings.Contains(out, "subject: ") {
 		t.Errorf("no prompts:\n%s", out)
 	}
-	if !strings.Contains(out, "feat: add prompt") && !strings.Contains(out, "plan ") {
+	if !strings.Contains(out, "dry-run") || !strings.Contains(out, "commit -S -F <msg>") {
 		t.Errorf("no plan:\n%s", out)
 	}
 }
@@ -360,5 +360,41 @@ func TestCommitCustomTemplateIsValidated(t *testing.T) {
 	b, err := os.ReadFile(e.runner.commits[0].Args[len(e.runner.commits[0].Args)-1])
 	if err != nil || string(b) != "feat: add x\n\nCustom body.\n" {
 		t.Errorf("message = %q (%v)", b, err)
+	}
+}
+
+// dry run -> --apply <id>: the second run loads the saved plan and commits.
+func TestCommitApplyByID(t *testing.T) {
+	e := newCommitEnv(t)
+	args := []string{"commit", "-t", "feat", "-m", "add login"}
+	out, errs, code := e.run(false, "", args...)
+	_, rest, ok := strings.Cut(out, "plan ")
+	if code != 0 || !ok {
+		t.Fatalf("dry run: exit %d\n%s%s", code, out, errs)
+	}
+	id, _, _ := strings.Cut(rest, " ")
+	out, errs, code = e.run(false, "", append(args, "--apply", id)...)
+	if code != 0 || len(e.runner.commits) != 1 {
+		t.Fatalf("apply: exit %d, commits %v\n%s%s", code, e.runner.commits, out, errs)
+	}
+}
+
+// Prompted values are part of the plan id: it equals the id of the same
+// commit made with explicit flags, so --apply <id> never re-prompts.
+func TestCommitPromptedValuesInPlanID(t *testing.T) {
+	e := newCommitEnv(t)
+	id := func(terminal bool, stdin string, args ...string) string {
+		out, _, code := e.run(terminal, stdin, args...)
+		_, rest, _ := strings.Cut(out, "plan ")
+		got, _, _ := strings.Cut(rest, " ")
+		if code != 0 || got == "" {
+			t.Fatalf("exit %d, no plan id:\n%s", code, out)
+		}
+		return got
+	}
+	prompted := id(true, "feat\nadd prompt\n", "commit")
+	flagged := id(false, "", "commit", "-t", "feat", "-m", "add prompt")
+	if prompted != flagged {
+		t.Errorf("prompted plan id %s != flag plan id %s", prompted, flagged)
 	}
 }

@@ -50,7 +50,7 @@ There are also two High findings in `branch`: `switch -c` sets up tracking of th
 | Area | Packages | Tests |
 |---|---|---|
 | Core types | verdict, execx (Runner + Fake), policy (+ Substitute) | 100% coverage |
-| Config, rule sets, profiles, workflow templates | config, profile, workflow | ≥97%. Default template = `branching.json` (exit criterion); the spec's `rules show --origin` example reproduces exactly |
+| Config, rule sets, profiles, workflow templates | config, profile, workflow | ≥97%. The default workflow template is `defaults/workflows/default.json`; `branching.json` is the BR rules contract whose verdicts the default template must reproduce (exit criterion); the spec's `rules show --origin` example reproduces exactly |
 | Rules engine (35 rules + ID006) | shell (mvdan + PowerShell lexer), rules, engine | 111/118 Python cases match. The 7 skipped test `contracts.validate`, which has no Go port. 112 golden commands in `internal/engine/testdata/cases.json` |
 | Plan core, shell renderers, git/gh wrappers, templates | plan, shellfmt, gitx, ghx, tmpl | ≥98.8% |
 | Shared CLI plumbing (dry-run → save → apply/manual) | app, cli/plumbing.go | **no tests** |

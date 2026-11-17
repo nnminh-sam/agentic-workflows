@@ -3,6 +3,7 @@ package workflow
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -11,7 +12,7 @@ import (
 // optionally a ticket or version). It checks the type against the template's
 // work types and fails when the pattern needs a value that was not given.
 func (c *Compiled) BranchNewName(typ, name, ticket, version string) (string, error) {
-	if len(c.WorkTypes) > 0 && !containsStr(c.WorkTypes, typ) {
+	if len(c.WorkTypes) > 0 && !slices.Contains(c.WorkTypes, typ) {
 		return "", fmt.Errorf("unknown branch type %q (want one of: %s)", typ, strings.Join(c.WorkTypes, ", "))
 	}
 	return expandAll(c.Template.Work.Pattern, map[string]string{
@@ -107,13 +108,4 @@ func expandAll(pattern string, values map[string]string) (string, error) {
 		return "", fmt.Errorf("pattern %q needs a value for %s", pattern, m)
 	}
 	return out, nil
-}
-
-func containsStr(l []string, s string) bool {
-	for _, x := range l {
-		if x == s {
-			return true
-		}
-	}
-	return false
 }

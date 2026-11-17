@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"slices"
 	"sort"
 	"strings"
 
@@ -91,7 +92,8 @@ func branchCutCmd(a *App, s *session) *cobra.Command {
 	return cmd
 }
 
-// branchCreate plans `git switch -c name start`, checked against the rules
+// branchCreate plans `git switch --no-track -c name start` (no tracking: the
+// new branch must not inherit the base as its upstream, or push would think it is up to date), checked against the rules
 // (minus ignore). base is the branch name shown to the user.
 func branchCreate(a *App, s *session, cmd *cobra.Command, args []string, e *app.Env, c *config.Resolved,
 	name, base, what string, ignore []string) error {
@@ -108,13 +110,13 @@ func branchCreate(a *App, s *session, cmd *cobra.Command, args []string, e *app.
 	if err != nil {
 		return err
 	}
-	v := branchEvaluate(a, e, c, execx.Cmd{Name: "git", Args: []string{"switch", "-c", name, start}}, ignore)
+	v := branchEvaluate(a, e, c, execx.Cmd{Name: "git", Args: []string{"switch", "--no-track", "-c", name, start}}, ignore)
 	if v.Decision() == verdict.DecDeny {
 		return lintReport(a, v)
 	}
 	p := e.NewPlanner(planArgv(cmd, args))
 	branchChecks(p, v)
-	p.Git("create "+name+" from "+start, "switch", "-c", name, start)
+	p.Git("create "+name+" from "+start, "switch", "--no-track", "-c", name, start)
 	after := func(w io.Writer) { fmt.Fprintf(w, "✓ %s (from %s)\n", name, base) }
 	return s.runExtra(cmd, p, after, map[string]any{"branch": name, "base": base, "startPoint": start, "action": what})
 }
@@ -146,7 +148,7 @@ func branchEvaluate(a *App, e *app.Env, c *config.Resolved, cmd execx.Cmd, ignor
 		c.Policy, guardEngineDeps(a))
 	var out verdict.Verdict
 	for _, f := range v.Findings {
-		if !branchContains(ignore, f.RuleID) {
+		if !slices.Contains(ignore, f.RuleID) {
 			out.Findings = append(out.Findings, f)
 		}
 	}
@@ -162,15 +164,6 @@ func branchChecks(p *app.Planner, v verdict.Verdict) {
 	for _, f := range v.Findings {
 		p.Check(f.RuleID, false, f.Severity, f.Message)
 	}
-}
-
-func branchContains(l []string, s string) bool {
-	for _, x := range l {
-		if x == s {
-			return true
-		}
-	}
-	return false
 }
 
 // ---------------------------------------------------------------- prune
@@ -217,12 +210,13 @@ func branchPrune(a *App, s *session, cmd *cobra.Command, args []string, e *app.E
 	// Bases: staging (where work lands) and production, each as local ref or remote tracking ref.
 	var bases []string
 	for _, b := range []string{w.WorkFrom, w.Production} {
-		if b == "" || branchContains(bases, b) {
+		if b == "" || slices.Contains(bases, b) {
 			continue
 		}
 		bases = append(bases, b)
 	}
 	merged := map[string]bool{}
+	noted := map[string]bool{}
 	var candidates []string
 	var skipped []pruneRow
 	for _, b := range bases {
@@ -234,7 +228,13 @@ func branchPrune(a *App, s *session, cmd *cobra.Command, args []string, e *app.E
 		tip, _ := e.Git.Query(ctx, "rev-parse", start)
 		res, err := p.Read(ctx, e.Git.Cmd("branch", "--merged", start, "--format=%(refname:short)%09%(objectname)%09%(worktreepath)"),
 			"merged into "+start, func(r execx.Result) string {
-				return fmt.Sprintf("%d branch(es)", len(strings.Fields(r.Stdout)))
+				n := 0
+				for _, l := range strings.Split(r.Stdout, "\n") {
+					if strings.TrimSpace(l) != "" {
+						n++
+					}
+				}
+				return fmt.Sprintf("%d branch(es)", n)
 			})
 		if err != nil {
 			return err
@@ -249,14 +249,20 @@ func branchPrune(a *App, s *session, cmd *cobra.Command, args []string, e *app.E
 				continue
 			}
 			switch {
-			case name == current:
-				skipped = append(skipped, pruneRow{name, "current branch"})
 			case !w.BranchPrunable(name):
 				continue // protected or outside the workflow: not ours to prune, not worth a note
+			case name == current:
+				if !noted[name] {
+					noted[name] = true
+					skipped = append(skipped, pruneRow{name, "current branch"})
+				}
 			case len(f) > 1 && f[1] == tip:
 				skipped = append(skipped, pruneRow{name, "same commit as " + start + " (no work yet)"})
 			case len(f) > 2 && strings.TrimSpace(f[2]) != "":
-				skipped = append(skipped, pruneRow{name, "checked out in worktree " + strings.TrimSpace(f[2])})
+				if !noted[name] {
+					noted[name] = true
+					skipped = append(skipped, pruneRow{name, "checked out in worktree " + strings.TrimSpace(f[2])})
+				}
 			default:
 				merged[name] = true
 				candidates = append(candidates, name)
@@ -264,7 +270,10 @@ func branchPrune(a *App, s *session, cmd *cobra.Command, args []string, e *app.E
 		}
 	}
 
-	prMerged := branchMergedPRs(ctx, a, e, c, p)
+	prMerged, idDeny := branchMergedPRs(ctx, a, e, c, p)
+	if idDeny != nil {
+		return lintReport(a, *idDeny)
+	}
 	var unseen []pruneRow
 	var names []string
 	for n := range prMerged {
@@ -281,14 +290,21 @@ func branchPrune(a *App, s *session, cmd *cobra.Command, args []string, e *app.E
 	}
 
 	sort.Strings(candidates)
+	var deletable []string
 	for _, n := range candidates {
 		v := branchEvaluate(a, e, c, execx.Cmd{Name: "git", Args: []string{"branch", "-d", n}}, nil)
 		if v.Decision() == verdict.DecDeny {
 			skipped = append(skipped, pruneRow{n, v.Reason()})
 			continue
 		}
+		if !branchDeletable(ctx, e, n) {
+			skipped = append(skipped, pruneRow{n, "merged into a base branch but not into HEAD or its upstream, so git branch -d would refuse; switch to the base branch first"})
+			continue
+		}
+		deletable = append(deletable, n)
 		p.Git("delete "+n, "branch", "-d", n)
 	}
+	candidates = deletable
 	for _, r := range append(skipped, unseen...) {
 		p.Note("kept %s: %s", r.Name, r.Reason)
 	}
@@ -298,6 +314,20 @@ func branchPrune(a *App, s *session, cmd *cobra.Command, args []string, e *app.E
 		}
 	}
 	return s.runExtra(cmd, p, after, map[string]any{"delete": nonNil(candidates), "kept": nonNilRows(append(skipped, unseen...))})
+}
+
+// branchDeletable reports whether `git branch -d name` would accept the
+// branch: it is merged into HEAD or into its own upstream.
+func branchDeletable(ctx context.Context, e *app.Env, name string) bool {
+	if res, err := e.Git.Exec(ctx, "merge-base", "--is-ancestor", name, "HEAD"); err == nil && res.OK() {
+		return true
+	}
+	up, err := e.Git.Query(ctx, "rev-parse", "--abbrev-ref", name+"@{upstream}")
+	if err != nil || strings.TrimSpace(up) == "" {
+		return false
+	}
+	res, err := e.Git.Exec(ctx, "merge-base", "--is-ancestor", name, strings.TrimSpace(up))
+	return err == nil && res.OK()
 }
 
 func branchDecodePRs(out string, v *[]ghx.PR) error { return json.Unmarshal([]byte(out), v) }
@@ -318,34 +348,44 @@ func nonNilRows(l []pruneRow) []pruneRow {
 
 // branchMergedPRs returns head branch → PR number for merged pull requests,
 // or nil when gh is unavailable, the account fails ID005 or there is no remote.
-func branchMergedPRs(ctx context.Context, a *App, e *app.Env, c *config.Resolved, p *app.Planner) map[string]int {
+func branchMergedPRs(ctx context.Context, a *App, e *app.Env, c *config.Resolved, p *app.Planner) (map[string]int, *verdict.Verdict) {
 	if e.RemoteURL == "" {
-		return nil
+		return nil, nil
 	}
 	if _, err := e.Gh.Version(ctx); err != nil {
 		p.Note("gh not available: only git's own merge information was used")
-		return nil
+		return nil, nil
 	}
 	v := branchEvaluate(a, e, c, execx.Cmd{Name: "gh", Args: []string{"pr", "list", "--state", "merged"}}, nil)
+	clean := true
 	for _, f := range v.Findings {
-		if f.RuleID == "ID005" && f.Severity >= verdict.Ask {
-			p.Check("ID005", false, f.Severity, f.Message)
+		if f.RuleID != "ID005" {
+			continue
+		}
+		clean = false
+		p.Check("ID005", false, f.Severity, f.Message)
+		if f.Severity >= verdict.Ask {
 			p.Note("skipped merged pull requests: gh account check failed (ID005)")
-			return nil
+			if f.Severity == verdict.Deny {
+				return nil, &verdict.Verdict{Findings: []verdict.Finding{f}}
+			}
+			return nil, nil
 		}
 	}
-	p.Check("ID005", true, verdict.Off, "gh account matches the profile")
+	if clean {
+		p.Check("ID005", true, verdict.Off, "gh account matches the profile")
+	}
 	var prs []ghx.PR
 	args := []string{"pr", "list", "--state", "merged", "--limit", "200", "--json", "number,headRefName"}
 	cmd := e.Gh.Cmd(args...)
 	res, err := p.Read(ctx, cmd, "merged pull requests", nil)
 	if err != nil || !res.OK() {
 		p.Note("could not list merged pull requests; only git's own merge information was used")
-		return nil
+		return nil, nil
 	}
 	if err := branchDecodePRs(res.Stdout, &prs); err != nil {
 		p.Note("could not read merged pull requests: %v", err)
-		return nil
+		return nil, nil
 	}
 	out := map[string]int{}
 	for _, pr := range prs {
@@ -353,5 +393,5 @@ func branchMergedPRs(ctx context.Context, a *App, e *app.Env, c *config.Resolved
 			out[pr.HeadRefName] = pr.Number
 		}
 	}
-	return out
+	return out, nil
 }
