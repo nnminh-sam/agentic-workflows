@@ -27,16 +27,16 @@ There are also two High findings in `branch`: `switch -c` sets up tracking of th
 - `push` adds `-u` automatically for a new branch.
 - `pr release` does not fetch; it uses `<remote>/<head>`.
 
-**Fixers in progress at handoff:** three Sonnet agents, each in its own worktree branched from the integration branch:
-- `.claude/worktrees/fix-pushpr`, branch `fix/pushpr`: push and pr findings, and replacing `pr.PushArgs` with `app.PlanPush`.
-- `.claude/worktrees/fix-branchcommit`, branch `fix/branchcommit`: branch and commit findings, gofmt of the two pre-existing test files, and correcting the "Default template" line below.
-- `.claude/worktrees/fix-repo`, branch `fix/repo`: repo findings, and making `app.CommitGitArgs` the single identity/signing helper.
+**Fix status:**
+- `fix/branchcommit` (3b70de2) and `fix/repo` (eca3600) are merged here as daedb89 and 8289336. Every High and Medium finding in branch, commit and repo is fixed. The only thing skipped is the shared engine-deps helper (L14).
+- After those merges, `gofmt -s -l .` is clean, and `go vet ./...` and `go test ./...` pass.
+- Behaviour change: if the ID005 gh account check denies, `branch prune` now exits 2 instead of skipping the lookup of merged PRs.
+- **Pending:** `fix/pushpr` (`.claude/worktrees/fix-pushpr`) was still running at handoff. It covers the push and pr findings, including the three blocking pr bugs, and replaces `pr.PushArgs` with `app.PlanPush`.
 
 **Next steps:**
-1. Check each `fix/*` branch for a commit (`git -C <worktree> log -1`).
+1. Check `fix/pushpr` for a commit (`git -C .claude/worktrees/fix-pushpr log -1`; the base is e5073da's parent, 7608fe0).
    - If it has one, cherry-pick it onto the integration branch.
-   - If it only has uncommitted changes, finish it from the finding list in `docs/review-2026-11-17.md`.
-   - `fix/branchcommit` edits this file, so expect a conflict in HANDOFF.md.
+   - Otherwise finish the push/pr items in `docs/review-2026-11-17.md`.
 2. On the integration branch, run `gofmt -s -l .`, `go vet ./...` and `go test ./...`. Then merge or open a PR into `develop/feat/my-git-cli`.
 3. Remove the agent worktrees (`git worktree remove`). Coder branches: `worktree-agent-*`.
 4. Then continue with the "Not done" list below. Item 1 is now done; items 2–6 remain.
