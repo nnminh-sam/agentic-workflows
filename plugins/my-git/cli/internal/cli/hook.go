@@ -16,6 +16,7 @@ import (
 func init() { register(150, newHookCmd) }
 
 func newHookCmd(a *App) *cobra.Command {
+	s := newSession(a)
 	cmd := &cobra.Command{
 		Use:   "hook <commit-msg|pre-commit|pre-push> …",
 		Short: "run a git hook check (called by the .githooks shims, not by you)",
@@ -28,7 +29,7 @@ func newHookCmd(a *App) *cobra.Command {
 			Short: "check the commit message git is about to record",
 			Args:  cobra.ExactArgs(1),
 			RunE: func(cmd *cobra.Command, args []string) error {
-				return hookRun(a, "commit-msg", func(cwd string, cfg *config.Resolved, repo rules.Repo) (verdict.Verdict, error) {
+				return hookRun(a, s, cmd, "commit-msg", func(cwd string, cfg *config.Resolved, repo rules.Repo) (verdict.Verdict, error) {
 					raw, err := os.ReadFile(args[0])
 					if err != nil {
 						return verdict.Verdict{}, err
@@ -46,7 +47,7 @@ func newHookCmd(a *App) *cobra.Command {
 			Short: "block commits on protected branches and badly named work branches",
 			Args:  cobra.NoArgs,
 			RunE: func(cmd *cobra.Command, _ []string) error {
-				return hookRun(a, "pre-commit", func(cwd string, cfg *config.Resolved, repo rules.Repo) (verdict.Verdict, error) {
+				return hookRun(a, s, cmd, "pre-commit", func(cwd string, cfg *config.Resolved, repo rules.Repo) (verdict.Verdict, error) {
 					return githook.PreCommit(cwd, cfg.Policy, repo), nil
 				})
 			},
@@ -60,7 +61,7 @@ func newHookCmd(a *App) *cobra.Command {
 				if len(args) > 1 {
 					url = args[1]
 				}
-				return hookRun(a, "pre-push", func(cwd string, cfg *config.Resolved, repo rules.Repo) (verdict.Verdict, error) {
+				return hookRun(a, s, cmd, "pre-push", func(cwd string, cfg *config.Resolved, repo rules.Repo) (verdict.Verdict, error) {
 					in, err := io.ReadAll(a.In)
 					if err != nil {
 						return verdict.Verdict{}, fmt.Errorf("read stdin: %w", err)
@@ -83,12 +84,12 @@ type hookCheck func(cwd string, cfg *config.Resolved, repo rules.Repo) (verdict.
 // hook contract: findings on stderr, non-zero exit on deny or ask. An
 // invalid config fails closed (the rules cannot be checked), with a hint
 // to fix it or bypass the hook once.
-func hookRun(a *App, name string, check hookCheck) error {
+func hookRun(a *App, s *session, cmd *cobra.Command, name string, check hookCheck) error {
 	cwd, err := a.Cwd()
 	if err != nil {
 		return err
 	}
-	cfg, err := guardResolve(a, cwd)
+	_, cfg, err := s.config(cmd)
 	if err != nil {
 		a.Errorf("mygit %s: the configuration is invalid, so the rules cannot be checked:\n  %v\n"+
 			"  fix it (see mygit doctor), or skip the hook once with --no-verify\n", name, err)

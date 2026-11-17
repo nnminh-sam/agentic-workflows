@@ -145,7 +145,7 @@ func branchEvaluate(a *App, e *app.Env, c *config.Resolved, cmd execx.Cmd, ignor
 		words = append(words, shellfmt.Quote(shellfmt.Bash, w))
 	}
 	v := engine.Evaluate(engine.Request{Command: strings.Join(words, " "), Dialect: shell.Bash, Cwd: e.RepoRoot},
-		c.Policy, guardEngineDeps(a))
+		c.Policy, e.EngineDeps())
 	var out verdict.Verdict
 	for _, f := range v.Findings {
 		if !slices.Contains(ignore, f.RuleID) {

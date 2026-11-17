@@ -154,9 +154,16 @@ func CheckSigning(call *shell.GitCall, c *policy.Contract, vars map[string]any) 
 	return v
 }
 
-// signFlags scans git commit arguments for -S/--gpg-sign and --no-gpg-sign.
+// commitWithValue lists long git commit options that take a separate value argument.
+// Note: --untracked-files and --gpg-sign only accept an attached =<val>, never a separate arg.
+var commitWithValue = valueSet("--message", "--file", "--reuse-message", "--reedit-message", "--fixup", "--squash",
+	"--author", "--date", "--template", "--cleanup", "--pathspec-from-file", "--trailer")
+
+// signFlags scans git commit arguments for -S/--gpg-sign and --no-gpg-sign,
+// skipping separate option arguments (e.g. -m '-S fix').
 func signFlags(argv []string) (signed, unsigned bool) {
-	for _, a := range argv {
+	for i := 0; i < len(argv); i++ {
+		a := argv[i]
 		switch {
 		case a == "--":
 			return signed, unsigned
@@ -164,25 +171,34 @@ func signFlags(argv []string) (signed, unsigned bool) {
 			signed = true
 		case a == "--no-gpg-sign":
 			unsigned = true
+		case commitWithValue[a]:
+			i++ // skip the option's separate value argument
 		case strings.HasPrefix(a, "-") && !strings.HasPrefix(a, "--"):
-			signed = signed || clusterHasS(a[1:])
+			hasS, takesNext := clusterScanS(a[1:])
+			signed = signed || hasS
+			if takesNext {
+				i++
+			}
 		}
 	}
 	return signed, unsigned
 }
 
-// clusterHasS reports -S inside a short-option cluster, stopping at the
-// first option that takes a value (-m, -F, -C, -c, -t).
-func clusterHasS(body string) bool {
-	for _, ch := range body {
+// clusterScanS reports -S inside a short-option cluster and whether the
+// cluster ends with an option that consumes the next argument (-m, -F, -C, -c, -t).
+// -S[<keyid>] and -u[<mode>] take an optional attached value, so scanning stops at S or u.
+func clusterScanS(body string) (hasS, takesNext bool) {
+	for idx, ch := range body {
 		switch {
 		case ch == 'S':
-			return true
+			return true, false
+		case ch == 'u':
+			return false, false
 		case strings.ContainsRune("mFCct", ch):
-			return false
+			return false, idx+len(string(ch)) == len(body)
 		}
 	}
-	return false
+	return false, false
 }
 
 // ---------------------------------------------------------------- remotes & ssh (ID003 / ID004)

@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -28,6 +27,7 @@ const (
 )
 
 func newHooksCmd(a *App) *cobra.Command {
+	s := newSession(a)
 	cmd := &cobra.Command{
 		Use:   "hooks",
 		Short: "install, remove or inspect the git hook shims (.githooks → mygit hook)",
@@ -37,60 +37,56 @@ func newHooksCmd(a *App) *cobra.Command {
 		Use:   "install",
 		Short: "write .githooks/{commit-msg,pre-commit,pre-push} and set core.hooksPath (dry run first)",
 		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			env, err := hooksEnv(a)
+		RunE: func(cmd *cobra.Command, args []string) error {
+			p, env, err := s.planner(cmd, args)
 			if err != nil {
 				return err
 			}
-			p := env.NewPlanner([]string{"hooks", "install"})
+			if err := env.RequireRepo(); err != nil {
+				return err
+			}
 			if err := planHooksInstall(a, env, p, force); err != nil {
 				return err
 			}
-			built, err := p.Build(a.Context())
-			if err != nil {
-				return err
-			}
-			return guardRunPlan(a.Context(), a, env, built, nil)
+			return s.run(cmd, p, nil)
 		},
 	}
 	install.Flags().BoolVar(&force, "force", false, "replace hook files that were not written by mygit")
+	s.addOutFlag(install)
 	uninstall := &cobra.Command{
 		Use:   "uninstall",
 		Short: "remove the mygit hook shims and unset core.hooksPath (dry run first)",
 		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			env, err := hooksEnv(a)
+		RunE: func(cmd *cobra.Command, args []string) error {
+			p, env, err := s.planner(cmd, args)
 			if err != nil {
 				return err
 			}
-			p := env.NewPlanner([]string{"hooks", "uninstall"})
+			if err := env.RequireRepo(); err != nil {
+				return err
+			}
 			if err := planHooksUninstall(a, env, p); err != nil {
 				return err
 			}
-			built, err := p.Build(a.Context())
-			if err != nil {
-				return err
-			}
-			return guardRunPlan(a.Context(), a, env, built, nil)
+			return s.run(cmd, p, nil)
 		},
 	}
+	s.addOutFlag(uninstall)
 	status := &cobra.Command{
 		Use:   "status",
 		Short: "show which hook shims are installed and whether git uses them",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			env, err := hooksEnv(a)
+			env, err := s.env(cmd)
 			if err != nil {
+				return err
+			}
+			if err := env.RequireRepo(); err != nil {
 				return err
 			}
 			st := hooksStatus(a, env)
 			if a.Opts.JSON {
-				b, err := json.MarshalIndent(st, "", "  ")
-				if err != nil {
-					return err
-				}
-				fmt.Fprintln(a.Out, string(b))
-				return nil
+				return emitJSON(a.Out, st)
 			}
 			printHooksStatus(a, st)
 			return nil
@@ -98,14 +94,6 @@ func newHooksCmd(a *App) *cobra.Command {
 	}
 	cmd.AddCommand(install, uninstall, status)
 	return cmd
-}
-
-func hooksEnv(a *App) (*mgapp.Env, error) {
-	env, err := guardEnv(a, "")
-	if err != nil {
-		return nil, err
-	}
-	return env, env.RequireRepo()
 }
 
 // hookFile describes one shim on disk.

@@ -19,9 +19,11 @@ import (
 	"sync"
 
 	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/config"
+	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/engine"
 	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/execx"
 	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/ghx"
 	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/gitx"
+	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/rules"
 )
 
 // Deps are the process boundaries Load reads. Nil funcs get OS defaults.
@@ -142,6 +144,15 @@ func (e *Env) ReadOptional(path string) ([]byte, error) {
 		return nil, nil
 	}
 	return b, err
+}
+
+// EngineDeps returns the rules engine side-effect dependencies bound to e.
+func (e *Env) EngineDeps() engine.Deps {
+	return engine.Deps{
+		Repo:     func(dir string) rules.Repo { return rules.NewGitRepo(e.Runner, dir) },
+		ReadFile: e.ReadFile,
+		Env:      e.Getenv,
+	}
 }
 
 // ScopePath returns the config file of a writable scope.

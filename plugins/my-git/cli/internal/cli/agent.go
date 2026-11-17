@@ -29,6 +29,7 @@ const (
 )
 
 func newAgentCmd(a *App) *cobra.Command {
+	s := newSession(a)
 	cmd := &cobra.Command{
 		Use:   "agent",
 		Short: "connect AI agents to mygit (pre-command hook, instructions, git hooks)",
@@ -41,17 +42,18 @@ func newAgentCmd(a *App) *cobra.Command {
 			Args:      cobra.ExactArgs(1),
 			ValidArgs: installAgents,
 			RunE: func(cmd *cobra.Command, args []string) error {
-				return agentChange(a, strings.ToLower(args[0]), scope, install)
+				return agentChange(a, s, cmd, args, strings.ToLower(args[0]), scope, install)
 			},
 		}
 		c.Flags().StringVar(&scope, "scope", "project", "project (this repository) or user (every repository)")
+		s.addOutFlag(c)
 		return c
 	}
 	status := &cobra.Command{
 		Use:   "status",
 		Short: "show which agents are connected to mygit",
 		Args:  cobra.NoArgs,
-		RunE:  func(cmd *cobra.Command, _ []string) error { return agentStatus(a) },
+		RunE:  func(cmd *cobra.Command, _ []string) error { return agentStatus(a, s, cmd) },
 	}
 	cmd.AddCommand(mk("install", true), mk("uninstall", false), status)
 	return cmd
@@ -99,8 +101,8 @@ func agentTargetFor(a *App, env *mgapp.Env, name, scope string) (agentTarget, er
 	return t, nil
 }
 
-func agentChange(a *App, name, scope string, install bool) error {
-	env, err := guardEnv(a, "")
+func agentChange(a *App, s *session, cmd *cobra.Command, args []string, name, scope string, install bool) error {
+	p, env, err := s.planner(cmd, args)
 	if err != nil {
 		return err
 	}
@@ -108,11 +110,6 @@ func agentChange(a *App, name, scope string, install bool) error {
 	if err != nil {
 		return err
 	}
-	verb := "uninstall"
-	if install {
-		verb = "install"
-	}
-	p := env.NewPlanner([]string{"agent", verb, name, "--scope", scope})
 	cur, err := env.ReadOptional(t.Path)
 	if err != nil {
 		return err
@@ -152,11 +149,7 @@ func agentChange(a *App, name, scope string, install bool) error {
 	} else if !install {
 		p.Note("the git hooks stay installed (other agents and people rely on them); remove them with mygit hooks uninstall")
 	}
-	built, err := p.Build(a.Context())
-	if err != nil {
-		return err
-	}
-	return guardRunPlan(a.Context(), a, env, built, map[string]any{"target": t})
+	return s.runExtra(cmd, p, nil, map[string]any{"target": t})
 }
 
 // agentsMDBlock inserts (install) or removes the mygit block of an
@@ -326,8 +319,8 @@ type agentStatusRow struct {
 	Detail    string `json:"detail,omitempty"`
 }
 
-func agentStatus(a *App) error {
-	env, err := guardEnv(a, "")
+func agentStatus(a *App, s *session, cmd *cobra.Command) error {
+	env, err := s.env(cmd)
 	if err != nil {
 		return err
 	}

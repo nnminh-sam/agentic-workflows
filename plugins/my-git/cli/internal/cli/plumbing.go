@@ -46,9 +46,14 @@ func newSession(a *App) *session {
 	return s
 }
 
-// depsOf adapts the App to app.Deps.
+// depsOf adapts the App to app.Deps for a's working directory.
 func depsOf(a *App) app.Deps {
 	cwd, _ := a.Cwd()
+	return depsFor(a, cwd)
+}
+
+// depsFor adapts the App to app.Deps for cwd.
+func depsFor(a *App, cwd string) app.Deps {
 	home := ""
 	if a.Home != nil {
 		home, _ = a.Home()
@@ -59,6 +64,17 @@ func depsOf(a *App) app.Deps {
 		Flags: config.Flags{Profile: o.Profile, Ruleset: o.Ruleset, Workflow: o.Workflow,
 			Rules: o.Rules, Mode: o.Mode, Shell: o.Shell},
 	}
+}
+
+// loadEnvFor loads an app.Env for cwd ("" = -C / process cwd).
+func loadEnvFor(a *App, cwd string) (*app.Env, error) {
+	if cwd == "" {
+		var err error
+		if cwd, err = a.Cwd(); err != nil {
+			return nil, err
+		}
+	}
+	return app.Load(a.Context(), depsFor(a, cwd))
 }
 
 // env returns the memoized environment (config errors are in env.ConfigErr).

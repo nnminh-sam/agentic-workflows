@@ -363,11 +363,9 @@ type evaluator struct {
 }
 
 func newEvaluator(e *app.Env, pol *policy.Policy, read rules.ReadFile) *evaluator {
-	return &evaluator{e: e, pol: pol, deps: engine.Deps{
-		Repo:     func(dir string) rules.Repo { return rules.NewGitRepo(e.Runner, dir) },
-		ReadFile: read,
-		Env:      e.Getenv,
-	}}
+	deps := e.EngineDeps()
+	deps.ReadFile = read
+	return &evaluator{e: e, pol: pol, deps: deps}
 }
 
 // eval checks `prog args…` and keeps the findings of the listed rules.

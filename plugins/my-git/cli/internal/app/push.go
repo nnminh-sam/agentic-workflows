@@ -154,12 +154,7 @@ func PlanPush(ctx context.Context, p *Planner, o PushOptions) (*PushPlan, error)
 	res.Command = "git " + joinQuoted(res.Args)
 	pol := cfg.Policy
 	res.Verdict = engine.Evaluate(
-		engine.Request{Command: res.Command, Dialect: shell.Bash, Cwd: e.RepoRoot}, pol,
-		engine.Deps{
-			Repo:     func(dir string) rules.Repo { return rules.NewGitRepo(e.Runner, dir) },
-			ReadFile: e.ReadFile,
-			Env:      e.Getenv,
-		})
+		engine.Request{Command: res.Command, Dialect: shell.Bash, Cwd: e.RepoRoot}, pol, e.EngineDeps())
 
 	if !o.SkipSigning {
 		if err := pushSigning(ctx, p, cfg.Profile, pol, remote, res); err != nil {
