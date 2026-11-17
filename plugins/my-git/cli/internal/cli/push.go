@@ -17,11 +17,12 @@ func newPushCmd(a *App) *cobra.Command {
 	var upstream bool
 	cmd := &cobra.Command{
 		Use:   "push [--upstream]",
-		Short: "push the current branch to origin (never forced)",
-		Long: "push plans `git push [-u] origin <current-branch>` with the profile's credential pinned\n" +
+		Short: "push the current branch to the workflow remote (never forced)",
+		Long: "push plans `git push [-u] <remote> <current-branch>` (the workflow's remote, origin by default) with the profile's credential pinned\n" +
 			"(-c core.sshCommand for an ssh key), checks it against the rules (ID003, ID004, BR002), and\n" +
 			"verifies the signatures of the commits it would send when the profile signs commits (ID006).\n" +
-			"It shows ahead/behind against the upstream, refuses a detached HEAD and never forces.",
+			"It shows ahead/behind against <remote>/<branch>, adds -u for a branch with no remote counterpart, refuses a detached HEAD\n" +
+			"and never forces.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			p, env, err := s.planner(cmd, args)
@@ -46,7 +47,7 @@ func newPushCmd(a *App) *cobra.Command {
 			return pushDenied(a, built, extra)
 		},
 	}
-	cmd.Flags().BoolVarP(&upstream, "upstream", "u", false, "set the upstream (push -u)")
+	cmd.Flags().BoolVarP(&upstream, "upstream", "u", false, "set the upstream (push -u; added automatically for a branch not on the remote yet)")
 	s.addOutFlag(cmd)
 	return cmd
 }

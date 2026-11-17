@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -97,10 +98,15 @@ func newPRWorld(t *testing.T, local string) *prWorld {
 	r.on("git diff --stat", " 2 files changed, 10 insertions(+)\n")
 	r.on("gh auth status --active", prGhUser)
 	r.on("gh pr list", "[]")
-	r.on("go test ./...", "ok  \texample/pkg\t0.253s\n")
-	r.on("go vet ./...", "")
+	r.on("sh -c go test ./...", "ok  \texample/pkg\t0.253s\n")
+	r.on("sh -c go vet ./...", "")
 	r.on("gh pr create", "https://github.com/octo-acme/api/pull/17\n")
 	r.on("git rev-parse -q --verify HEAD", "deadbeef\n")
+	r.on("git rev-parse -q --verify refs/heads/", "deadbeef\n")
+	r.on("git remote get-url --push origin", "git@github.com:octo-acme/api.git\n")
+	// A new branch: no upstream, no remote counterpart.
+	r.fail("git rev-parse --abbrev-ref --symbolic-full-name", 128, "no upstream")
+	r.fail("git rev-parse --verify -q refs/remotes/origin/develop/feat/login", 1, "")
 	return &prWorld{t: t, repo: repo, run: r, out: &bytes.Buffer{}, errb: &bytes.Buffer{}}
 }
 
@@ -137,10 +143,10 @@ func TestPRCreateDryRun(t *testing.T) {
 		"title feat(auth): add login endpoint",
 		"base develop/base ← develop/feat/login",
 		"## Summary", "## Detailed changes", "## Explanation", "## Test results",
-		"- Unit tests: `go test ./...` → passed", "ok example/pkg Ns",
+		"- Unit tests: `go test ./...` → passed",
 		"- Lint: `go vet ./...` → passed",
 		"Sessions expire after an hour.",
-		`git -c core.sshCommand="ssh -i /keys/id_acme -o IdentitiesOnly=yes" push -u origin develop/feat/login`,
+		`core.sshCommand="ssh -i \"/keys/id_acme\" -o IdentitiesOnly=yes"`, "push -u origin develop/feat/login",
 		"gh pr create --base develop/base --head develop/feat/login --title",
 		"not applied (dry run)",
 	} {
@@ -157,7 +163,7 @@ func TestPRCreateDryRun(t *testing.T) {
 			t.Errorf("dry run executed %q", bad)
 		}
 	}
-	for _, read := range []string{"go test ./...", "go vet ./...", "gh auth status", "gh pr list --head develop/feat/login --json url"} {
+	for _, read := range []string{"sh -c go test ./...", "sh -c go vet ./...", "gh auth status", "gh pr list --head develop/feat/login --base develop/base --state open --json url"} {
 		if !w.run.ran(read) {
 			t.Errorf("did not run read step %q", read)
 		}
@@ -178,7 +184,7 @@ func TestPRCreateYesAppliesAndPrintsURL(t *testing.T) {
 			create = c
 		}
 	}
-	if !strings.Contains(push, "-c core.sshCommand=ssh -i /keys/id_acme -o IdentitiesOnly=yes push -u origin develop/feat/login") {
+	if !strings.Contains(push, `-c core.sshCommand=ssh -i "/keys/id_acme" -o IdentitiesOnly=yes push -u origin develop/feat/login`) {
 		t.Errorf("push = %q", push)
 	}
 	if !strings.Contains(create, "--base develop/base --head develop/feat/login --title feat(auth): add login endpoint --body-file ") ||
@@ -267,15 +273,101 @@ func TestPRCreateBR005ToMain(t *testing.T) {
 	}
 }
 
-func TestPRFailingChecksAreReported(t *testing.T) {
+func TestPRFailingChecksBlockUnlessAllowed(t *testing.T) {
 	w := newPRWorld(t, "")
-	w.run.resp["go test ./..."] = execx.Result{ExitCode: 1, Stdout: "FAIL example/pkg 0.1s\n"}
-	if code := w.main("pr", "create"); code != 0 {
-		t.Fatalf("exit %d\n%s%s", code, w.out, w.errb)
+	w.run.resp["sh -c go test ./..."] = execx.Result{ExitCode: 1, Stdout: "FAIL example/pkg 0.1s\n"}
+	// D2: failing checks are an ask-level finding (exit 1) and nothing is created.
+	if code := w.main("pr", "create", "--yes"); code != 1 {
+		t.Fatalf("exit %d, want 1\n%s%s", code, w.out, w.errb)
 	}
 	out := w.out.String()
-	if !strings.Contains(out, "→ FAILED (exit 1)") || !strings.Contains(out, "FAIL example/pkg Ns") {
-		t.Errorf("failure not in the body:\n%s", out)
+	if !strings.Contains(out, "PR-CHECKS") || !strings.Contains(out, "--allow-failing-checks") {
+		t.Errorf("no blocking finding:\n%s", out)
+	}
+	if !strings.Contains(prFlat(out), "FAIL example/pkg") {
+		t.Errorf("failing output not shown as a note:\n%s", out)
+	}
+	if w.run.ran("gh pr create") {
+		t.Error("created a PR with failing checks")
+	}
+	// --allow-failing-checks: the body reports the failure, the output is not in it.
+	if code := w.main("pr", "create", "--allow-failing-checks"); code != 0 {
+		t.Fatalf("exit %d\n%s%s", code, w.out, w.errb)
+	}
+	out = w.out.String()
+	if !strings.Contains(out, "→ FAILED (exit 1)") || strings.Contains(out, "| ```") {
+		t.Errorf("body:\n%s", out)
+	}
+}
+
+func TestPRNoChecksSkipsTestAndLint(t *testing.T) {
+	w := newPRWorld(t, "")
+	w.run.resp["sh -c go test ./..."] = execx.Result{ExitCode: 1}
+	if code := w.main("pr", "create", "--no-checks"); code != 0 {
+		t.Fatalf("exit %d\n%s%s", code, w.out, w.errb)
+	}
+	if w.run.ran("sh -c") {
+		t.Errorf("ran a check: %v", w.run.calls)
+	}
+	if out := w.out.String(); !strings.Contains(out, "`go test ./...` → not run (--no-checks)") {
+		t.Errorf("body:\n%s", out)
+	}
+}
+
+func TestPRDryRunThenApplyIDSurvivesTimingNoise(t *testing.T) {
+	w := newPRWorld(t, "")
+	if code := w.main("pr", "create"); code != 0 {
+		t.Fatalf("dry run exit %d\n%s%s", code, w.out, w.errb)
+	}
+	m := regexp.MustCompile(`--apply ([0-9a-f]{6})`).FindStringSubmatch(w.out.String())
+	if m == nil {
+		t.Fatalf("no --apply hint:\n%s", w.out)
+	}
+	if w.run.ran("gh pr create") || w.run.ran("git -c") {
+		t.Fatal("dry run wrote")
+	}
+	// Same state, different test output (timing and cache marks): the id holds.
+	w.run.on("sh -c go test ./...", "ok  \texample/pkg\t(cached)\n")
+	w.run.on("sh -c go vet ./...", "vet: 2.31 s total\n")
+	if code := w.main("pr", "create", "--apply", m[1]); code != 0 {
+		t.Fatalf("--apply %s exit %d\n%s%s", m[1], code, w.out, w.errb)
+	}
+	var push, create bool
+	for _, c := range w.run.calls {
+		push = push || strings.Contains(c, " push -u origin develop/feat/login")
+		create = create || strings.HasPrefix(c, "gh pr create")
+	}
+	if !push || !create {
+		t.Errorf("apply did not push (%v) and create (%v): %v", push, create, w.run.calls)
+	}
+}
+
+func TestPRBehindRemoteBlocks(t *testing.T) {
+	w := newPRWorld(t, "")
+	w.run.on("git rev-parse --abbrev-ref --symbolic-full-name", "origin/develop/feat/login\n")
+	w.run.on("git rev-list --left-right --count", "2\t1\n")
+	if code := w.main("pr", "create", "--yes"); code != 1 {
+		t.Fatalf("exit %d, want 1\n%s%s", code, w.out, w.errb)
+	}
+	if out := w.out.String(); !strings.Contains(out, "PR-SYNC") || !strings.Contains(out, "behind") {
+		t.Errorf("no behind finding:\n%s", out)
+	}
+	if w.run.ran("gh pr create") {
+		t.Error("created a PR for a behind branch")
+	}
+}
+
+func TestPRBodyFileIsRelativeToTheRepo(t *testing.T) {
+	w := newPRWorld(t, "")
+	body := "## Summary\nFrom a file.\n\n## Detailed changes\n- x\n\n## Explanation\nBecause.\n\n## Test results\n- Unit tests: `go test` ok\n- Lint: `go vet` clean\n"
+	if err := os.WriteFile(filepath.Join(w.repo, "body.md"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code := w.main("pr", "create", "--body-file", "body.md"); code != 0 {
+		t.Fatalf("exit %d\n%s%s", code, w.out, w.errb)
+	}
+	if !strings.Contains(w.out.String(), "From a file.") {
+		t.Errorf("body file not used:\n%s", w.out)
 	}
 }
 
@@ -322,6 +414,59 @@ func TestPRReleaseUsesWorkflowTransition(t *testing.T) {
 	}
 	if len(got.Extra.Commands) != 1 || !strings.HasPrefix(got.Extra.Commands[0], "gh pr create --base main --head develop/base") {
 		t.Errorf("commands = %v", got.Extra.Commands)
+	}
+}
+
+func TestPRReleaseReadsRemoteTrackingHead(t *testing.T) {
+	w := newPRWorld(t, "")
+	w.run.on("git log --format=%h%x1f%s%x1f%b%x1e", "b2\x1ffeat: one\x1f\x1e")
+	if code := w.main("pr", "release", "--section", "Explanation=Ship it."); code != 0 {
+		t.Fatalf("exit %d\n%s%s", code, w.out, w.errb)
+	}
+	// The stale local develop/base is not used: the range is remote-tracking on both sides.
+	if !w.run.ran("git log --format=%h%x1f%s%x1f%b%x1e origin/main..origin/develop/base") {
+		t.Errorf("calls: %v", w.run.calls)
+	}
+	// Missing remote-tracking head: an error that says how to fetch, no fetch of its own.
+	w.run.fail("git rev-parse --verify -q refs/remotes/origin/develop/base", 1, "")
+	if code := w.main("pr", "release"); code != 1 || !strings.Contains(w.errb.String(), "mygit graph --fetch") {
+		t.Errorf("exit %d: %s", code, w.errb)
+	}
+	if w.run.ran("git fetch") {
+		t.Error("fetched on its own")
+	}
+}
+
+func TestPRReleaseSigningSkipsMergesAndGitHubCommits(t *testing.T) {
+	proj := `{"profile":"work","profiles":{"work":{"git":{"name":"Octo Cat","email":"octo@acme.example",
+	  "signing":{"format":"ssh","key":"/keys/id_sign.pub"}},"github":{"user":"octo-acme","transport":"ssh","sshKey":"/keys/id_acme"}}},
+	  "rules":{"ID006":"deny"}}`
+	w := newPRWorld(t, proj)
+	w.run.on("git log --format=%h%x1f%s%x1f%b%x1e", "b2\x1ffeat: one\x1f\x1e")
+	w.run.on("git log --no-merges --format=%H%x1f%G?%x1f%GS%x1f%s%x1f%ce origin/main..origin/develop/base",
+		"aaaaaaa1\x1fN\x1f\x1ffeat: squashed on github\x1fnoreply@github.com\n"+
+			"bbbbbbb2\x1fG\x1fOcto\x1ffix: mine\x1focto@acme.example\n")
+	if code := w.main("pr", "release", "--section", "Explanation=Ship it."); code != 0 {
+		t.Fatalf("exit %d\n%s%s", code, w.out, w.errb)
+	}
+	if strings.Contains(w.out.String(), "ID006") && strings.Contains(w.out.String(), "not signed") {
+		t.Errorf("GitHub-committed commit flagged:\n%s", w.out)
+	}
+	// A commit by the profile identity that is unsigned still is.
+	w.run.on("git log --no-merges --format=%H%x1f%G?%x1f%GS%x1f%s%x1f%ce origin/main..origin/develop/base",
+		"ccccccc3\x1fN\x1f\x1ffeat: mine unsigned\x1focto@acme.example\n")
+	if code := w.main("pr", "release", "--section", "Explanation=Ship it."); code != 2 || !strings.Contains(w.out.String(), "not signed") {
+		t.Errorf("unsigned commit: exit %d\n%s", code, w.out)
+	}
+}
+
+func TestPRBranchRulesStopBeforeChecks(t *testing.T) {
+	w := newPRWorld(t, "")
+	if code := w.main("pr", "create", "--to", "main"); code != 2 {
+		t.Fatalf("exit %d\n%s%s", code, w.out, w.errb)
+	}
+	if w.run.ran("sh -c") || w.run.ran("gh pr") {
+		t.Errorf("ran checks or gh before BR005 stopped the plan: %v", w.run.calls)
 	}
 }
 

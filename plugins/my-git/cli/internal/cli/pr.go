@@ -3,7 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
-	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -27,6 +27,9 @@ type prFlags struct {
 	bodyFile string
 	version  string
 	sections []string
+	noChecks bool
+	// allowFailing turns failing test/lint from a blocking finding into a note.
+	allowFailing bool
 }
 
 func (f *prFlags) add(cmd *cobra.Command, withTo bool) {
@@ -38,6 +41,8 @@ func (f *prFlags) add(cmd *cobra.Command, withTo bool) {
 	fl.StringVar(&f.title, "title", "", "PR title (default: derived from the commits or branch)")
 	fl.StringVar(&f.bodyFile, "body-file", "", "use this markdown file as the body instead of the template ('-' for stdin)")
 	fl.StringArrayVar(&f.sections, "section", nil, `fill a body section: "Explanation=why we did this" (repeatable)`)
+	fl.BoolVar(&f.noChecks, "no-checks", false, "skip the configured test and lint commands (the body says they were not run)")
+	fl.BoolVar(&f.allowFailing, "allow-failing-checks", false, "open the PR although test or lint failed (the body reports it)")
 	fl.StringVar(&f.version, "version", "", "release version for the title and summary (default: today's date)")
 }
 
@@ -46,7 +51,8 @@ func newPRCmd(a *App) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "pr",
 		Short: "open and check pull requests (plan)",
-		Long: "pr create and pr release run the sequence: read the branch range, run the configured test and lint, check the gh account,\n" +
+		Long: "pr create and pr release run the sequence: read the branch range, run the configured test and lint (failing ones block unless\n" +
+			"--allow-failing-checks; --no-checks skips them), check the gh account,\n" +
 			"look for an open PR, render the title and body, validate them, then push and run gh pr create. Dry run stops after the checks\n" +
 			"and prints the title, the body and the exact commands.",
 	}
@@ -111,13 +117,18 @@ func runPROpen(a *App, s *session, cmd *cobra.Command, args []string, f *prFlags
 		return err
 	}
 	in := pr.Input{Env: e, Config: c, Target: t, Current: cur, Draft: f.draft, Title: f.title,
-		Sections: sections, Version: f.version, Now: a.Now()}
+		Sections: sections, Version: f.version, Now: a.Now(), NoChecks: f.noChecks, AllowFailingChecks: f.allowFailing}
 	if f.bodyFile != "" {
 		var b []byte
 		if f.bodyFile == "-" {
 			b, err = io.ReadAll(a.In)
 		} else {
-			b, err = os.ReadFile(f.bodyFile)
+			// Relative to the repository (-C), read through the Env.
+			path := f.bodyFile
+			if !filepath.IsAbs(path) {
+				path = filepath.Join(e.Cwd, path)
+			}
+			b, err = e.ReadFile(path)
 		}
 		if err != nil {
 			return err

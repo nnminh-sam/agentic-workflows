@@ -21,9 +21,16 @@ import (
 // PushOptions tune PlanPush.
 type PushOptions struct {
 	// Upstream adds -u so the branch tracks the remote branch afterwards.
+	// A branch with no remote counterpart gets -u even without it.
 	Upstream bool
-	// Remote is the remote to push to ("" = origin).
+	// Remote is the remote to push to ("" = the workflow's remote, else origin).
 	Remote string
+	// Branch is the local branch to push ("" = the checked-out branch).
+	// Every read then uses refs/heads/<branch>, never HEAD.
+	Branch string
+	// SkipSigning leaves out the ID006 signature check of the commits to
+	// push (for callers that verify signatures over their own range).
+	SkipSigning bool
 }
 
 // PushPlan is what PlanPush found and recorded.
@@ -38,6 +45,11 @@ type PushPlan struct {
 	Behind int `json:"behind"`
 	// NewBranch is true when the remote branch does not exist yet.
 	NewBranch bool `json:"newBranch"`
+	// SetUpstream is true when the push carries -u (asked for, or added
+	// because the branch has no remote counterpart).
+	SetUpstream bool `json:"setUpstream"`
+	// Tracked is true when the branch's configured upstream is <remote>/<branch>.
+	Tracked bool `json:"tracked"`
 	// Args are the git arguments of the push step ("-c", "core.sshCommand=…",
 	// "push", "-u", "origin", branch). Always set, also when Denied.
 	Args []string `json:"args"`
@@ -66,17 +78,19 @@ type PushPlan struct {
 // ErrDetachedHead is returned by PlanPush when HEAD is not on a branch.
 var ErrDetachedHead = errors.New("HEAD is detached: check out a branch before pushing")
 
-// PlanPush plans `git push [-u] <remote> <current-branch>` on p. It is the
-// push step of `mygit push` and is meant to be reused by `mygit pr create`
-// (call it with Upstream: true on the same Planner, before the gh step).
+// PlanPush plans `git push [-u] <remote> <branch>` on p (the checked-out
+// branch unless PushOptions.Branch names one). It is the push step of
+// `mygit push` and of `mygit pr create` (same Planner, before the gh step).
 //
 // Reads recorded on p (they run immediately): the upstream and ahead/behind
-// state, and, when the profile signs commits and ID006 is enabled, one
+// state of refs/heads/<branch>, and, when the profile signs commits and ID006 is enabled, one
 // `git log` over the commits to push (the equivalent of `mygit sign
 // verify`). The write step is the push, pinned with
 // `-c core.sshCommand=ssh -i <key> -o IdentitiesOnly=yes` when the profile
 // uses the ssh transport with an ssh key (nothing is pinned for transport
-// gh). The planned command is run through the rules engine (ID003, ID004,
+// gh); the key is always double-quoted, and the pin decision looks at the
+// remote's push URL. The configured upstream is only trusted when it is
+// <remote>/<branch>; a branch with no remote counterpart is pushed with -u. The planned command is run through the rules engine (ID003, ID004,
 // BR002) and every passed or failed rule becomes a plan check; unsigned
 // commits are ID006 findings. The push is never forced.
 //
@@ -94,33 +108,49 @@ func PlanPush(ctx context.Context, p *Planner, o PushOptions) (*PushPlan, error)
 		return nil, err
 	}
 	remote := o.Remote
+	if remote == "" && cfg.Workflow != nil {
+		remote = cfg.Workflow.Remote
+	}
 	if remote == "" {
 		remote = "origin"
 	}
-	branch, err := e.Git.CurrentBranch(ctx)
+	branch := o.Branch
+	if branch == "" {
+		if branch, err = e.Git.CurrentBranch(ctx); err != nil {
+			return nil, err
+		}
+		if branch == "" {
+			return nil, ErrDetachedHead
+		}
+	}
+	tip, err := e.Git.Exec(ctx, "rev-parse", "-q", "--verify", "refs/heads/"+branch+"^{commit}")
 	if err != nil {
 		return nil, err
 	}
-	if branch == "" {
-		return nil, ErrDetachedHead
-	}
-	if head, err := e.Git.HeadSHA(ctx); err != nil {
-		return nil, err
-	} else if head == "" {
+	if !tip.OK() || strings.TrimSpace(tip.Stdout) == "" {
 		return nil, fmt.Errorf("branch %s has no commits yet: nothing to push", branch)
 	}
 	url, err := e.Git.RemoteURL(ctx, remote)
 	if err != nil || strings.TrimSpace(url) == "" {
 		return nil, fmt.Errorf("remote %q is not configured (add it with: git remote add %s <url>)", remote, remote)
 	}
+	// The push URL decides whether an ssh key is pinned (pushurl may differ).
+	pushURL := url
+	if u, err := e.Git.Query(ctx, "remote", "get-url", "--push", remote); err == nil && u != "" {
+		pushURL = u
+	}
 	res := &PushPlan{Branch: branch, Remote: remote}
 
 	if err := pushTrack(ctx, p, res); err != nil {
 		return nil, err
 	}
+	res.SetUpstream = o.Upstream || res.NewBranch
+	if res.NewBranch && !o.Upstream {
+		p.Note("%s has no remote counterpart: adding -u so it tracks %s/%s", branch, remote, branch)
+	}
 
 	// The planned command, pinned like the profile requires.
-	res.Args = pushArgs(cfg.Profile, url, o.Upstream, remote, branch)
+	res.Args = pushArgs(cfg.Profile, pushURL, e.Home, res.SetUpstream, remote, branch)
 	res.Command = "git " + joinQuoted(res.Args)
 	pol := cfg.Policy
 	res.Verdict = engine.Evaluate(
@@ -131,8 +161,10 @@ func PlanPush(ctx context.Context, p *Planner, o PushOptions) (*PushPlan, error)
 			Env:      e.Getenv,
 		})
 
-	if err := pushSigning(ctx, p, cfg.Profile, pol, remote, res); err != nil {
-		return nil, err
+	if !o.SkipSigning {
+		if err := pushSigning(ctx, p, cfg.Profile, pol, remote, res); err != nil {
+			return nil, err
+		}
 	}
 	pushChecks(p, pol, res)
 
@@ -144,7 +176,7 @@ func PlanPush(ctx context.Context, p *Planner, o PushOptions) (*PushPlan, error)
 	res.Denied = res.Decision == verdict.DecDeny
 
 	remoteKnown := res.Upstream != ""
-	res.UpToDate = remoteKnown && res.Ahead == 0 && (!o.Upstream || pushHasConfiguredUpstream(ctx, e, branch))
+	res.UpToDate = remoteKnown && res.Ahead == 0 && (!res.SetUpstream || res.Tracked)
 	if res.Behind > 0 {
 		p.Note("%s is %d commit(s) behind %s: git rejects a push of a diverged branch as non-fast-forward. "+
 			"mygit never forces; update the branch first (rebase or merge)", branch, res.Behind, res.Upstream)
@@ -155,7 +187,7 @@ func PlanPush(ctx context.Context, p *Planner, o PushOptions) (*PushPlan, error)
 	case res.UpToDate:
 		p.Note("%s has nothing new for %s; nothing to push", branch, res.Upstream)
 	default:
-		p.Git("git push "+pushTarget(o.Upstream, remote, branch), res.Args...)
+		p.Git("git push "+pushTarget(res.SetUpstream, remote, branch), res.Args...)
 		res.Pushed = true
 	}
 	return res, nil
@@ -169,12 +201,13 @@ func pushTarget(upstream bool, remote, branch string) string {
 	return remote + " " + branch
 }
 
-// pushArgs returns the git arguments of the push step.
-func pushArgs(p profile.Profile, remoteURL string, upstream bool, remote, branch string) []string {
+// pushArgs returns the git arguments of the push step. home expands a
+// leading ~ in the ssh key, which sits in double quotes (sh would not).
+func pushArgs(p profile.Profile, remoteURL, home string, upstream bool, remote, branch string) []string {
 	var args []string
 	if p.GitHub.Transport != profile.TransportGH && p.GitHub.SSHKey != "" && !rules.IsLocalURL(remoteURL) {
 		if kind, _, _ := rules.ParseRemote(remoteURL); kind == "ssh" {
-			args = append(args, "-c", "core.sshCommand="+pushSSHCommand(p.GitHub.SSHKey))
+			args = append(args, "-c", "core.sshCommand="+pushSSHCommand(p.GitHub.SSHKey, home))
 		}
 	}
 	args = append(args, "push")
@@ -184,12 +217,14 @@ func pushArgs(p profile.Profile, remoteURL string, upstream bool, remote, branch
 	return append(args, remote, branch)
 }
 
-// pushSSHCommand is profile.SSHCommand with the key quoted when it has spaces.
-func pushSSHCommand(key string) string {
-	if strings.ContainsAny(key, " \t") {
-		return `ssh -i "` + key + `" -o IdentitiesOnly=yes`
+// pushSSHCommand is profile.SSHCommand with the key always double-quoted
+// (Windows paths carry backslashes and spaces), a leading ~ expanded.
+func pushSSHCommand(key, home string) string {
+	if home != "" && (key == "~" || strings.HasPrefix(key, "~/") || strings.HasPrefix(key, `~\`)) {
+		key = home + key[1:]
 	}
-	return profile.SSHCommand(key)
+	key = strings.NewReplacer(`"`, `\"`, "$", `\$`, "`", "\\`").Replace(key)
+	return `ssh -i "` + key + `" -o IdentitiesOnly=yes`
 }
 
 func joinQuoted(args []string) string {
@@ -200,16 +235,14 @@ func joinQuoted(args []string) string {
 	return strings.Join(out, " ")
 }
 
-// pushHasConfiguredUpstream reports whether branch.<name>.merge is set.
-func pushHasConfiguredUpstream(ctx context.Context, e *Env, branch string) bool {
-	_, ok, err := e.Git.ConfigGet(ctx, "branch."+branch+".merge")
-	return err == nil && ok
-}
-
-// pushTrack records the upstream and ahead/behind reads and fills res.
+// pushTrack records the upstream and ahead/behind reads and fills res. Only
+// an upstream equal to <remote>/<branch> is trusted; another one (a branch
+// cut from origin/<base> tracks the base) is ignored with a note.
 func pushTrack(ctx context.Context, p *Planner, res *PushPlan) error {
 	e := p.Env
-	up, err := p.Read(ctx, e.Git.Cmd("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"),
+	ref := "refs/heads/" + res.Branch
+	want := res.Remote + "/" + res.Branch
+	up, err := p.Read(ctx, e.Git.Cmd("rev-parse", "--abbrev-ref", "--symbolic-full-name", res.Branch+"@{upstream}"),
 		"upstream of "+res.Branch, func(r execx.Result) string {
 			if r.OK() && strings.TrimSpace(r.Stdout) != "" {
 				return strings.TrimSpace(r.Stdout)
@@ -219,18 +252,21 @@ func pushTrack(ctx context.Context, p *Planner, res *PushPlan) error {
 	if err != nil {
 		return err
 	}
-	if up.OK() {
-		res.Upstream = strings.TrimSpace(up.Stdout)
+	if configured := strings.TrimSpace(up.Stdout); up.OK() && configured != "" {
+		if configured == want {
+			res.Upstream, res.Tracked = want, true
+		} else {
+			p.Note("%s tracks %s, not %s: comparing against %s instead", res.Branch, configured, want, want)
+		}
 	}
 	if res.Upstream == "" {
-		// No upstream configured: fall back to the same-named remote branch.
-		ref := res.Remote + "/" + res.Branch
-		r, err := e.Git.Exec(ctx, "rev-parse", "--verify", "-q", "refs/remotes/"+ref)
+		// Not tracking <remote>/<branch>: fall back to the same-named remote branch.
+		r, err := e.Git.Exec(ctx, "rev-parse", "--verify", "-q", "refs/remotes/"+want)
 		if err != nil {
 			return err
 		}
 		if r.OK() {
-			res.Upstream = ref
+			res.Upstream = want
 		}
 	}
 	if res.Upstream == "" {
@@ -238,7 +274,7 @@ func pushTrack(ctx context.Context, p *Planner, res *PushPlan) error {
 		p.Note("%s/%s does not exist yet: this push creates it", res.Remote, res.Branch)
 		return nil
 	}
-	r, err := p.Read(ctx, e.Git.Cmd("rev-list", "--left-right", "--count", res.Upstream+"...HEAD"),
+	r, err := p.Read(ctx, e.Git.Cmd("rev-list", "--left-right", "--count", res.Upstream+"..."+ref),
 		"ahead/behind vs "+res.Upstream, func(r execx.Result) string {
 			res.Behind, res.Ahead = parseLeftRight(r.Stdout)
 			return fmt.Sprintf("↑%d ahead · ↓%d behind", res.Ahead, res.Behind)
@@ -274,7 +310,7 @@ func pushSigning(ctx context.Context, p *Planner, prof profile.Profile, pol *pol
 	if r.Severity == verdict.Off || r.ID == "" || format == "" || format == profile.SignNone {
 		return nil
 	}
-	args := append(sign.LogArgs(""), "HEAD", "--not", "--remotes="+remote)
+	args := append(sign.LogArgs(""), "refs/heads/"+res.Branch, "--not", "--remotes="+remote)
 	var commits []sign.Commit
 	if _, err := p.Read(ctx, p.Env.Git.Cmd(args...), "mygit sign verify (commits to push)", func(x execx.Result) string {
 		commits = sign.ParseLog(x.Stdout)

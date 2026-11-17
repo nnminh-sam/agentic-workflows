@@ -38,22 +38,28 @@ func ParseCommits(out string) []Commit {
 	return cs
 }
 
-// CheckRun is the outcome of one local check (test or lint).
+// CheckRun is the outcome of one local check (test or lint). It carries no
+// command output: the PR body is hashed into the plan id, and test output
+// (timings, "(cached)", seeds, paths) differs between runs, which would make
+// `--apply <id>` stale.
 type CheckRun struct {
 	Label      string // "Unit tests" or "Lint"
 	Command    string // as configured; "" = none configured
 	ExitCode   int
-	Output     string
+	Skipped    bool   // not run (--no-checks)
 	StartError string // the command could not be started
 }
 
 // Passed reports a started command that exited 0.
-func (r CheckRun) Passed() bool { return r.Command != "" && r.StartError == "" && r.ExitCode == 0 }
+func (r CheckRun) Passed() bool {
+	return r.Command != "" && !r.Skipped && r.StartError == "" && r.ExitCode == 0
+}
 
 const outputTail = 10
 
-// TestResults renders the "Test results" section content from the checks.
-// Both labels always appear so rule GH008 (must mention unit and lint) holds.
+// TestResults renders the "Test results" section content from the checks:
+// the status and exit code only. Both labels always appear so rule GH008
+// (must mention unit and lint) holds.
 func TestResults(runs []CheckRun) string {
 	var b strings.Builder
 	for i, r := range runs {
@@ -63,19 +69,14 @@ func TestResults(runs []CheckRun) string {
 		switch {
 		case r.Command == "":
 			fmt.Fprintf(&b, "- %s: none configured (set pr.checks.%s)", r.Label, checkKey(r.Label))
+		case r.Skipped:
+			fmt.Fprintf(&b, "- %s: `%s` → not run (--no-checks)", r.Label, r.Command)
 		case r.StartError != "":
 			fmt.Fprintf(&b, "- %s: `%s` → could not run: %s", r.Label, r.Command, r.StartError)
 		case r.ExitCode == 0:
 			fmt.Fprintf(&b, "- %s: `%s` → passed", r.Label, r.Command)
 		default:
 			fmt.Fprintf(&b, "- %s: `%s` → FAILED (exit %d)", r.Label, r.Command, r.ExitCode)
-		}
-		if tail := stableTail(r.Output, outputTail); tail != "" && r.Command != "" && r.StartError == "" {
-			b.WriteString("\n\n  ```text\n")
-			for _, l := range strings.Split(tail, "\n") {
-				b.WriteString("  " + l + "\n")
-			}
-			b.WriteString("  ```")
 		}
 	}
 	return b.String()
@@ -86,16 +87,6 @@ func checkKey(label string) string {
 		return "lint"
 	}
 	return "test"
-}
-
-// durationRe matches timings ("0.253s", "12ms") that differ on every run.
-var durationRe = regexp.MustCompile(`\b\d+(?:\.\d+)?(?:ms|µs|ns|s)\b`)
-
-// stableTail is the last n lines of a command's output with timings blanked
-// (as "Ns"), so re-running the checks for `--apply <id>` renders the same
-// body and the plan id stays valid.
-func stableTail(s string, n int) string {
-	return durationRe.ReplaceAllString(lastLines(s, n), "Ns")
 }
 
 func lastLines(s string, n int) string {
@@ -121,58 +112,17 @@ func CheckSummary(res execx.Result) string {
 	return fmt.Sprintf("failed (exit %d)", res.ExitCode)
 }
 
-var shellMeta = regexp.MustCompile("[&|;<>`]|\\$[({]|^\\s*[A-Za-z_][A-Za-z0-9_]*=")
-
 // CheckCmd builds the process that runs a configured check command line in
-// dir. Plain commands run directly ("go test ./..."); a command line that
-// needs a shell (&&, pipes, redirects, variables) runs through sh -c, or
-// cmd /C on Windows.
+// dir. It always goes through a shell, so quoting, && and pipes behave as
+// the user wrote them: sh -c, or cmd /S /C on Windows. There the raw command
+// line is set too (execx.Cmd.CmdLine), because Go's argument quoting would
+// escape the quotes cmd needs untouched.
 func CheckCmd(line, dir, goos string) execx.Cmd {
 	line = strings.TrimSpace(line)
-	if !shellMeta.MatchString(line) {
-		if words, ok := splitWords(line); ok && len(words) > 0 {
-			return execx.Cmd{Name: words[0], Args: words[1:], Dir: dir}
-		}
-	}
 	if goos == "windows" {
-		return execx.Cmd{Name: "cmd", Args: []string{"/C", line}, Dir: dir}
+		return execx.Cmd{Name: "cmd", Args: []string{"/S", "/C", line}, Dir: dir, CmdLine: `cmd /S /C "` + line + `"`}
 	}
 	return execx.Cmd{Name: "sh", Args: []string{"-c", line}, Dir: dir}
-}
-
-// splitWords splits a command line on spaces, honouring '…' and "…".
-func splitWords(s string) ([]string, bool) {
-	var words []string
-	var cur strings.Builder
-	var quote rune
-	started := false
-	for _, r := range s {
-		switch {
-		case quote != 0:
-			if r == quote {
-				quote = 0
-			} else {
-				cur.WriteRune(r)
-			}
-		case r == '\'' || r == '"':
-			quote, started = r, true
-		case r == ' ' || r == '\t':
-			if started || cur.Len() > 0 {
-				words = append(words, cur.String())
-				cur.Reset()
-				started = false
-			}
-		default:
-			cur.WriteRune(r)
-		}
-	}
-	if quote != 0 {
-		return nil, false
-	}
-	if started || cur.Len() > 0 {
-		words = append(words, cur.String())
-	}
-	return words, true
 }
 
 // DeriveTitle proposes a PR title. A release uses chore(release): <version

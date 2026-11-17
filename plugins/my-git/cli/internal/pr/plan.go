@@ -26,9 +26,16 @@ import (
 	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/workflow"
 )
 
-// bodyCheckPath is the stand-in path the engine reads the planned body from
-// while the real body file does not exist yet.
-const bodyCheckPath = "/mygit-plan/pr-body.md"
+// bodyCheckPath is the stand-in --body-file the engine reads the planned
+// body from while the real body file does not exist yet. It is relative, so
+// the engine resolves it under the repository root on every OS.
+const bodyCheckPath = "mygit-plan/pr-body.md"
+
+// Synthetic rule ids of findings that are not in a contract.
+const (
+	ruleChecks = "PR-CHECKS" // failing test/lint (D2)
+	ruleSync   = "PR-SYNC"   // head behind its remote branch
+)
 
 // Input is everything Plan needs.
 type Input struct {
@@ -48,6 +55,11 @@ type Input struct {
 	Sections map[string]string
 	Version  string
 	Now      time.Time
+	// NoChecks skips the configured test and lint commands.
+	NoChecks bool
+	// AllowFailingChecks turns failing test/lint from an ask-level finding
+	// into a note (the body still reports the failure).
+	AllowFailingChecks bool
 }
 
 // Result is what Plan found.
@@ -61,7 +73,8 @@ type Result struct {
 	// Verdict holds every finding. A deny or ask decision means the plan must
 	// not be applied.
 	Verdict verdict.Verdict
-	// Push and Create are the exact commands planned (shell-quoted, bash).
+	// Push and Create are the exact commands planned (shell-quoted, bash);
+	// Push is empty when nothing is pushed (protected head, or up to date).
 	Push   string
 	Create string
 	// Signed and Total count the commits of the range by signature state.
@@ -118,41 +131,69 @@ func Plan(ctx context.Context, p *app.Planner, in Input) (*Result, error) {
 		}
 	}
 
+	// Branch name (BR003) and target (BR005) are known now: stop before the
+	// slow test run and the gh calls when they already forbid the PR.
+	pol := c.Policy
+	createArgs := []string{"pr", "create", "--base", t.Base, "--head", t.Head, "--title", "-", "--body-file", bodyCheckPath}
+	early := branchNameFindings(t, c)
+	early.Extend(newEvaluator(e, pol, in.bodyForCheck("")).eval("gh", createArgs, "BR005"))
+	res.Verdict.Extend(early)
+	if blocked(early) {
+		recordChecks(p, pol, res.Verdict, "BR003", "BR005")
+		return res, nil
+	}
+
 	// ③ test + lint (pr.checks.*)
 	if in.Current != "" && in.Current != t.Head {
 		p.Note("test and lint run on the checked-out branch %s, not on %s", in.Current, t.Head)
 	}
+	if in.NoChecks {
+		p.Note("test and lint skipped (--no-checks); the PR body says so")
+	}
+	var failing []string
 	for _, ck := range []struct{ label, cmd string }{
 		{"Unit tests", c.File.PR.Checks.Test}, {"Lint", c.File.PR.Checks.Lint},
 	} {
-		run := CheckRun{Label: ck.label, Command: strings.TrimSpace(ck.cmd)}
-		if run.Command != "" {
+		run := CheckRun{Label: ck.label, Command: strings.TrimSpace(ck.cmd), Skipped: in.NoChecks}
+		if run.Command != "" && !in.NoChecks {
 			r, err := p.Read(ctx, CheckCmd(run.Command, e.RepoRoot, e.GOOS), run.Command, CheckSummary)
-			run.ExitCode, run.Output = r.ExitCode, strings.TrimSpace(r.Stdout+"\n"+r.Stderr)
+			run.ExitCode = r.ExitCode
 			if err != nil {
 				run.StartError = strings.TrimPrefix(err.Error(), "plan read ")
 			}
 			if !run.Passed() {
-				p.Note("%s did not pass; the PR body reports it", strings.ToLower(ck.label))
+				failing = append(failing, strings.ToLower(ck.label))
+				if tail := lastLines(r.Stdout+"\n"+r.Stderr, outputTail); tail != "" {
+					p.Note("%s output (last lines):\n    %s", strings.ToLower(ck.label), strings.ReplaceAll(tail, "\n", "\n    "))
+				}
 			}
 		}
 		res.Checks = append(res.Checks, run)
+	}
+	if len(failing) > 0 {
+		names := strings.Join(failing, " and ")
+		if in.AllowFailingChecks {
+			p.Note("%s did not pass (--allow-failing-checks); the PR body reports it", names)
+		} else {
+			msg := names + " did not pass: fix them, or rerun with --allow-failing-checks (the PR body reports the result)"
+			res.Verdict.Add(ruleChecks, verdict.Ask, msg)
+			p.Check(ruleChecks, false, verdict.Ask, msg)
+		}
 	}
 
 	// ④ gh account (ID005), then: is a PR already open?
 	if _, err := p.Read(ctx, e.Gh.Cmd("auth", "status"), "gh auth status", authSummary); err != nil {
 		return nil, err
 	}
-	pol := c.Policy
 	ev := newEvaluator(e, pol, in.bodyForCheck(""))
-	listArgs := []string{"pr", "list", "--head", t.Head, "--json", "url"}
+	listArgs := []string{"pr", "list", "--head", t.Head, "--base", t.Base, "--state", "open", "--json", "url"}
 	pre := ev.eval("gh", listArgs, "ID005")
 	if blocked(pre) {
 		res.Verdict.Extend(pre)
 		recordChecks(p, pol, res.Verdict, "ID005")
 		return res, nil
 	}
-	listRes, err := p.Read(ctx, e.Gh.Cmd(listArgs...), "gh pr list --head "+t.Head+" --json url", func(r execx.Result) string {
+	listRes, err := p.Read(ctx, e.Gh.Cmd(listArgs...), "gh "+strings.Join(listArgs, " "), func(r execx.Result) string {
 		if u := firstURL(r.Stdout); u != "" {
 			return "already open: " + u
 		}
@@ -198,28 +239,37 @@ func Plan(ctx context.Context, p *app.Planner, in Input) (*Result, error) {
 		}
 	}
 
-	createArgs := []string{"pr", "create", "--base", t.Base, "--head", t.Head, "--title", res.Title, "--body-file", bodyCheckPath}
+	createArgs[bodyTitleArg] = res.Title
 	if in.Draft {
 		createArgs = append(createArgs, "--draft")
 	}
 	ev = newEvaluator(e, pol, in.bodyForCheck(res.Body))
-	res.Verdict.Extend(branchNameFindings(t, c))
-	res.Verdict.Extend(ev.eval("gh", createArgs, "ID005", "BR005", "GH005", "GH008", "GH009"))
-	pushArgs := PushArgs(c.Profile, remote, t.Head)
-	if !t.Protected {
-		res.Verdict.Extend(ev.eval("git", pushArgs, "ID003", "ID004", "BR001", "BR002", "BR004"))
-	}
-	signed, total, sv := verifySigning(ctx, p, e, c, baseRef, headRef)
+	res.Verdict.Extend(ev.eval("gh", createArgs, "ID005", "GH005", "GH008", "GH009"))
+	signed, total, sv := verifySigning(ctx, p, e, c, baseRef, headRef, t.Kind == tmpl.PRRelease)
 	res.Signed, res.Total = signed, total
 	res.Verdict.Extend(sv)
-	recordChecks(p, pol, res.Verdict, "ID005", "BR003", "BR005", "GH005", "GH008", "GH009", "ID003", "ID004", "ID006")
+	recordChecks(p, pol, res.Verdict, "BR003", "BR005", "ID005", "GH005", "GH008", "GH009", "ID006")
 
-	// ⑥ push -u, ⑦ gh pr create
+	// ⑥ push -u (never the protected head), ⑦ gh pr create
 	if t.Protected {
 		p.Note("%s is protected: it is not pushed; it must already be on %s", t.Head, remote)
+	} else if headRef != t.Head {
+		p.Note("%s exists only on %s: it is not pushed", t.Head, remote)
 	} else {
-		p.Git("git push -u "+remote+" "+t.Head, pushArgs...)
-		res.Push = "git " + quoteArgs(pushArgs)
+		// SkipSigning: verifySigning above already judged the whole PR range.
+		pp, err := app.PlanPush(ctx, p, app.PushOptions{Upstream: true, Remote: remote, Branch: t.Head, SkipSigning: true})
+		if err != nil {
+			return nil, err
+		}
+		res.Verdict.Extend(pp.Verdict)
+		if pp.Behind > 0 {
+			msg := fmt.Sprintf("%s is %d commit(s) behind %s: update the branch (rebase or merge) before opening the PR", t.Head, pp.Behind, pp.Upstream)
+			res.Verdict.Add(ruleSync, verdict.Ask, msg)
+			p.Check(ruleSync, false, verdict.Ask, msg)
+		}
+		if pp.Pushed {
+			res.Push = pp.Command
+		}
 	}
 	bodyPath := p.File("pr-body.md", res.Body)
 	createArgs[bodyFileArg] = bodyPath
@@ -228,30 +278,48 @@ func Plan(ctx context.Context, p *app.Planner, in Input) (*Result, error) {
 	return res, nil
 }
 
-// bodyFileArg is the index of the --body-file value in the create args.
-const bodyFileArg = 9
+// Indexes of the --title and --body-file values in the create args.
+const (
+	bodyTitleArg = 7
+	bodyFileArg  = 9
+)
 
-// bodyForCheck serves the planned body to the engine at bodyCheckPath and
-// reads every other file from disk through the Env.
+// bodyForCheck serves the planned body to the engine at bodyCheckPath (as
+// the engine resolves it under the repository root, on any OS) and reads
+// every other file from disk through the Env.
 func (in Input) bodyForCheck(body string) rules.ReadFile {
+	want := filepath.Clean(filepath.Join(in.Env.RepoRoot, filepath.FromSlash(bodyCheckPath)))
 	return func(path string) ([]byte, error) {
-		if path == bodyCheckPath {
+		if filepath.Clean(path) == want || path == bodyCheckPath {
 			return []byte(body), nil
 		}
 		return in.Env.ReadFile(path)
 	}
 }
 
-// resolveHead returns the ref the PR range ends at: the local head branch,
-// else its remote-tracking branch.
+// resolveHead returns the ref the PR range ends at. A protected head (the
+// release) is read from its remote-tracking branch: a stale local copy must
+// not decide what is released, and mygit does not fetch on its own. Any
+// other head is the local branch, else its remote-tracking branch.
 func resolveHead(ctx context.Context, e *app.Env, remote string, t Target) (string, error) {
+	remoteRef := remote + "/" + t.Head
+	hasRemote := false
+	if r, err := e.Git.Exec(ctx, "rev-parse", "--verify", "-q", "refs/remotes/"+remoteRef); err == nil && r.OK() {
+		hasRemote = true
+	}
+	if t.Protected {
+		if !hasRemote {
+			return "", fmt.Errorf("remote-tracking branch %s was not found: fetch it first (mygit graph --fetch, or git fetch %s)", remoteRef, remote)
+		}
+		return remoteRef, nil
+	}
 	if ok, err := e.Git.BranchExists(ctx, t.Head); err != nil {
 		return "", err
 	} else if ok {
 		return t.Head, nil
 	}
-	if r, err := e.Git.Exec(ctx, "rev-parse", "--verify", "-q", "refs/remotes/"+remote+"/"+t.Head); err == nil && r.OK() {
-		return remote + "/" + t.Head, nil
+	if hasRemote {
+		return remoteRef, nil
 	}
 	return "", fmt.Errorf("branch %s was not found locally or on %s", t.Head, remote)
 }
@@ -283,18 +351,6 @@ func firstURL(listJSON string) string {
 		return prs[0].URL
 	}
 	return ""
-}
-
-// PushArgs are the git arguments of the PR push. TODO(orchestrator): swap
-// this private helper for the shared push planner of `mygit push`. With the
-// ssh transport the profile's key is pinned for this one command (rule
-// ID003); with the gh transport git authenticates through gh.
-func PushArgs(p profile.Profile, remote, branch string) []string {
-	var args []string
-	if p.GitHub.Transport != profile.TransportGH && p.GitHub.SSHKey != "" {
-		args = append(args, "-c", "core.sshCommand="+profile.SSHCommand(p.GitHub.SSHKey))
-	}
-	return append(args, "push", "-u", remote, branch)
 }
 
 // ---------------------------------------------------------------- rules
@@ -370,17 +426,38 @@ func branchNameFindings(t Target, c *config.Resolved) verdict.Verdict {
 }
 
 // verifySigning runs `git log %G?` over base..head as a read step and
-// reports unsigned commits under ID006 when the profile signs commits.
-func verifySigning(ctx context.Context, p *app.Planner, e *app.Env, c *config.Resolved, baseRef, headRef string) (signed, total int, v verdict.Verdict) {
+// reports unsigned commits under ID006 when the profile signs commits. For a
+// release range (release true) merge commits and commits committed by
+// GitHub itself (squash merges, web edits) are left out: they are not the
+// profile identity's to sign.
+func verifySigning(ctx context.Context, p *app.Planner, e *app.Env, c *config.Resolved, baseRef, headRef string, release bool) (signed, total int, v verdict.Verdict) {
 	rng := baseRef + ".." + headRef
-	res, err := p.Read(ctx, e.Git.Cmd(sign.LogArgs(rng)...), "mygit sign verify "+rng, func(r execx.Result) string {
-		cs := sign.ParseLog(r.Stdout)
+	args := sign.LogArgs(rng)
+	if release {
+		args = []string{"log", "--no-merges", "--format=%H%x1f%G?%x1f%GS%x1f%s%x1f%ce", rng}
+	}
+	parse := func(out string) []sign.Commit {
+		if !release {
+			return sign.ParseLog(out)
+		}
+		var cs []sign.Commit
+		for _, l := range strings.Split(strings.ReplaceAll(out, "\r\n", "\n"), "\n") {
+			f := strings.Split(l, "\x1f")
+			if len(f) < 5 || strings.EqualFold(strings.TrimSpace(f[4]), githubCommitter) {
+				continue
+			}
+			cs = append(cs, sign.Commit{SHA: f[0], Status: f[1], Signer: f[2], Subject: f[3]})
+		}
+		return cs
+	}
+	res, err := p.Read(ctx, e.Git.Cmd(args...), "mygit sign verify "+rng, func(r execx.Result) string {
+		cs := parse(r.Stdout)
 		return fmt.Sprintf("%d/%d signed", len(cs)-len(sign.Problems(cs)), len(cs))
 	})
 	if err != nil || !res.OK() {
 		return 0, 0, v
 	}
-	cs := sign.ParseLog(res.Stdout)
+	cs := parse(res.Stdout)
 	bad := sign.Problems(cs)
 	f := c.Profile.Git.Signing.Format
 	if len(bad) == 0 || f == "" || f == profile.SignNone {
@@ -404,6 +481,9 @@ func verifySigning(ctx context.Context, p *app.Planner, e *app.Env, c *config.Re
 		len(bad), len(cs), rng, f, strings.Join(lines, "; "))
 	return len(cs) - len(bad), len(cs), v
 }
+
+// githubCommitter is the committer email of commits GitHub itself makes.
+const githubCommitter = "noreply@github.com"
 
 // recordChecks adds one plan check per evaluated rule: failed when a
 // finding names it, passed otherwise. Rules that are off are left out.

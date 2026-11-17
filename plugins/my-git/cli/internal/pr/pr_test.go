@@ -1,13 +1,14 @@
 package pr
 
 import (
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/app"
 	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/config"
-	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/profile"
 	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/tmpl"
 	"github.com/nnminh-sam/agentic-workflows/plugins/my-git/cli/internal/workflow"
 )
@@ -102,18 +103,21 @@ func TestAutoSectionsDropsTrailers(t *testing.T) {
 	}
 }
 
-func TestTestResults(t *testing.T) {
+func TestTestResultsHasNoOutput(t *testing.T) {
 	out := TestResults([]CheckRun{
-		{Label: "Unit tests", Command: "go test ./...", Output: "ok pkg 0.253s\n"},
-		{Label: "Lint", Command: "golangci-lint run", ExitCode: 1, Output: "a.go:1: bad\nb.go:2: worse"},
+		{Label: "Unit tests", Command: "go test ./..."},
+		{Label: "Lint", Command: "golangci-lint run", ExitCode: 1},
 	})
 	for _, want := range []string{
-		"- Unit tests: `go test ./...` → passed", "ok pkg Ns",
-		"- Lint: `golangci-lint run` → FAILED (exit 1)", "a.go:1: bad",
+		"- Unit tests: `go test ./...` → passed",
+		"- Lint: `golangci-lint run` → FAILED (exit 1)",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("lacks %q:\n%s", want, out)
 		}
+	}
+	if strings.Contains(out, "```") {
+		t.Errorf("command output in the body:\n%s", out)
 	}
 	none := TestResults([]CheckRun{{Label: "Unit tests"}, {Label: "Lint"}})
 	if !strings.Contains(none, "Unit tests: none configured") || !strings.Contains(none, "Lint: none configured") {
@@ -123,14 +127,9 @@ func TestTestResults(t *testing.T) {
 	if !strings.Contains(started, "could not run: program not found") {
 		t.Errorf("start error = %q", started)
 	}
-	// Only the last lines of long output are kept.
-	var long []string
-	for i := 0; i < 30; i++ {
-		long = append(long, "line")
-	}
-	long = append(long, "last")
-	if got := TestResults([]CheckRun{{Label: "Lint", Command: "x", Output: strings.Join(long, "\n")}}); strings.Count(got, "line") != outputTail-1 || !strings.Contains(got, "last") {
-		t.Errorf("tail: %q", got)
+	skipped := TestResults([]CheckRun{{Label: "Unit tests", Command: "make test", Skipped: true}, {Label: "Lint", Command: "make lint", Skipped: true}})
+	if !strings.Contains(skipped, "Unit tests: `make test` → not run (--no-checks)") || !strings.Contains(skipped, "Lint: `make lint` → not run") {
+		t.Errorf("skipped = %q", skipped)
 	}
 }
 
@@ -138,19 +137,20 @@ func TestCheckCmd(t *testing.T) {
 	cases := []struct {
 		line, goos string
 		want       []string
+		cmdLine    string
 	}{
-		{"go test ./...", "linux", []string{"go", "test", "./..."}},
-		{`pytest -k "a b" -q`, "linux", []string{"pytest", "-k", "a b", "-q"}},
-		{"npm test && npm run lint", "linux", []string{"sh", "-c", "npm test && npm run lint"}},
-		{"CI=1 npm test", "linux", []string{"sh", "-c", "CI=1 npm test"}},
-		{"make test | tee out", "windows", []string{"cmd", "/C", "make test | tee out"}},
-		{`echo "unterminated`, "linux", []string{"sh", "-c", `echo "unterminated`}},
+		{"go test ./...", "linux", []string{"sh", "-c", "go test ./..."}, ""},
+		{`pytest -k "a b" -q`, "linux", []string{"sh", "-c", `pytest -k "a b" -q`}, ""},
+		{"npm test && npm run lint", "linux", []string{"sh", "-c", "npm test && npm run lint"}, ""},
+		{"make test | tee out", "windows", []string{"cmd", "/S", "/C", "make test | tee out"}, `cmd /S /C "make test | tee out"`},
+		// Quotes reach cmd raw, not as \" escapes.
+		{`go test -run "A B" ./...`, "windows", []string{"cmd", "/S", "/C", `go test -run "A B" ./...`}, `cmd /S /C "go test -run "A B" ./..."`},
 	}
 	for _, tc := range cases {
 		c := CheckCmd(tc.line, "/repo", tc.goos)
 		got := append([]string{c.Name}, c.Args...)
-		if !reflect.DeepEqual(got, tc.want) || c.Dir != "/repo" {
-			t.Errorf("%q → %v dir %q; want %v", tc.line, got, c.Dir, tc.want)
+		if !reflect.DeepEqual(got, tc.want) || c.Dir != "/repo" || c.CmdLine != tc.cmdLine {
+			t.Errorf("%q → %v cmdline %q dir %q; want %v %q", tc.line, got, c.CmdLine, c.Dir, tc.want, tc.cmdLine)
 		}
 	}
 }
@@ -184,14 +184,20 @@ func TestFillForMatchesLoosely(t *testing.T) {
 	}
 }
 
-func TestPushArgs(t *testing.T) {
-	ssh := profile.Profile{GitHub: profile.GitHub{Transport: profile.TransportSSH, SSHKey: "/k/id"}}
-	if got := PushArgs(ssh, "origin", "develop/feat/x"); !reflect.DeepEqual(got,
-		[]string{"-c", "core.sshCommand=ssh -i /k/id -o IdentitiesOnly=yes", "push", "-u", "origin", "develop/feat/x"}) {
-		t.Errorf("ssh: %v", got)
+func TestBodyForCheckResolvesUnderRepoRoot(t *testing.T) {
+	root := t.TempDir() // not "/": the body placeholder must resolve under it on every OS
+	e := &app.Env{RepoRoot: root}
+	e.ReadFile = func(string) ([]byte, error) { return []byte("disk"), nil }
+	read := Input{Env: e}.bodyForCheck("planned body")
+	// The engine joins the relative --body-file under its cwd (the repo root).
+	got, err := read(filepath.Join(root, bodyCheckPath))
+	if err != nil || string(got) != "planned body" {
+		t.Errorf("planned body = %q, %v", got, err)
 	}
-	gh := profile.Profile{GitHub: profile.GitHub{Transport: profile.TransportGH, SSHKey: "/k/id"}}
-	if got := PushArgs(gh, "origin", "b"); !reflect.DeepEqual(got, []string{"push", "-u", "origin", "b"}) {
-		t.Errorf("gh: %v", got)
+	if got, _ := read(filepath.Join(root, "other.md")); string(got) != "disk" {
+		t.Errorf("other file = %q", got)
+	}
+	if filepath.IsAbs(bodyCheckPath) {
+		t.Errorf("bodyCheckPath %q must be relative (a /-rooted path is not absolute on Windows)", bodyCheckPath)
 	}
 }
