@@ -1,7 +1,49 @@
-# mygit CLI — handoff (2026-11-14)
+# mygit CLI — handoff (2026-11-17)
 
 Spec: `../docs/mygit-cli-plan.html`. Conventions, package map, and build/test commands: `DEVELOPMENT.md`.
-State at handoff: `go build ./...`, `go vet ./...` and `go test ./...` all pass.
+
+## Session 2026-11-17: commit / branch / push / pr / repo
+
+**Branch:** `develop/feat/my-git-cli-commands` (worktree `.claude/worktrees/integration`), based on `12dfc65`. It has one commit per command, and build, vet and test all pass on it:
+
+| Commit | Command | Main files |
+|---|---|---|
+| 26ffa17 | `push` (order 63), shared `app.PlanPush` | internal/app/push.go, internal/cli/push.go |
+| 726f95a | `branch new/cut/prune` (62) | internal/cli/branch.go, internal/workflow/branch_ops.go |
+| d3fa546 | `commit` (61) | internal/cli/commit.go, internal/app/commit_ops.go |
+| e48ed00 | `repo create/protect/bootstrap` (65) | internal/cli/repo.go, internal/repoops/ |
+| 7608fe0 | `pr create/release/run/check/template` (64) | internal/cli/pr.go, internal/pr/ |
+
+**Review:** three Opus reviews ran. The findings, the owner's decisions and the default answers to the open questions are in `docs/review-2026-11-17.md`. Fix those findings before merging into `develop/feat/my-git-cli`. Three fixes block it:
+- `pr --apply <id>` usually goes stale, because raw test output is hashed into the PR body.
+- `pr release` reads the stale local `develop/base`.
+- Every PR is blocked on Windows by GH008 "unreadable".
+
+There are also two High findings in `branch`: `switch -c` sets up tracking of the base branch, and `prune -d` can fail partway through the plan.
+
+**Owner decisions:**
+- `delete_branch_on_merge` is off by default, with the config key `github.deleteBranchOnMerge`.
+- Failing PR checks give an ask finding; `--allow-failing-checks` overrides it.
+- `push` adds `-u` automatically for a new branch.
+- `pr release` does not fetch; it uses `<remote>/<head>`.
+
+**Fixers in progress at handoff:** three Sonnet agents, each in its own worktree branched from the integration branch:
+- `.claude/worktrees/fix-pushpr`, branch `fix/pushpr`: push and pr findings, and replacing `pr.PushArgs` with `app.PlanPush`.
+- `.claude/worktrees/fix-branchcommit`, branch `fix/branchcommit`: branch and commit findings, gofmt of the two pre-existing test files, and correcting the "Default template" line below.
+- `.claude/worktrees/fix-repo`, branch `fix/repo`: repo findings, and making `app.CommitGitArgs` the single identity/signing helper.
+
+**Next steps:**
+1. Check each `fix/*` branch for a commit (`git -C <worktree> log -1`).
+   - If it has one, cherry-pick it onto the integration branch.
+   - If it only has uncommitted changes, finish it from the finding list in `docs/review-2026-11-17.md`.
+   - `fix/branchcommit` edits this file, so expect a conflict in HANDOFF.md.
+2. On the integration branch, run `gofmt -s -l .`, `go vet ./...` and `go test ./...`. Then merge or open a PR into `develop/feat/my-git-cli`.
+3. Remove the agent worktrees (`git worktree remove`). Coder branches: `worktree-agent-*`.
+4. Then continue with the "Not done" list below. Item 1 is now done; items 2–6 remain.
+
+**Correction:** the default workflow template is `defaults/workflows/default.json`. `branching.json` is the BR rules contract, whose verdicts the default template must reproduce. The table below is the 2026-11-14 state.
+
+---
 
 ## Done
 
