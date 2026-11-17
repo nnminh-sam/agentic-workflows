@@ -168,6 +168,7 @@ Contracts refer to account values as variables, for example `"expected_logins": 
 | `git_email` | `GIT_GUARD_GIT_EMAIL` (comma-separated) | ID002 author email |
 | `git_transport` | `GIT_GUARD_GIT_TRANSPORT` | ID003 / ID004: `ssh` (default) or `gh` |
 | `ssh_key` | `GIT_GUARD_SSH_KEY` | ID003 pinned key (full path or path suffix), `ssh` transport only |
+| `signing_key` | `GIT_GUARD_SIGNING_KEY` | commit skill signing: `default` (git's own signing config, `commit -S`) or a path to an SSH key (`gpg.format=ssh`); unset = unsigned |
 
 Each value is resolved from the first source that has it:
 1. the environment variable
@@ -176,12 +177,14 @@ Each value is resolved from the first source that has it:
 
 Run these from the project root. `<root>` is this folder, or `.claude/hooks/git-guard` when vendored.
 
-`--from-current` sets `git_transport` to `ssh` when the repo pins a key in `core.sshCommand`, and to `gh` when git uses `gh auth git-credential` for github.com and gh is logged in. Otherwise it leaves it unset (= `ssh`).
+`--from-current` sets `signing_key` to `default` when git already signs commits (`commit.gpgsign=true` or `user.signingkey` set). It sets `git_transport` to `ssh` when the repo pins a key in `core.sshCommand`, and to `gh` when git uses `gh auth git-credential` for github.com and gh is logged in. Otherwise it leaves it unset (= `ssh`).
 
 ```sh
 python3 <root>/scripts/setup_profile.py init --from-current   # capture current git/gh identity (+ detect transport)
 python3 <root>/scripts/setup_profile.py init --from-current --transport gh   # single account over HTTPS + gh
 python3 <root>/scripts/setup_profile.py init --github-user octocat --ssh-key ~/.ssh/id_gh
+python3 <root>/scripts/setup_profile.py init --signing-key default             # sign commits with git's signing config
+python3 <root>/scripts/setup_profile.py init --signing-key ~/.ssh/id_sign.pub  # sign commits with this SSH key
 python3 <root>/scripts/setup_profile.py init --scope user ...  # for all projects
 python3 <root>/scripts/setup_profile.py show                   # values, sources, active contract files
 ```
