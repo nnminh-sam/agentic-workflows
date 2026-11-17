@@ -591,6 +591,26 @@
     "source": "python"
   },
   {
+    "name": "switch_no_track_good",
+    "command": "git switch --no-track -c develop/feat/login origin/develop/base",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "allow",
+    "rules": [],
+    "source": "go"
+  },
+  {
+    "name": "switch_no_track_bad_base",
+    "command": "git switch --no-track -c develop/feat/x main",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "deny",
+    "rules": [
+      "BR004"
+    ],
+    "source": "go"
+  },
+  {
     "name": "checkout_b_from_work",
     "command": "git checkout -b develop/fix/x",
     "dialect": "bash",

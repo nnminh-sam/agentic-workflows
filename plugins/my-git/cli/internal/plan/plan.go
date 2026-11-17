@@ -132,11 +132,12 @@ func pathSep(dir string) string {
 
 // cmdJSON is the lowerCamelCase wire form of execx.Cmd.
 type cmdJSON struct {
-	Name  string   `json:"name"`
-	Args  []string `json:"args"`
-	Dir   string   `json:"dir,omitempty"`
-	Env   []string `json:"env,omitempty"`
-	Stdin string   `json:"stdin,omitempty"`
+	Name    string   `json:"name"`
+	Args    []string `json:"args"`
+	Dir     string   `json:"dir,omitempty"`
+	Env     []string `json:"env,omitempty"`
+	Stdin   string   `json:"stdin,omitempty"`
+	CmdLine string   `json:"cmdLine,omitempty"`
 }
 
 type resultJSON struct {

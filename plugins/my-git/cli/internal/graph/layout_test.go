@@ -88,9 +88,9 @@ func TestLayoutFixtures(t *testing.T) {
 			conn:  []string{"├─╮", "", "├─╯", ""},
 		},
 		{
-			name:  "octopus merge",
-			dag:   dag("O:A,B,C", "A:R", "B:R", "C:R", "R:"),
-			cols:  []int{0, 0, 1, 2, 0},
+			name: "octopus merge",
+			dag:  dag("O:A,B,C", "A:R", "B:R", "C:R", "R:"),
+			cols: []int{0, 0, 1, 2, 0},
 			edges: [][]Edge{
 				{e(0, 0), e(0, 1), e(0, 2)},
 				{e(0, 0), e(1, 1), e(2, 2)},
@@ -570,9 +570,9 @@ func TestLayoutRealRepoTopology(t *testing.T) {
 		conn  string
 	}{
 		{0, []Edge{e(0, 0)}, ""},
-		{1, []Edge{e(0, 0), e(1, 0), e(1, 1)}, "├─┤"},           // 2810109 → 60f67a6 (lane 0) and 29c5551 (lane 1)
-		{0, []Edge{e(0, 0), e(0, 2), e(1, 1)}, "├─┼─╮"},         // 60f67a6 → a418699 (0) and 853b838 (new lane 2, crossing lane 1)
-		{2, []Edge{e(0, 0), e(1, 1), e(2, 2)}, ""},              // 853b838
+		{1, []Edge{e(0, 0), e(1, 0), e(1, 1)}, "├─┤"},            // 2810109 → 60f67a6 (lane 0) and 29c5551 (lane 1)
+		{0, []Edge{e(0, 0), e(0, 2), e(1, 1)}, "├─┼─╮"},          // 60f67a6 → a418699 (0) and 853b838 (new lane 2, crossing lane 1)
+		{2, []Edge{e(0, 0), e(1, 1), e(2, 2)}, ""},               // 853b838
 		{2, []Edge{e(0, 0), e(1, 1), e(2, 0), e(2, 2)}, "├─┼─┤"}, // 1845b18 → d6eebf0 (2) and a418699 (0, crossing 1)
 		{0, []Edge{e(0, 0), e(0, 3), e(1, 1), e(2, 2)}, "├─┼─┼─╮"},
 		{0, []Edge{e(0, 0), e(0, 1), e(1, 1), e(2, 2), e(3, 3)}, "├─┤ │ │"}, // df9896d → 61f801d (0, outside) and 29c5551 (1)

@@ -36,6 +36,8 @@ internal/gitx, ghx   → execx
 internal/sign        → gitx, ghx, plan
 internal/graph       → gitx, ghx, workflow
 internal/tmpl        → defaults
+internal/repoops     → workflow                  (pure: slug, ruleset, bootstrap steps for `mygit repo`)
+internal/pr          → app, config, engine, execx, ghx, policy, profile, rules, shell, shellfmt, sign, tmpl, verdict, workflow
 internal/policy      → verdict                   (resolved contracts: read-only engine input)
 internal/verdict     → (none)                    (Finding, Verdict, Severity, Decision)
 internal/execx       → (os/exec)                 (Runner interface + Fake: the ONLY os/exec user)

@@ -85,6 +85,7 @@
       "additionalProperties": false,
       "properties": {
         "owners": { "$ref": "#/$defs/strings" },
+        "deleteBranchOnMerge": { "type": "boolean" },
         "ruleset": {
           "type": "object",
           "additionalProperties": false,
