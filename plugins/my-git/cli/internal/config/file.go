@@ -80,6 +80,9 @@ type Checks struct {
 type GitHub struct {
 	Owners  []string      `json:"owners,omitempty"`
 	Ruleset GitHubRuleset `json:"ruleset"`
+	// DeleteBranchOnMerge makes `mygit repo protect` also turn on GitHub's
+	// delete_branch_on_merge. Off by default (long-lived work branches).
+	DeleteBranchOnMerge bool `json:"deleteBranchOnMerge,omitempty"`
 }
 
 // GitHubRuleset tunes the ruleset `mygit repo protect` applies.

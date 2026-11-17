@@ -203,15 +203,15 @@ func TestKindAndResult(t *testing.T) {
 // TestFailSafeInvalidConfig: an invalid config asks for git/gh, allows the rest.
 func TestFailSafeInvalidConfig(t *testing.T) {
 	tests := map[string]bool{
-		"git push":                     true,
-		"gh pr create":                 true,
-		"curl https://api.github.com":  true,
-		"git-lfs push":                 true,
-		"ls -la":                       false,
-		"echo hello":                   false,
-		"npm test":                     false,
-		"python3 -m http.server":       false,
-		"cd /x && make && git status":  true,
+		"git push":                    true,
+		"gh pr create":                true,
+		"curl https://api.github.com": true,
+		"git-lfs push":                true,
+		"ls -la":                      false,
+		"echo hello":                  false,
+		"npm test":                    false,
+		"python3 -m http.server":      false,
+		"cd /x && make && git status": true,
 		"Get-ChildItem | Select -F 1": false,
 	}
 	for cmd, want := range tests {

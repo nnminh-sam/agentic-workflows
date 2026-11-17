@@ -21,6 +21,10 @@ type Cmd struct {
 	Dir   string   // working directory; "" = current
 	Env   []string // extra KEY=VALUE entries appended to the process env
 	Stdin string   // optional stdin
+	// CmdLine, when set, is the raw Windows command line used instead of
+	// quoting Args (for `cmd /S /C "line"`, where Go's \" escaping breaks
+	// cmd). Other platforms ignore it; Args stay the portable form.
+	CmdLine string
 }
 
 func (c Cmd) String() string { return strings.TrimSpace(c.Name + " " + strings.Join(c.Args, " ")) }
@@ -54,6 +58,7 @@ func (OS) Run(ctx context.Context, c Cmd) (Result, error) {
 	}
 	cmd := exec.CommandContext(ctx, path, c.Args...)
 	cmd.Dir = c.Dir
+	setCmdLine(cmd, c.CmdLine)
 	if len(c.Env) > 0 {
 		cmd.Env = append(cmd.Environ(), c.Env...)
 	}
