@@ -1,15 +1,14 @@
 <#
 .SYNOPSIS
-  Spawn an independent Claude Code session in a new Zed terminal, placed in a
-  right-hand split pane, pre-wired to talk to a parent session over
+  Spawn an independent Claude Code session in a new Zed terminal tab,
+  pre-wired to talk to a parent session over
   cross-session messaging (ListAgents / SendMessage).
 
 .DESCRIPTION
   Zed has no command API, so this drives it with keystrokes:
     1. Ctrl+Alt+Shift+1  -> workspace::NewCenterTerminal (new terminal tab)
-    2. Ctrl+Alt+Shift+2  -> pane::SplitAndMoveRight      (move it to a right split)
-    3. types a command that runs a generated launcher, which starts `claude`
-  Those two bindings must exist in %APPDATA%\Zed\keymap.json (use -InstallKeymap).
+    2. pastes a command that runs a generated launcher, which starts `claude`
+  That binding must exist in %APPDATA%\Zed\keymap.json (use -InstallKeymap).
 
 .EXAMPLE
   zed-spawn.ps1 -Name api-review -Parent lead -Task "Review src/api for auth bugs"
@@ -24,7 +23,7 @@ param(
   [switch]$Worktree,          # claude -w <Name>: isolated git worktree
   [string]$PermissionMode,    # e.g. acceptEdits, plan, auto
   [int]$DelayMs = 1500,       # wait for the new terminal's shell to start
-  [switch]$InstallKeymap,     # add the two required bindings to Zed's keymap.json, then exit
+  [switch]$InstallKeymap,     # add the required binding to Zed's keymap.json, then exit
   [switch]$DryRun
 )
 $ErrorActionPreference = 'Stop'
@@ -32,7 +31,6 @@ $ErrorActionPreference = 'Stop'
 $keymapPath = Join-Path $env:APPDATA 'Zed\keymap.json'
 $bindings = [ordered]@{
   'ctrl-alt-shift-1' = 'workspace::NewCenterTerminal'
-  'ctrl-alt-shift-2' = 'pane::SplitAndMoveRight'
 }
 
 function Test-Keymap {
@@ -45,7 +43,7 @@ function Test-Keymap {
 }
 
 if ($InstallKeymap) {
-  if (Test-Keymap) { Write-Output "Zed keymap already has the bindings: $keymapPath"; return }
+  if (Test-Keymap) { Write-Output "Zed keymap already has the binding: $keymapPath"; return }
   $block = [pscustomobject]@{ context = 'Workspace'; bindings = [pscustomobject]$bindings }
   if (Test-Path -LiteralPath $keymapPath) {
     $raw = Get-Content -Raw -LiteralPath $keymapPath
@@ -75,7 +73,7 @@ $work  = Join-Path $env:TEMP "claude-spawn\$Name-$stamp"
 New-Item -ItemType Directory -Force -Path $work | Out-Null
 
 $sys = @"
-You are a Claude Code session named "$Name", spawned by the Claude Code session named "$Parent" to handle a delegated task. You run in a Zed terminal split next to "$Parent".
+You are a Claude Code session named "$Name", spawned by the Claude Code session named "$Parent" to handle a delegated task. You run in a Zed terminal tab in the same window as "$Parent".
 
 Coordination protocol:
 - First action, before anything else: use ListAgents to find the session named "$Parent", then SendMessage it a one-line check-in: "$Name online, starting: <one-line restatement of the task>".
@@ -107,7 +105,7 @@ Set-Location -LiteralPath $(Q $Dir)
 $typed = "powershell -NoLogo -ExecutionPolicy Bypass -File `"$launcher`""
 
 if ($DryRun) {
-  Write-Output "Would type into new Zed split: $typed"
+  Write-Output "Would paste into new Zed terminal tab: $typed"
   Write-Output "--- launcher ($launcher) ---"
   Get-Content -LiteralPath $launcher
   return
@@ -117,25 +115,51 @@ $zed = Get-Process -Name Zed -ErrorAction SilentlyContinue |
   Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
 if (-not $zed) { throw "No Zed window found. Open Zed first." }
 
+# AppActivate can return true while Windows' foreground lock keeps another app in front
+# (it only flashes Zed's taskbar button). Keys sent then land in that app: in Microsoft Teams,
+# Ctrl+Alt+Shift+1 downloads diagnostic logs and Ctrl+Shift+V + Enter posts the pasted command
+# into the open chat. So every keystroke is guarded by a real foreground-window check.
+Add-Type -Namespace ZedSpawn -Name Win -MemberDefinition @'
+[DllImport("user32.dll")] public static extern System.IntPtr GetForegroundWindow();
+[DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(System.IntPtr hWnd, out uint pid);
+'@
+function Test-ZedForeground {
+  $procId = [uint32]0
+  [void][ZedSpawn.Win]::GetWindowThreadProcessId([ZedSpawn.Win]::GetForegroundWindow(), [ref]$procId)
+  return $procId -eq [uint32]$zed.Id
+}
+function Send-ZedKeys([string]$keys, [string]$what) {
+  if (-not (Test-ZedForeground)) {
+    throw "Zed is not the foreground window; stopped before sending $what. Nothing more was typed. Click into Zed and run the spawn again."
+  }
+  $shell.SendKeys($keys)
+}
+
 $shell = New-Object -ComObject WScript.Shell
-if (-not $shell.AppActivate($zed.Id)) { throw "Could not focus the Zed window." }
+[void]$shell.AppActivate($zed.Id)
+$focusDeadline = (Get-Date).AddMilliseconds(1500)
+while (-not (Test-ZedForeground) -and (Get-Date) -lt $focusDeadline) { Start-Sleep -Milliseconds 100 }
+if (-not (Test-ZedForeground)) {
+  throw "Could not bring Zed to the foreground (Windows focus lock). No keys were sent. Click into the Zed window and run the spawn again."
+}
 Start-Sleep -Milliseconds 300
 
-$shell.SendKeys('^%+1')                 # new terminal tab
+Send-ZedKeys '^%+1' 'the new-terminal key'   # new terminal tab (no split)
 Start-Sleep -Milliseconds $DelayMs
-$shell.SendKeys('^%+2')                 # move it into a right split
-Start-Sleep -Milliseconds 500
 
 # Paste rather than type: input methods such as Vietnamese Telex rewrite typed letters
 # (e.g. "test" -> "tét"), but leave pasted text and Ctrl shortcuts alone.
 $savedClip = $null
 try { $savedClip = Get-Clipboard -Raw -ErrorAction Stop } catch {}
-Set-Clipboard -Value $typed
-Start-Sleep -Milliseconds 150
-$shell.SendKeys('^+v')                  # terminal::Paste in Zed
-Start-Sleep -Milliseconds 300
-$shell.SendKeys('{ENTER}')
-Start-Sleep -Milliseconds 300
-if ($null -ne $savedClip) { Set-Clipboard -Value $savedClip }
+try {
+  Set-Clipboard -Value $typed
+  Start-Sleep -Milliseconds 150
+  Send-ZedKeys '^+v' 'the paste'             # terminal::Paste in Zed
+  Start-Sleep -Milliseconds 300
+  Send-ZedKeys '{ENTER}' 'Enter'
+  Start-Sleep -Milliseconds 300
+} finally {
+  if ($null -ne $savedClip) { Set-Clipboard -Value $savedClip }
+}
 
-Write-Output "Spawned session '$Name' (parent '$Parent') in a Zed split pane. Files: $work"
+Write-Output "Spawned session '$Name' (parent '$Parent') in a new Zed terminal tab. Files: $work"
