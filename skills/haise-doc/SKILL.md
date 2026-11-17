@@ -151,6 +151,7 @@ if the content now reads better another way.
   cards, SVG groups, `.phase-key` chips) light up together on hover, and pin
   on tap/click (components.md "Phase focus"). When a doc walks through stages
   that appear in steps and diagrams, tag them.
+- Shell v3.1.1 lets long `.orig` text wrap (tables no longer overflow).
 - Facts only from sources you reopened; user guesses or predictions are not
   findings — record them as hypotheses (`OPEN`) unless the user confirmed them
   as decisions (then cite as type `Decision` with who/when).
