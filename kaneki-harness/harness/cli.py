@@ -955,7 +955,8 @@ def cmd_install(args: argparse.Namespace) -> None:
 
 def cmd_tickets(args: argparse.Namespace) -> None:
     from . import board
-    out({"tickets": board.list_tickets(profile_path(args))})
+    from .contract import CONTRACT_VERSION
+    out({"contractVersion": CONTRACT_VERSION, "tickets": board.list_tickets(profile_path(args))})
 
 
 def cmd_status_of(args: argparse.Namespace) -> None:

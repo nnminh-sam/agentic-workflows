@@ -21,6 +21,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from . import board
+from .contract import CONTRACT_VERSION
 from .errors import HarnessError
 
 MAX_FILE_BYTES = 512 * 1024
@@ -92,7 +93,8 @@ def make_handler(b: Board):
                     html = html.replace("__TOKEN__", b.token).replace("__PROJECT__", json.dumps(b.project))
                     self._send(200, html.encode("utf-8"), "text/html; charset=utf-8")
                 elif url.path == "/api/tickets":
-                    self._json({"project": b.project, "editor": bool(editor_command()), "tickets": board.list_tickets(b.profile)})
+                    self._json({"contractVersion": CONTRACT_VERSION, "project": b.project, "editor": bool(editor_command()),
+                                "tickets": board.list_tickets(b.profile)})
                 elif url.path == "/api/ticket":
                     self._json(board.summarize_ticket(b.profile, q["id"]))
                 elif url.path == "/api/file":

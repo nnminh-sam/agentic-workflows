@@ -141,7 +141,10 @@ class BoardTests(Base):
         code, body = self.get("/api/tickets")
         data = json.loads(body)
         self.assertEqual(data["tickets"][0]["ticket"], "WEB-1")
-        self.assertEqual(data["tickets"][0]["strip"][0], {"node": "scope", "status": "done", "verdict": "approved"})
+        self.assertEqual(data["contractVersion"], 1)
+        self.assertEqual(data["tickets"][0]["strip"][0], {
+            "node": "scope", "status": "done", "verdict": "approved",  # the 3 keys this test checked before P1-T04
+            "generation": 1, "boundary": "user", "waiting": {"on": "none", "node": "scope", "reason": "done"}})
         code, body = self.get("/api/ticket?id=WEB-1")
         detail = json.loads(body)
         self.assertEqual((detail["lane"], detail["nextPending"]), ("lite", "change"))

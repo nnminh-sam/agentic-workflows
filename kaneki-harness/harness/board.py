@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .contract import CONTRACT_VERSION
 from .errors import HarnessError
 
 HIDDEN_EVENTS = {"state-write"}
@@ -46,18 +47,46 @@ def summarize(s: Any, events_limit: int = 40) -> dict[str, Any]:
     shown = [e for e in events if e.get("event") not in HIDDEN_EVENTS]
     extra = [p for p in (s.state["context"].get("repositories") or [])]
     questions = s.ticket.dir / "questions.md"
+    # One decision-log read serves every waiting() call of this ticket (problems is passed through).
+    wait = waiting(s, problems=problems)
+    strip = [{"node": n["node"], "status": n["status"], "verdict": n["verdict"], "generation": n["generation"],
+              "boundary": n["boundary"], "waiting": waiting(s, n["node"], problems=problems)} for n in nodes]
     return {
-        "ticket": s.ctx["ticket"], "kind": s.ctx["kind"], "lane": G.lane_of(s.ctx), "reviewRound": s.ctx["reviewRound"],
+        "ticket": s.ctx["ticket"], "title": _title(s), "kind": s.ctx["kind"], "lane": G.lane_of(s.ctx),
+        "reviewRound": s.ctx["reviewRound"], "contractVersion": CONTRACT_VERSION,
         "ticketDir": str(s.ticket.dir), "createdAt": s.state.get("createdAt"),
         "updatedAt": events[-1]["at"] if events else s.state.get("createdAt"),
         "settled": sum(1 for n in s.order if settled(s.state, n)), "traceLength": len(s.order),
-        "nextPending": nxt, "next": next_hint(s, nxt), "tokensTotal": tokens_total, "nodes": nodes,
+        "nextPending": nxt, "next": next_hint(s, nxt), "tokensTotal": tokens_total,
+        "waitingOn": wait["on"], "waitingNode": wait["node"], "waitingReason": wait["reason"],
+        "lastEventAt": shown[-1]["at"] if shown else None, "lastEventKind": shown[-1]["event"] if shown else None,
+        "nodes": nodes, "strip": strip,
         "repositories": [{"id": r["id"], "path": r["path"], "worktree": r.get("worktree"), "base": r.get("baseBranch")}
                          for r in extra],
         "questions": {"path": str(questions), "exists": questions.is_file()},
         "receipts": s.state.get("receipts") or {}, "shipped": s.state.get("shipped") or {},
         "events": shown[-events_limit:], "integrity": problems or None,
     }
+
+
+def _title(s: Any) -> str | None:
+    """First `# ` line of the ticket text minus a leading `<ticket>:`: `ticket.md` in the ticket folder (full-lane
+    intake copies it there), else the local-file tracker's `{dir}/{ticket}.md` next to the profile; None when neither."""
+    candidates = [s.ticket.dir / "ticket.md"]
+    tracker = s.profile.get("tracker") or {}
+    if tracker.get("adapter") == "local-file":
+        folder = (tracker.get("config") or {}).get("dir") or "tickets"
+        candidates.append(s.pdir / folder / f"{s.ctx['ticket']}.md")
+    for path in candidates:
+        if not path.is_file():
+            continue
+        for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+            if line.startswith("# "):
+                text = line[2:].strip()
+                prefix = s.ctx["ticket"] + ":"
+                return (text[len(prefix):] if text.startswith(prefix) else text).strip() or None
+        return None
+    return None
 
 
 def next_hint(s: Any, node: str | None) -> str:
@@ -80,7 +109,7 @@ WAITING_REASONS = ("integrity", "done", "shipped", "rejected-open", "loop-cap", 
 FAILING_VERDICTS = ("FAIL", "NEEDS CHANGES")
 
 
-def waiting(s: Any, node: str | None = None) -> dict[str, Any]:
+def waiting(s: Any, node: str | None = None, problems: list[str] | None = None) -> dict[str, Any]:
     """Who the ticket waits on: `{"on": "user"|"agent"|"none", "node": str|None, "reason": str}`. Read-only.
 
     `node` defaults to the next pending node N. The rules are tried in this order; the first match wins:
@@ -99,6 +128,9 @@ def waiting(s: Any, node: str | None = None) -> dict[str, Any]:
     Explicit decisions (3-5) come before "work left to do" (6) because the gate refuses the normal close in each case;
     loop-cap comes before 6 because a staged review that FAILs its first unit never runs the next one.
 
+    `problems` is the result of `s.ticket.verify_log()` when the caller already has it (summarize reads the log once
+    for every node of a ticket); None reads the log here.
+
     A round is complete when every planned unit (reviewer included) has an `ok` record at the current generation, or,
     on a loop-back node, when the last recorded unit verdict is FAIL / NEEDS CHANGES (the controller closes it
     needs-changes). A node without units (lite scope/change, inline nodes, deliverable-ready) never reaches
@@ -109,7 +141,8 @@ def waiting(s: Any, node: str | None = None) -> dict[str, Any]:
     from .state import next_pending
 
     n = node if node is not None else next_pending(s.state, s.order)
-    _, problems = s.ticket.verify_log()
+    if problems is None:
+        _, problems = s.ticket.verify_log()
     if problems:
         return {"on": "none", "node": n, "reason": "integrity"}
     if n is None or s.state["nodes"][n]["status"] == "done":
@@ -167,9 +200,9 @@ def list_tickets(profile: Path) -> list[dict[str, Any]]:
         for d in sorted(root.iterdir()):
             if (d / "state.json").is_file():
                 full = summarize_ticket(profile, d.name)
-                brief = {k: v for k, v in full.items() if k not in ("nodes", "events", "receipts", "repositories")}
-                if "nodes" in full:
-                    brief["strip"] = [{"node": n["node"], "status": n["status"], "verdict": n["verdict"]} for n in full["nodes"]]
+                # contractVersion goes once on the wrapper (cmd_tickets, /api/tickets), not on every item.
+                brief = {k: v for k, v in full.items()
+                         if k not in ("nodes", "events", "receipts", "repositories", "contractVersion")}
                 out.append(brief)
     out.sort(key=lambda t: t.get("updatedAt") or "", reverse=True)
     return out
