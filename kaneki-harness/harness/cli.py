@@ -984,6 +984,13 @@ def cmd_status_of(args: argparse.Namespace) -> None:
     out(summary)
 
 
+def cmd_ticket_detail(args: argparse.Namespace) -> None:
+    """One ticket as the desktop app's `TicketDetail`: the board summary plus node cards, trace and loop-backs.
+    Read-only; a ticket that fails to load is the usual rc 2 error."""
+    from . import board
+    out(board.summarize(Session(args), events_limit=args.events, detail=True))
+
+
 def cmd_contract(args: argparse.Namespace) -> None:
     """The contract version the desktop app checks at start-up; needs no profile or ticket and writes nothing."""
     from .contract import contract_info
@@ -1011,6 +1018,13 @@ def cmd_digest(args: argparse.Namespace) -> None:
 
 
 # --- parser ------------------------------------------------------------------------------------------
+
+def _non_negative(text: str) -> int:
+    value = int(text)
+    if value < 0:
+        raise argparse.ArgumentTypeError(f"must be 0 or more, got {value}")
+    return value
+
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="sdlc", description="Generic SDLC ticket harness driver")
@@ -1154,6 +1168,11 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--path", required=True)
     x.set_defaults(fn=cmd_status_of)
 
+    x = sub.add_parser("ticket-detail", parents=[ticketed],
+                       help="one ticket with node cards, trace and loop-backs, as JSON for the desktop app (read-only)")
+    x.add_argument("--events", type=_non_negative, default=40, help="how many recent decision events to include")
+    x.set_defaults(fn=cmd_ticket_detail)
+
     x = sub.add_parser("contract", help="the data contract version the desktop app checks (read-only, no profile)")
     x.set_defaults(fn=cmd_contract)
 
@@ -1175,7 +1194,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 READ_ONLY = {"status", "plan", "validate", "digest", "onboard-scan", "onboard-verify", "onboard-write", "install",
-             "tickets", "status-of", "web", "zed-setup", "contract"}
+             "tickets", "status-of", "web", "zed-setup", "contract", "ticket-detail"}
 NO_STATUS_REFRESH = READ_ONLY | {"git"}
 
 

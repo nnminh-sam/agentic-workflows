@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -15,8 +16,12 @@ HIDDEN_EVENTS = {"state-write"}
 STATUS_FILE = "STATUS.md"
 
 
-def summarize(s: Any, events_limit: int = 40) -> dict[str, Any]:
-    """Summary of one loaded Session (cli.Session)."""
+def summarize(s: Any, events_limit: int = 40, detail: bool = False) -> dict[str, Any]:
+    """Summary of one loaded Session (cli.Session).
+
+    `detail=True` (only `sdlc ticket-detail`) adds the app's `TicketDetail` extras: top-level `trace`, `loopCap`,
+    `generationMax`, `loopBacks`, and the `NodeCard` keys on every node (`_node_detail`). The default output is the one
+    STATUS.md, `sdlc tickets` and the web board use; it does not pay for the extras."""
     from . import graph as G
     from .state import next_pending, settled
 
@@ -49,9 +54,10 @@ def summarize(s: Any, events_limit: int = 40) -> dict[str, Any]:
     questions = s.ticket.dir / "questions.md"
     # One decision-log read serves every waiting() call of this ticket (problems is passed through).
     wait = waiting(s, problems=problems)
+    waits = {n["node"]: waiting(s, n["node"], problems=problems) for n in nodes}
     strip = [{"node": n["node"], "status": n["status"], "verdict": n["verdict"], "generation": n["generation"],
-              "boundary": n["boundary"], "waiting": waiting(s, n["node"], problems=problems)} for n in nodes]
-    return {
+              "boundary": n["boundary"], "waiting": waits[n["node"]]} for n in nodes]
+    summary = {
         "ticket": s.ctx["ticket"], "title": _title(s), "kind": s.ctx["kind"], "lane": G.lane_of(s.ctx),
         "reviewRound": s.ctx["reviewRound"], "contractVersion": CONTRACT_VERSION,
         "ticketDir": str(s.ticket.dir), "createdAt": s.state.get("createdAt"),
@@ -65,8 +71,88 @@ def summarize(s: Any, events_limit: int = 40) -> dict[str, Any]:
                          for r in extra],
         "questions": {"path": str(questions), "exists": questions.is_file()},
         "receipts": s.state.get("receipts") or {}, "shipped": s.state.get("shipped") or {},
-        "events": shown[-events_limit:], "integrity": problems or None,
+        "events": shown[max(0, len(shown) - events_limit):], "integrity": problems or None,
     }
+    if detail:
+        for n in nodes:
+            n.update(_node_detail(s, n["node"], waits[n["node"]]))
+        summary.update({
+            "trace": list(s.order), "loopCap": s.profile.get("gates", {}).get("loopCap", 2),
+            "generationMax": max((s.state["nodes"][n]["generation"] for n in s.order), default=1),
+            "loopBacks": _loop_backs(s, events),
+        })
+    return summary
+
+
+def _node_detail(s: Any, node: str, wait: dict[str, Any]) -> dict[str, Any]:
+    """The `NodeCard` extras of one node (P1 plan §4.2). `wait` is this node's `waiting()` result, computed once."""
+    from .state import missing_prerequisites
+    from .usage import node_usage
+
+    spec = s.spec(node)
+    rec = s.state["nodes"][node]
+    planned = []
+    for u in s.units(node):
+        tier, why = s.tier(node, u["id"])  # escalation included, as `sdlc plan` prints it
+        row: dict[str, Any] = {"id": u["id"], "role": u.get("role"), "tier": tier, "model": s.model(tier)}
+        if why:
+            row["escalated"] = {"from": u["tier"], "why": why}
+        planned.append(row)
+    usage = node_usage(rec)
+    return {
+        "plannedUnits": planned,
+        "unitRecords": [dict(u) for u in rec["units"] if u["generation"] == rec["generation"]],
+        "agents": usage["agents"], "tokensAllGenerations": usage["allGenerations"],
+        "tokensEarlier": usage["earlierGenerations"],
+        "loopBackTo": spec.get("loopBackTo"), "reopens": spec.get("reopens"), "gates": list(spec.get("gates", [])),
+        "missing": missing_prerequisites(s.graph, s.order, s.state, node),
+        "waiting": wait, "resultFiles": _result_files(s, node),
+    }
+
+
+def _result_files(s: Any, node: str) -> list[dict[str, Any]]:
+    """Existing `results/<node>.g<gen>.<unit>.r<n>.md` files of every generation (naming: cli.cmd_packet), oldest
+    generation first, then unit, then round."""
+    folder = s.ticket.dir / "results"
+    if not folder.is_dir():
+        return []
+    pattern = re.compile(re.escape(node) + r"\.g(\d+)\.(.+)\.r(\d+)\.md")
+    found = []
+    for path in folder.iterdir():
+        m = pattern.fullmatch(path.name)
+        if m and path.is_file():
+            found.append({"name": path.name, "path": str(path), "generation": int(m.group(1)), "unit": m.group(2),
+                          "round": int(m.group(3))})
+    return sorted(found, key=lambda f: (f["generation"], f["unit"], f["round"]))
+
+
+def _loop_backs(s: Any, events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """One `{at, node, stale, reason, byGateVerdict, byNode}` per `invalidate` event. The gate that caused it logs its
+    own event right after (cli.cmd_gate: `_invalidate` first, then the gate): a `needs-changes` gate on the node that
+    loops back to the reopened node, or an `approved` gate on a node that `reopens` (triage-review). A manual
+    `sdlc invalidate` has no such gate: both null.
+
+    The following gate alone is not proof: a triage gate closed `--reopen none` invalidates nothing, so a manual
+    invalidate just before it would look caused by it. The invalidate's reason must also carry the text that gate
+    writes (cli.cmd_gate: `<node> NEEDS CHANGES...` / `review round <n>:...`)."""
+    out = []
+    for i, e in enumerate(events):
+        if e.get("event") != "invalidate":
+            continue
+        after = next((x for x in events[i + 1:] if x.get("event") not in HIDDEN_EVENTS), None)
+        by_verdict = by_node = None
+        if after and after.get("event") == "gate":
+            gate_node = after.get("node") or ""
+            spec = s.graph["nodes"].get(gate_node, {})
+            reason = str(e.get("reason") or "")
+            if ((after.get("verdict") == "needs-changes" and spec.get("loopBackTo") == e.get("node")
+                 and reason.startswith(f"{gate_node} NEEDS CHANGES"))
+                    or (after.get("verdict") == "approved" and spec.get("reopens")
+                        and reason.startswith("review round "))):
+                by_verdict, by_node = after["verdict"], gate_node
+        out.append({"at": e.get("at"), "node": e.get("node"), "stale": list(e.get("stale") or []),
+                    "reason": e.get("reason"), "byGateVerdict": by_verdict, "byNode": by_node})
+    return out
 
 
 def _title(s: Any) -> str | None:
