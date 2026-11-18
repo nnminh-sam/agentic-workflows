@@ -1172,7 +1172,8 @@ NO_STATUS_REFRESH = READ_ONLY | {"git"}
 def _ticket_lock(args: argparse.Namespace):
     """One writer per ticket: every command that changes a ticket holds its lock for the whole read-modify-write."""
     from contextlib import nullcontext
-    if args.cmd in READ_ONLY or not getattr(args, "ticket", None) or (args.cmd == "lang" and not (args.set or args.clear)):
+    if ((args.cmd in READ_ONLY and not (args.cmd == "status" and args.accept_current_state))
+            or not getattr(args, "ticket", None) or (args.cmd == "lang" and not (args.set or args.clear))):
         return nullcontext()
     try:
         prof = load_profile(profile_path(args))

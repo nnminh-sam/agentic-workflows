@@ -69,6 +69,45 @@ class IntegrityTests(Flow):
         self.assertFalse(lock.exists())
         self.assertIn("lock-broken", (self.tdir("I-3") / "decisions.jsonl").read_text(encoding="utf-8"))
 
+    def test_accept_current_state_waits_for_the_ticket_lock(self) -> None:
+        run("init", "--ticket", "I-5", "--kind", "bug", *self.p)
+        tdir = self.tdir("I-5")
+        state_path, log_path, lock = tdir / "state.json", tdir / "decisions.jsonl", tdir / ".lock"
+        st = json.loads(state_path.read_text(encoding="utf-8"))
+        st["nodes"]["investigate"]["status"] = "done"  # edited outside the driver
+        state_path.write_text(json.dumps(st), encoding="utf-8")
+        lock.mkdir()
+        owner = json.dumps({"pid": 1, "command": "gate", "since": time.time()})
+        (lock / "owner.json").write_text(owner)
+        state_before, log_before = state_path.read_bytes(), log_path.read_bytes()
+        accept = ("status", "--ticket", "I-5", "--accept-current-state", "--reason", "test: deliberate edit", *self.p)
+        code, res = run(*accept)  # a live foreign lock refuses the accept and writes nothing
+        self.assertEqual(code, 2, res)
+        self.assertIn("G7", res["error"])
+        self.assertIn("locked by another session", res["error"])
+        self.assertEqual(state_path.read_bytes(), state_before)
+        self.assertEqual(log_path.read_bytes(), log_before)
+        self.assertEqual((lock / "owner.json").read_text(), owner)
+        code, res = run("status", "--ticket", "I-5", "--accept-current-state", *self.p)  # no reason: still refused, still no write
+        self.assertEqual(code, 2, res)
+        self.assertEqual(log_path.read_bytes(), log_before)
+        # plain status stays lock-free: it is refused for the edit, not for the lock, and writes nothing
+        code, res = run("status", "--ticket", "I-5", *self.p)
+        self.assertEqual(code, 2)
+        self.assertIn("changed outside the driver", res["error"])
+        self.assertEqual(log_path.read_bytes(), log_before)
+        (lock / "owner.json").unlink()
+        lock.rmdir()
+        code, res = run(*accept)
+        self.assertEqual(code, 0, res)
+        added = log_path.read_bytes()[len(log_before):].decode("utf-8").splitlines()
+        self.assertEqual(len(added), 1)
+        self.assertEqual(json.loads(added[0])["event"], "state-write")
+        self.assertIn('"acceptedByUser": true', added[0])
+        self.assertFalse(lock.exists())
+        code, res = run("status", "--ticket", "I-5", *self.p)
+        self.assertEqual(code, 0, res)
+
     def test_status_and_plan_do_not_write(self) -> None:
         run("init", "--ticket", "I-4", "--kind", "bug", *self.p)
         before = (self.tdir("I-4") / "decisions.jsonl").read_text(encoding="utf-8")
