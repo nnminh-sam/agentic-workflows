@@ -983,6 +983,12 @@ def cmd_status_of(args: argparse.Namespace) -> None:
     out(summary)
 
 
+def cmd_contract(args: argparse.Namespace) -> None:
+    """The contract version the desktop app checks at start-up; needs no profile or ticket and writes nothing."""
+    from .contract import contract_info
+    out(contract_info())
+
+
 def cmd_web(args: argparse.Namespace) -> None:
     from . import web
     out(web.serve(profile_path(args), args.port, args.open))
@@ -1147,6 +1153,9 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--path", required=True)
     x.set_defaults(fn=cmd_status_of)
 
+    x = sub.add_parser("contract", help="the data contract version the desktop app checks (read-only, no profile)")
+    x.set_defaults(fn=cmd_contract)
+
     x = sub.add_parser("web", parents=[common], help="local live board of every ticket (127.0.0.1, read-only); Ctrl-C stops it")
     x.add_argument("--port", type=int, default=8765)
     x.add_argument("--open", action="store_true", help="open it in the browser")
@@ -1165,7 +1174,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 READ_ONLY = {"status", "plan", "validate", "digest", "onboard-scan", "onboard-verify", "onboard-write", "install",
-             "tickets", "status-of", "web", "zed-setup"}
+             "tickets", "status-of", "web", "zed-setup", "contract"}
 NO_STATUS_REFRESH = READ_ONLY | {"git"}
 
 
