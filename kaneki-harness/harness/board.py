@@ -75,6 +75,79 @@ def next_hint(s: Any, node: str | None) -> str:
     return f"{node}: next ({who})" + (" — stale, rerun" if rec["status"] == "stale" else "")
 
 
+WAITING_REASONS = ("integrity", "done", "shipped", "rejected-open", "loop-cap", "reviewer-fail", "needs-run", "running",
+                   "user-boundary", "awaiting-gate")
+FAILING_VERDICTS = ("FAIL", "NEEDS CHANGES")
+
+
+def waiting(s: Any, node: str | None = None) -> dict[str, Any]:
+    """Who the ticket waits on: `{"on": "user"|"agent"|"none", "node": str|None, "reason": str}`. Read-only.
+
+    `node` defaults to the next pending node N. The rules are tried in this order; the first match wins:
+
+    1. the decision log fails its hash chain                         -> none,  integrity
+    2. no pending node (or the given node is done)                   -> none,  shipped if the ticket shipped, else done
+    3. N's verdict is `rejected` (not yet invalidated)                -> user,  rejected-open
+    4. N loops back, its last unit verdict is FAIL / NEEDS CHANGES
+       and `attempts + 1 >= gates.loopCap` (G4 needs --actor user)   -> user,  loop-cap
+    5. N has a reviewer whose last verdict is FAIL (every unit ok)   -> agent, reviewer-fail (the controller re-records
+                                                                        or re-dispatches the worker; no user decision)
+    6. N's round is not complete                                      -> agent, running if in_progress, else needs-run
+    7. N closes on the user's approval (not a plan auto-skip)         -> user,  user-boundary
+    8. otherwise                                                      -> agent, awaiting-gate (the controller closes it)
+
+    Explicit decisions (3-5) come before "work left to do" (6) because the gate refuses the normal close in each case;
+    loop-cap comes before 6 because a staged review that FAILs its first unit never runs the next one.
+
+    A round is complete when every planned unit (reviewer included) has an `ok` record at the current generation, or,
+    on a loop-back node, when the last recorded unit verdict is FAIL / NEEDS CHANGES (the controller closes it
+    needs-changes). A node without units (lite scope/change, inline nodes, deliverable-ready) never reaches
+    in_progress, so its round is complete when every artifact exists with live text; one without artifacts is
+    complete as soon as it is next.
+    """
+    from .cli import live_text
+    from .state import next_pending
+
+    n = node if node is not None else next_pending(s.state, s.order)
+    _, problems = s.ticket.verify_log()
+    if problems:
+        return {"on": "none", "node": n, "reason": "integrity"}
+    if n is None or s.state["nodes"][n]["status"] == "done":
+        return {"on": "none", "node": n, "reason": "shipped" if s.state.get("shipped") else "done"}
+
+    spec = s.spec(n)
+    rec = s.state["nodes"][n]
+    current = [u for u in rec["units"] if u["generation"] == rec["generation"]]
+    planned = [u["id"] for u in s.units(n)]
+    last_verdict = next((u.get("verdict") for u in reversed(current) if u.get("verdict")), None)
+    loops_back = bool(spec.get("loopBackTo"))
+    cap = s.profile.get("gates", {}).get("loopCap", 2)
+
+    if rec["verdict"] == "rejected":
+        return {"on": "user", "node": n, "reason": "rejected-open"}
+    if loops_back and last_verdict in FAILING_VERDICTS and rec["attempts"] + 1 >= cap:
+        return {"on": "user", "node": n, "reason": "loop-cap"}
+
+    if planned:
+        done = {u["unit"] for u in current if u["status"] == "ok"}
+        complete = set(planned) <= done or (loops_back and last_verdict in FAILING_VERDICTS)
+        reviews = [u for u in current if u["unit"] == "reviewer"]
+        if complete and reviews and reviews[-1].get("verdict") == "FAIL":
+            return {"on": "agent", "node": n, "reason": "reviewer-fail"}
+    else:
+        paths = [s.ticket.dir / a for a in s.artifacts(n)]  # the gate's own test (cli.cmd_gate: absent, not_rewritten)
+        complete = all(p.is_file() and (p.suffix != ".md" or live_text(p).strip()) for p in paths)
+    if not complete:
+        return {"on": "agent", "node": n, "reason": "running" if rec["status"] == "in_progress" else "needs-run"}
+
+    boundary = spec["boundary"]
+    if boundary == "user" and n in ("fix-plan", "feature-plan") and s.profile.get("gates", {}).get("autoSkipPlanApproval"):
+        boundary = "controller"
+    if boundary == "user":
+        return {"on": "user", "node": n, "reason": "user-boundary"}
+    return {"on": "agent", "node": n, "reason": "awaiting-gate"}
+
+
 def summarize_ticket(profile: Path, ticket: str) -> dict[str, Any]:
     from .cli import Session
     try:
