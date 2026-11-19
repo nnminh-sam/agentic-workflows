@@ -12,7 +12,7 @@ git-guard is a PreToolUse hook on `Bash` and `PowerShell`. It parses each comman
 | `identity` | ID001–ID005 | commit author name/email; the pinned credential on push/pull/fetch/clone (an SSH key with `-i <key>` + `IdentitiesOnly=yes`, or with `git_transport: gh` the gh credential helper as the expected gh account); remotes on allowed hosts and owners using the profile's transport; active `gh` account |
 | `commit-message` | CM001–CM016 | Conventional Commits 1.0 on `git commit -m/-F` and on `gh pr create/edit --title`; CM016: no AI co-author or "Generated with" attribution |
 | `github-cli` | GH001–GH010 | GitHub only through `gh`, risky `gh` commands denied or confirmed, `gh api` mutations, non-interactive `gh pr create`, repo owner scope, `gh repo create` visibility; GH008: PR body has Summary / Detailed changes / Explanation / Test results (unit + lint); GH009: no AI attribution in PR bodies; GH010: no gh at all when `pr_via` is `browser` |
-| `branching` | BR001–BR005 | no commits on `main` / `develop/base` (BR001); no pushes to them (BR002); work branches named `develop/<type>/<name>` (BR003) and started from `develop/base` (BR004); PRs target `develop/base`, and only `develop/base` targets `main` (BR005) |
+| `branching` | BR001–BR005 | no commits on `main` / `develop/base` (BR001); no pushes to them (BR002); work branches named `develop/<type>/<name>` (BR003) and started from `develop/base` (BR004); PRs target `develop/base`, and only `develop/base` targets `main` (BR005); with `nested_work_branches` a work branch may start from and PR into a parent work branch |
 
 Each finding is `deny`, `ask` or `warn`, and the strictest one wins. The block reason names the rule id and says what to change.
 

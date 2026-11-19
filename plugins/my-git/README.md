@@ -213,6 +213,26 @@ python3 <root>/scripts/setup_profile.py show                   # values, sources
 - `-i <some key>` plus `IdentitiesOnly=yes` must be pinned (`ssh` transport); `git_transport` unset means `ssh`
 - GH006 (owner scope) is skipped
 
+## Nested work branches (feature parent branches)
+
+A feature can have its own parent branch with smaller branches under it:
+
+```
+main  <-(release PR)-  develop/base  <-(PR)-  develop/feat/kaneki-harness  <-(PR)-  develop/feat/kh-P1-T07
+                                                                           <-(PR)-  develop/feat/kh-P2-T01
+```
+
+With `settings.nested_work_branches` (branching contract, on by default) any work branch can be a parent:
+- BR004: a new work branch may start from `develop/base` or from another work branch (local or `origin/...`).
+- BR005: a PR may target `develop/base` or another work branch (never itself); `main` still accepts only `develop/base`.
+- BR003: names stay `develop/<type>/<name>`; upper case is allowed so ticket ids fit (`develop/feat/kh-P1-T07`).
+  Child names are flat: git cannot have `develop/feat/kaneki-harness` and `develop/feat/kaneki-harness/x` at once.
+- `/my-git:pr` picks the parent with `scripts/pr_base.py` (the closest branch the head was forked from), or takes
+  `--base <branch>`.
+
+Set `"nested_work_branches": false` in a project override (`setup_profile.py eject branching`) for the strict model:
+work branches only from and into `develop/base`.
+
 ## Configure the rules
 
 In plugin mode, copy a shipped contract into the project first, then edit the copy:
