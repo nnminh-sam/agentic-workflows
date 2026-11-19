@@ -111,7 +111,7 @@ The code stays in this folder and every project uses it. To update all projects 
 python3 <root>/install.py /path/to/project
 ```
 
-This adds the following to `<project>/.claude/settings.json`; commit it so teammates get the same setup:
+This adds the following to `<project>/.claude/settings.json`:
 
 ```json
 {
@@ -123,6 +123,10 @@ This adds the following to `<project>/.claude/settings.json`; commit it so teamm
 ```
 
 Restart Claude Code in the project and accept the marketplace trust prompt.
+
+Don't commit this entry. `path` is an absolute path to this folder on your machine, so it breaks on any machine
+with a different layout, and Claude Code doesn't document how a relative `path` is resolved. Each machine runs the
+install once instead (or `--scope user`, below).
 
 You can also do the same from inside Claude Code:
 ```

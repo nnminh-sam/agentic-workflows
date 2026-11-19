@@ -20,18 +20,8 @@ node_modules/
 !.env.example
 *.local.json
 
-# Claude Code: per-machine state and the kaneki-harness installed copy
-# (written by kaneki-harness/harness/install.py, embeds this machine's absolute harnessHome path;
-#  the source of truth is kaneki-harness/skills and kaneki-harness/agents)
-/.claude/*
-!/.claude/settings.json
-
-# Kaneki harness working state (ticket folders, packets, evidence, adapters); may hold customer data
-.sdlc/
-# workspace-local harness project files: profile (holds git identity), its provenance, local ticket notes
-/sdlc.profile.json
-/sdlc.profile.evidence.json
-/tickets/
+# Claude Code per-machine settings and installs (absolute paths); each machine runs the installers itself
+/.claude/
 
 # Logs and temp
 *.log
