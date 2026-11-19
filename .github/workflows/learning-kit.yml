@@ -2,13 +2,13 @@ name: learning-kit
 
 on:
   push:
-    paths: ["learning-kit/**", ".github/workflows/learning-kit.yml"]
+    paths: ["harness/learning-kit/**", ".github/workflows/learning-kit.yml"]
   pull_request:
-    paths: ["learning-kit/**", ".github/workflows/learning-kit.yml"]
+    paths: ["harness/learning-kit/**", ".github/workflows/learning-kit.yml"]
 
 defaults:
   run:
-    working-directory: learning-kit
+    working-directory: harness/learning-kit
 
 jobs:
   test:

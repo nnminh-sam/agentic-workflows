@@ -1,0 +1,13 @@
+{
+  "extraKnownMarketplaces": {
+    "my-git-local": {
+      "source": {
+        "source": "directory",
+        "path": "D:/workspace/HAISE/agentic-workflows/plugins/my-git"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "my-git@my-git-local": true
+  }
+}
