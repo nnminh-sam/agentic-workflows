@@ -38,4 +38,4 @@ Work goes on `develop/<type>/<name>` branches (feat, fix, chore, docs, refactor,
 `develop/base`, and reaches `develop/base` through a PR (`/my-git:pr`); `develop/base` reaches `main` through a release
 PR (`/my-git:pr --release`). Neither `main` nor `develop/base` takes direct commits or pushes.
 
-Test locally before pushing (`/my-git:pr` runs the tests and lint); CI runs the learning-kit tests only.
+Test locally before pushing (`/my-git:pr` runs the tests and lint); there is no CI.
