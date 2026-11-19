@@ -16,7 +16,7 @@ The guard is **account-agnostic**: the shared contracts never name a user. Each 
 | Identity | `contracts/identity.json` | commit author name/email; the pinned credential for push/pull/fetch/clone (SSH key, or the gh credential helper as the expected account); remotes on allowed hosts/owners using the profile's transport; active `gh` account |
 | Commit message | `contracts/commit-message.json` | Conventional Commits 1.0 on `git commit -m/-F`, also applied to `gh pr create/edit --title` |
 | Commit message (CM016) | `contracts/commit-message.json` | no AI co-author trailer (`Co-Authored-By: Claude ...`) or "Generated with ..." / 🤖 attribution |
-| GitHub CLI | `contracts/github-cli.json` | GitHub only via `gh`; risky `gh` commands denied or confirmed; `gh api` mutations; non-interactive `gh pr create`; repository owner scope; `gh repo create` visibility; PR body sections (GH008) and no AI attribution in PR bodies (GH009) |
+| GitHub CLI | `contracts/github-cli.json` | GitHub only via `gh`; risky `gh` commands denied or confirmed; `gh api` mutations; non-interactive `gh pr create`; repository owner scope; `gh repo create` visibility; PR body sections (GH008) and no AI attribution in PR bodies (GH009); no gh at all in browser mode (GH010) |
 | Branching | `contracts/branching.json` | no commits on / pushes to `main` and `develop/base`; work branches `develop/<type>/<name>` started from `develop/base`; PRs target `develop/base`, only `develop/base` → `main` |
 
 ## Branching model and repo template
@@ -72,6 +72,22 @@ The guard still enforces:
 - **gh**: the active account must be `github_user` (ID005).
 
 With several accounts, or SSH remotes, use `--transport ssh` with an `ssh_key` (see [Profile](#profile-who-you-are)).
+
+## Open PRs in the browser (no gh for the agent)
+
+If gh is not logged in as your account, or you don't want the agent to call GitHub at all:
+
+```sh
+python3 <root>/scripts/setup_profile.py init --pr-via browser
+```
+
+- GH010 denies every `gh` command the agent runs; GH001 already denies `curl` / `Invoke-RestMethod` to `api.github.com`.
+- `/my-git:pr` still runs the tests, writes and validates the title and body, then prints
+  `https://github.com/<owner>/<repo>/compare/<base>...<head>?expand=1&title=...&body=...`. You open it, check the
+  prefilled form and press "Create pull request". (A body too long for a URL is left out; paste it from the body file.)
+- Pushes are unaffected: they use git with your `ssh_key`.
+- The guard checks commands only, so what you submit in the browser is checked by `check_pr.py` beforehand and by the
+  GitHub branch rules afterwards.
 
 What it ships:
 - **Hooks** (`hooks/hooks.json`):
@@ -169,6 +185,7 @@ Contracts refer to account values as variables, for example `"expected_logins": 
 | `git_transport` | `GIT_GUARD_GIT_TRANSPORT` | ID003 / ID004: `ssh` (default) or `gh` |
 | `ssh_key` | `GIT_GUARD_SSH_KEY` | ID003 pinned key (full path or path suffix), `ssh` transport only |
 | `signing_key` | `GIT_GUARD_SIGNING_KEY` | commit skill signing: `default` (git's own signing config, `commit -S`) or a path to an SSH key (`gpg.format=ssh`); unset = unsigned |
+| `pr_via` | `GIT_GUARD_PR_VIA` | `gh` (default) or `browser`: GH010 denies every gh command and `/my-git:pr` prints a prefilled compare link you submit yourself |
 
 Each value is resolved from the first source that has it:
 1. the environment variable

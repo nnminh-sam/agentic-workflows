@@ -24,7 +24,7 @@ CONTRACT_FILES = {
 KNOWN_RULES = {
     "identity": {"ID001", "ID002", "ID003", "ID004", "ID005"},
     "commit-message": {f"CM{n:03d}" for n in range(1, 17)},
-    "github-cli": {f"GH{n:03d}" for n in range(1, 10)},
+    "github-cli": {f"GH{n:03d}" for n in range(1, 11)},
     "branching": {f"BR{n:03d}" for n in range(1, 6)},
 }
 

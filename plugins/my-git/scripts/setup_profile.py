@@ -8,6 +8,7 @@
   python3 setup_profile.py init --signing-key default                # sign commits with git's own signing config
   python3 setup_profile.py init --signing-key ~/.ssh/id_sign.pub     # sign commits with this SSH key (gpg.format=ssh)
   python3 setup_profile.py init --scope user ...               # ~/.claude/git-guard/profile.json (all projects)
+  python3 setup_profile.py init --pr-via browser               # no gh for the agent; PRs from a prefilled link
   python3 setup_profile.py unset github_orgs
   python3 setup_profile.py eject commit-message                # copy a shipped contract into the project to edit it
 
@@ -143,7 +144,7 @@ def cmd_init(args) -> int:
                 data[k] = v
     given = {"github_user": args.github_user, "github_orgs": args.github_orgs, "git_name": args.git_name,
              "git_email": args.git_email, "ssh_key": args.ssh_key, "git_transport": args.transport,
-             "signing_key": args.signing_key}
+             "signing_key": args.signing_key, "pr_via": args.pr_via}
     try:
         for k, v in given.items():
             if v is not None and k in decls:
@@ -202,6 +203,8 @@ def main(argv: list[str] | None = None) -> int:
                    help="ssh: SSH remotes + pinned key; gh: HTTPS remotes through the gh credential helper (no SSH key)")
     p.add_argument("--signing-key", metavar="default|PATH",
                    help="sign commits: 'default' uses git's signing config; a path pins that SSH key (gpg.format=ssh)")
+    p.add_argument("--pr-via", choices=("gh", "browser"),
+                   help="gh: /my-git:pr runs gh pr create; browser: no gh for the agent, PRs from a prefilled compare link")
     u = sub.add_parser("unset", help="remove keys from a profile file")
     u.add_argument("keys", nargs="+")
     u.add_argument("--scope", choices=FILES, default="project")

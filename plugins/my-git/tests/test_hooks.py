@@ -87,6 +87,29 @@ class SessionStart(unittest.TestCase):
     def test_summary_clean(self):
         self.assertEqual(session_start.summary(CWD, contracts(), run=FakeRunner(), env=ENV), [])
 
+    def test_workspace_folder_checks_the_repos_inside(self):
+        """A non-repo session folder reads the identity from its repos (includeIf gitdir only applies there)."""
+        with tempfile.TemporaryDirectory() as ws:
+            repo = os.path.join(ws, "app")
+            os.makedirs(os.path.join(repo, ".git"))
+            os.makedirs(os.path.join(ws, "notes"))
+            good, bad = FakeRunner(), FakeRunner(name="someone-else", email="a@b.c")
+
+            def run(argv, cwd):  # the repo has the profile identity, the workspace folder the global default
+                return (good if argv[:3] == ["git", "-C", repo] else bad)(argv, cwd)
+
+            self.assertEqual(session_start.author_dirs(ws, run), [repo])
+            self.assertEqual(session_start.summary(ws, contracts(), run=run, env=ENV), [])
+            notes = session_start.summary(ws, contracts(), run=bad, env=ENV)
+            self.assertTrue(notes and all(n.startswith("[app] ") for n in notes if "ID00" in n and "ID005" not in n))
+
+    def test_repo_folder_is_checked_itself(self):
+        def run(argv, cwd):
+            if argv[3:] == ["rev-parse", "--is-inside-work-tree"]:
+                return 0, "true\n"
+            return FakeRunner()(argv, cwd)
+        self.assertEqual(session_start.author_dirs(CWD, run), [CWD])
+
 
 class Render(unittest.TestCase):
     def test_html_embeds_contracts(self):
