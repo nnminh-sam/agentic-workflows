@@ -1,24 +1,27 @@
 """Quiz sessions: one file per sitting (gate, practice or review), shared by every question type.
 
-Modes: gate, practice, review (one topic or SRS), plus two path modes: placement (before a
-learning path starts: which nodes the learner already knows) and checkpoint (a mixed quiz over
-a finished milestone).
+Modes: gate, practice, review (one topic or SRS), lesson (a bite-mode topic's pieces; it is that topic's
+gate), plus two path modes: placement (before a learning path starts: which nodes the learner already
+knows) and checkpoint (a mixed quiz over a finished milestone).
 
 Lifecycle: open -> (answers recorded) -> grading -> graded -> applied
                                       +-> grade_failed (retry with `lk grade <id>` or the UI)
 "Applied" means the side effects ran exactly once: attempts log, mistakes log, then either the
 gate (concepts + stage) or the scheduler (FSRS cards).
+
+A lesson is graded piece by piece while it is still open (`check_piece`), so the learner gets feedback
+right after each piece. Those results are kept; `finish` grades whatever is left and applies the gate.
 """
 from __future__ import annotations
 
 import random
 from pathlib import Path
 
-from . import gate, grader, learnpath, mistakes, paths, quiz, sources, srs, topics
+from . import gate, grader, learnpath, lesson, mistakes, paths, quiz, sources, srs, topics
 from .lock import locked
 from .store import LkError, append_jsonl, now_iso, read_json, short_token, today, write_json
 
-MODES = ("gate", "practice", "review", "placement", "checkpoint")
+MODES = ("gate", "practice", "review", "lesson", "placement", "checkpoint")
 
 
 def spath(sid: str) -> Path:
@@ -88,17 +91,24 @@ def _ordered(items: list[dict], rng: random.Random) -> list[dict]:
     return out
 
 
-def create_gate(slug: str, force: bool = False) -> dict:
-    cfg = paths.config()
-    st = topics.load_state(slug)
-    if st["stage"] != "quiz" and not force:
-        raise LkError(f"topic is at '{st['stage']}', not 'quiz' ({topics.NEXT_HINT[st['stage']]})")
-    existing = find_open(slug, "gate")
-    if existing:
-        return existing
+def _round_cap(st: dict, cfg: dict, force: bool) -> None:
     if topics.rounds_today(st) >= cfg["gate"]["max_rounds_per_day"] and not force:
         raise LkError(f"{topics.rounds_today(st)} gate rounds already today. Sleep on it and come back "
                       "tomorrow: consolidation overnight is part of the method (--force to override).")
+
+
+def create_gate(slug: str, force: bool = False) -> dict:
+    cfg = paths.config()
+    st = topics.load_state(slug)
+    if topics.mode_of(st) == "bite" and not force:
+        raise LkError(f"'{slug}' is a bite-sized topic: its gate is the lesson (`lk serve --topic {slug}` at "
+                      "stage lesson). For a no-stakes round use practice.")
+    if st["stage"] != "quiz" and not force:
+        raise LkError(f"topic is at '{st['stage']}', not 'quiz' ({topics.hint_for(st)})")
+    existing = find_open(slug, "gate")
+    if existing:
+        return existing
+    _round_cap(st, cfg, force)
     cov = quiz.coverage(slug, cfg)
     if cov["issues"] and not force:
         raise LkError("not enough fresh items:\n  - " + "\n  - ".join(cov["issues"]))
@@ -120,6 +130,42 @@ def create_gate(slug: str, force: bool = False) -> dict:
     rng = random.Random()
     entries = [_entry(slug, i) for i in _ordered(chosen, rng)]
     return _new("gate", slug, entries, st["round"], f"{st['title']} — round {st['round']}")
+
+
+def create_lesson(slug: str, force: bool = False) -> dict:
+    """A bite-mode topic's round: its current pieces in the authored order. Per piece: the opening question
+    (answered in the learner's own words after reading the paragraph), then its checks."""
+    cfg = paths.config()
+    st = topics.load_state(slug)
+    if topics.mode_of(st) != "bite" and not force:
+        raise LkError(f"'{slug}' is in doc mode: its gate is the quiz (`lk serve --topic {slug}`)")
+    if st["stage"] != "lesson" and not force:
+        raise LkError(f"topic is at '{st['stage']}', not 'lesson' ({topics.hint_for(st)})")
+    existing = find_open(slug, "lesson")
+    if existing:
+        return existing
+    _round_cap(st, cfg, force)
+    cov = lesson.coverage(slug)
+    if cov["issues"] and not force:
+        raise LkError("the lesson is not ready:\n  - " + "\n  - ".join(cov["issues"]))
+    bank = quiz.item_map(slug)
+    entries, pieces = [], []
+    for p in lesson.current_pieces(slug):
+        uids = []
+        for qid in [p["recall_item"], *p["check_items"]]:
+            it = bank.get(qid)
+            if it is None:
+                raise LkError(f"piece {p['id']}: item {qid} is missing from quiz.json")
+            e = _entry(slug, it)
+            e["piece"] = p["id"]
+            entries.append(e)
+            uids.append(e["uid"])
+        pieces.append({"id": p["id"], "concept": p["concept"], "title": p["title"], "body": p["body"],
+                       "source_ids": p.get("source_ids", []), "recall": uids[0], "checks": uids[1:]})
+    if not pieces:
+        raise LkError("no pieces for this round")
+    title = f"{st['title']}: lesson" + (f", round {st['round']}" if st["round"] > 1 else "")
+    return _new("lesson", slug, entries, st["round"], title, extra={"pieces": pieces})
 
 
 def create_practice(slug: str, n: int = 10) -> dict:
@@ -201,6 +247,8 @@ def record_answer(s: dict, u: str, response, confidence: int | None, time_ms: in
         raise LkError("session already graded")
     if u not in {e["uid"] for e in s["items"]}:
         raise LkError(f"unknown item {u}")
+    if u in s["results"]:
+        raise LkError("this answer is already graded")  # e.g. a lesson piece that was checked
     if confidence is not None and confidence not in (1, 2, 3):
         raise LkError("confidence is 1..3")
     s["answers"][u] = {"response": response, "confidence": confidence, "time_ms": time_ms, "at": now_iso()}
@@ -209,11 +257,11 @@ def record_answer(s: dict, u: str, response, confidence: int | None, time_ms: in
 
 # ---------------------------------------------------------------- grading + side effects
 
-def _grade(s: dict, grade_fn) -> None:
+def _grade(s: dict, grade_fn, only: set[str] | None = None) -> None:
     pending = []
     for e in s["items"]:
         u, it = e["uid"], e["item"]
-        if u in s["results"]:
+        if u in s["results"] or (only is not None and u not in only):
             continue
         a = s["answers"].get(u, {})
         resp = a.get("response")
@@ -298,7 +346,7 @@ def _apply(s: dict) -> None:
                 s["srs"].append(upd)
     if s["mode"] == "checkpoint":
         s["checkpoint"] = learnpath.record_checkpoint(s["path"], s["milestone"], s)
-    if s["mode"] == "gate":
+    if s["mode"] in quiz.GATE_MODES:
         res = gate.evaluate(s)
         res.update(gate.apply(s, res))
         s["gate"] = res
@@ -334,6 +382,51 @@ def finish(sid: str, grade_fn=None) -> dict:
         s["finished"] = now_iso()
         save(s)
     return s
+
+
+def _piece(s: dict, piece_id: str) -> dict:
+    if s["mode"] != "lesson":
+        raise LkError("only a lesson has pieces")
+    p = next((p for p in s.get("pieces", []) if p["id"] == piece_id), None)
+    if p is None:
+        raise LkError(f"no piece '{piece_id}' in this lesson")
+    return p
+
+
+def check_piece(sid: str, piece_id: str, grade_fn=None) -> dict:
+    """Grade one lesson piece as soon as the learner has answered all of it, so feedback comes right after
+    the piece. Idempotent: an already-graded piece returns its stored results. The lock is not held while
+    the model grades the own-words answer."""
+    with locked():
+        s = load(sid)
+        p = _piece(s, piece_id)
+        uids = [p["recall"], *p["checks"]]
+        if s["status"] not in ("open", "grade_failed", "applied", "graded"):
+            raise LkError(f"lesson is {s['status']}")
+        todo = {u for u in uids if u not in s["results"]}
+        missing = [u for u in todo if u not in s["answers"]]
+        if missing:
+            raise LkError(f"piece {piece_id}: {len(missing)} question(s) not answered yet")
+    if todo:
+        err = None
+        try:
+            _grade(s, grade_fn or grader.grade, only=todo)
+        except LkError as e:
+            err = e
+        with locked():
+            cur = load(sid)
+            for u in todo:
+                if u in s["results"] and u not in cur["results"]:
+                    cur["results"][u] = s["results"][u]
+            save(cur)  # keep the script-graded checks even if the model failed
+            s = cur
+        if err is not None:
+            raise LkError(f"grading failed: {err}. Your answers are saved: retry, or carry on and they are "
+                          "graded when the lesson finishes.")
+    rows = {r["uid"]: r for r in _rows(s)}
+    done = sum(1 for x in s["pieces"] if all(u in s["results"] for u in [x["recall"], *x["checks"]]))
+    return {"piece": piece_id, "results": [rows[u] for u in uids], "pieces_done": done,
+            "pieces": len(s["pieces"])}
 
 
 def apply_manual_grades(sid: str, grades: dict) -> dict:
@@ -377,18 +470,35 @@ def pending_llm(sid: str) -> list[dict]:
 
 # ---------------------------------------------------------------- views for the browser
 
+def _src_refs(ids, srcs: dict) -> list[dict]:
+    return [{"id": x, "title": srcs.get(x, {}).get("title", x), "url": srcs.get(x, {}).get("url")} for x in ids]
+
+
 def client_view(s: dict) -> dict:
     cfg = paths.config()
     items = []
     for n, e in enumerate(s["items"]):
         rng = random.Random(s["seed"] + n)
-        items.append({"uid": e["uid"], "topic": e["topic"], **quiz.present(e["item"], rng)})
-    return {"id": s["id"], "mode": s["mode"], "topic": s["topic"], "title": s["title"], "round": s["round"],
-            "status": s["status"], "speech_lang": cfg["speech_lang"], "items": items,
-            "answers": {u: {"response": a["response"], "confidence": a["confidence"]} for u, a in s["answers"].items()}}
+        extra = {"piece": e["piece"], "role": e["item"].get("role")} if "piece" in e else {}
+        items.append({"uid": e["uid"], "topic": e["topic"], **quiz.present(e["item"], rng), **extra})
+    v = {"id": s["id"], "mode": s["mode"], "topic": s["topic"], "title": s["title"], "round": s["round"],
+         "status": s["status"], "speech_lang": cfg["speech_lang"], "items": items,
+         "answers": {u: {"response": a["response"], "confidence": a["confidence"]} for u, a in s["answers"].items()}}
+    if s["mode"] == "lesson":
+        # The paragraphs are teaching, not answers: they go to the browser. Reference answers and rubrics
+        # stay on the items (never presented); a piece's results come from check_piece after it's answered.
+        srcs = sources.by_id()
+        cmap = topics.concept_map(s["topic"]) if topics.exists(s["topic"]) else {}
+        v["pieces"] = [{**{k: p[k] for k in ("id", "concept", "title", "body", "recall", "checks")},
+                        "concept_name": cmap.get(p["concept"], {}).get("name", p["concept"]),
+                        "sources": _src_refs(p.get("source_ids", []), srcs),
+                        "checked": all(u in s["results"] for u in [p["recall"], *p["checks"]])}
+                       for p in s["pieces"]]
+        v["break_every"] = int(cfg["lesson"]["break_every"])
+    return v
 
 
-def results_view(s: dict) -> dict:
+def _rows(s: dict) -> list[dict]:
     srcs = sources.by_id()
     cnames: dict[str, dict] = {}
     rows = []
@@ -399,16 +509,24 @@ def results_view(s: dict) -> dict:
             cnames[e["topic"]] = topics.concept_map(e["topic"]) if topics.exists(e["topic"]) else {}
             for k, v in (s.get("labels") or {}).items():
                 cnames[e["topic"]].setdefault(k, {"name": v})
-        rows.append({
+        row = {
             "n": n + 1, "uid": e["uid"], "topic": e["topic"], "type": it["type"], "prompt": it["prompt"],
             "code": it.get("code"), "concept": it["concept"],
             "concept_name": cnames[e["topic"]].get(it["concept"], {}).get("name", it["concept"]),
             "your_answer": quiz.response_text(it, a.get("response")), "confidence": a.get("confidence"),
             "result": r,
             "confident_wrong": bool(r and (a.get("confidence") or 0) >= 3 and float(r.get("score", 0)) < 0.5),
-            "sources": [{"id": x, "title": srcs.get(x, {}).get("title", x), "url": srcs.get(x, {}).get("url")}
-                        for x in it.get("source_ids", [])],
-        })
+            "sources": _src_refs(it.get("source_ids", []), srcs),
+        }
+        if "piece" in e:
+            row.update(piece=e["piece"], role=it.get("role"),
+                       peeked=bool((a.get("response") or {}).get("peeked")))
+        rows.append(row)
+    return rows
+
+
+def results_view(s: dict) -> dict:
+    rows = _rows(s)
     return {"id": s["id"], "mode": s["mode"], "status": s["status"], "error": s.get("error"),
             "summary": s.get("summary"), "gate": s.get("gate"), "srs": s.get("srs"),
             "path": s.get("path"), "placement": s.get("placement"), "checkpoint": s.get("checkpoint"),

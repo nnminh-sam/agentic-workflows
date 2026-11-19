@@ -21,13 +21,14 @@ def uid(slug: str, item_id: str) -> str:
 
 
 def enroll(slug: str) -> list[str]:
-    """Put every gate-attempted item of a mastered concept into SRS, seeded by its last attempt."""
+    """Put every gate-attempted item (gate quiz or lesson) of a mastered concept into SRS, seeded by its
+    last attempt."""
     cfg = paths.config()["srs"]
     data = load()
     mastered = {c["id"] for c in topics.load_concepts(slug) if c.get("status") == "mastered"}
     last: dict[str, dict] = {}
     for a in topics.attempts(slug):
-        if a.get("mode") == "gate":
+        if a.get("mode") in quiz.GATE_MODES:
             last[a["item_id"]] = a
     added = []
     on = today()
