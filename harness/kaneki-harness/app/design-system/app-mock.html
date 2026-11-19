@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kaneki Window Mock</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="components.css">
+<style>html,body{height:100%;overflow:hidden}</style>
+</head>
+<body>
+<div class="k-app">
+  <header class="k-topbar">
+    <div class="k-brand"><span class="k-brand__mark"><svg class="k-icon"><use href="#i-pipeline"/></svg></span>kaneki</div>
+    <div class="k-breadcrumb"><svg class="k-icon k-icon--sm"><use href="#i-chevron-right"/></svg><b>todo-nestjs-backend</b></div>
+    <span class="k-spacer"></span>
+    <button class="k-cmdk" id="openPalette"><svg class="k-icon"><use href="#i-search"/></svg><span class="k-cmdk__text">Search or run a command</span><span class="k-kbd">Ctrl</span><span class="k-kbd">K</span></button>
+    <button class="k-pill k-pill--attention" id="pill"><span class="k-pill__count">1</span>gate needs you</button>
+    <span class="k-muted" style="font-size:12px">Today <b style="color:var(--ink)">$9.62</b> · 31.8M tokens</span>
+    <div class="k-segmented" id="theme" aria-label="Theme"><button data-t="light" class="is-selected" aria-label="Light"><svg class="k-icon k-icon--sm"><use href="#i-sun"/></svg></button><button data-t="dark" aria-label="Dark"><svg class="k-icon k-icon--sm"><use href="#i-moon"/></svg></button></div>
+  </header>
+
+  <aside class="k-rail">
+    <div class="k-rail__head"><span class="k-overline">Tickets</span><span class="k-spacer"></span><button class="k-btn k-btn--ghost k-btn--icon k-btn--sm" aria-label="Filter"><svg class="k-icon k-icon--sm"><use href="#i-filter"/></svg></button></div>
+    <div class="k-rail__list">
+      <div class="k-ticket is-selected"><div class="k-ticket__head"><span class="k-dot k-dot--attention"></span>TODO-1-2<span class="k-ticket__count">9/12</span></div><div class="k-ticket__title">Foundation (tiered redo)</div>
+        <div class="k-segments"><i class="is-ok"></i><i class="is-ok"></i><i class="is-ok"></i><i class="is-ok"></i><i class="is-ok"></i><i class="is-ok"></i><i class="is-ok"></i><i class="is-ok"></i><i class="is-ok"></i><i class="is-attention"></i><i></i><i></i></div>
+        <div class="k-ticket__who"><b>You</b> · gate on execute-and-evidence</div></div>
+      <div class="k-ticket"><div class="k-ticket__head"><span class="k-dot k-dot--run"></span>TODO-2<span class="k-ticket__count">3/12</span></div><div class="k-ticket__title">Auth &amp; users</div>
+        <div class="k-segments"><i class="is-ok"></i><i class="is-ok"></i><i class="is-ok"></i><i class="is-run"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="k-ticket__who">Agent · feature-plan</div></div>
+      <div class="k-ticket"><div class="k-ticket__head"><span class="k-dot k-dot--ok"></span>TODO-1<span class="k-ticket__count">12/12</span></div><div class="k-ticket__title">Foundation</div>
+        <div class="k-segments"><i class="is-ok"></i><i class="is-ok"></i><i class="is-ok"></i><i class="is-ok"></i><i class="is-ok"></i><i class="is-ok"></i><i class="is-ok"></i><i class="is-ok"></i><i class="is-ok"></i><i class="is-ok"></i><i class="is-ok"></i><i class="is-ok"></i></div>
+        <div class="k-ticket__who">Shipped 2026-11-17</div></div>
+      <div class="k-ticket"><div class="k-ticket__head"><span class="k-dot k-dot--idle"></span>TODO-3<span class="k-ticket__count">0/12</span></div><div class="k-ticket__title">Todo CRUD</div>
+        <div class="k-segments"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="k-ticket__who">Not started</div></div>
+    </div>
+    <div class="k-rail__foot"><button class="k-btn" style="width:100%"><svg class="k-icon"><use href="#i-plus"/></svg>New ticket</button></div>
+  </aside>
+
+  <main class="k-main">
+    <div class="k-main__head">
+      <h1 class="k-main__title">TODO-1-2 · Foundation</h1><span class="k-badge">full lane</span><span class="k-badge k-badge--outline">loop 1 of 2</span>
+      <span class="k-spacer"></span>
+      <button class="k-btn" id="openPolicy"><svg class="k-icon"><use href="#i-sliders"/></svg>Run policy</button>
+      <button class="k-btn k-btn--primary"><svg class="k-icon"><use href="#i-play"/></svg>Run next node</button>
+    </div>
+    <div class="k-main__tabs"><nav class="k-tabs">
+      <button class="k-tab is-selected"><svg class="k-icon k-icon--sm"><use href="#i-pipeline"/></svg>Pipeline</button>
+      <button class="k-tab"><svg class="k-icon k-icon--sm"><use href="#i-coins"/></svg>Cost</button>
+      <button class="k-tab"><svg class="k-icon k-icon--sm"><use href="#i-list"/></svg>Decisions <span class="k-tab__count">24</span></button></nav></div>
+    <div class="k-main__view">
+      <div class="k-pipeline">
+        <button class="k-node k-node--done"><span class="k-node__dot"><svg class="k-icon"><use href="#i-check"/></svg></span><span class="k-node__label">prepare</span></button><span class="k-edge k-edge--done"></span>
+        <button class="k-node k-node--done"><span class="k-node__dot"><svg class="k-icon"><use href="#i-check"/></svg></span><span class="k-node__label">requirement-analysis</span></button><span class="k-edge k-edge--done"></span>
+        <button class="k-node k-node--done"><span class="k-node__dot"><svg class="k-icon"><use href="#i-check"/></svg></span><span class="k-node__label">impact-analysis</span></button><span class="k-edge k-edge--done"></span>
+        <button class="k-node k-node--done"><span class="k-node__dot"><svg class="k-icon"><use href="#i-check"/></svg></span><span class="k-node__label">feature-plan</span></button><span class="k-edge k-edge--done"></span>
+        <button class="k-node k-node--done"><span class="k-node__dot"><svg class="k-icon"><use href="#i-check"/></svg><span class="k-node__gen">g2</span></span><span class="k-node__label">coding</span></button><span class="k-edge k-edge--done"></span>
+        <button class="k-node k-node--done"><span class="k-node__dot"><svg class="k-icon"><use href="#i-check"/></svg><span class="k-node__gen">g2</span></span><span class="k-node__label">code-review</span></button><span class="k-edge k-edge--done"></span>
+        <button class="k-node k-node--done"><span class="k-node__dot"><svg class="k-icon"><use href="#i-check"/></svg></span><span class="k-node__label">testcase</span></button><span class="k-edge k-edge--done"></span>
+        <button class="k-node k-node--done"><span class="k-node__dot"><svg class="k-icon"><use href="#i-check"/></svg></span><span class="k-node__label">testcase-review</span></button><span class="k-edge k-edge--done"></span>
+        <button class="k-node k-node--attention is-selected"><span class="k-node__dot"><svg class="k-icon"><use href="#i-gate"/></svg><span class="k-node__gen">g2</span></span><span class="k-node__label">execute-and-evidence</span></button><span class="k-edge"></span>
+        <button class="k-node"><span class="k-node__dot">10</span><span class="k-node__label">final-review</span></button><span class="k-edge"></span>
+        <button class="k-node"><span class="k-node__dot">11</span><span class="k-node__label">delivery-drafts</span></button><span class="k-edge"></span>
+        <button class="k-node"><span class="k-node__dot">12</span><span class="k-node__label">deliverable-ready</span></button>
+      </div>
+      <div class="k-loopnote"><svg class="k-icon k-icon--sm"><use href="#i-reopen"/></svg><b>execute-and-evidence g1</b> rejected → coding reopened · 2026-11-17 08:54 UTC</div>
+      <article class="k-card">
+        <header class="k-card__head"><h4 class="k-card__title">execute-and-evidence</h4><span class="k-badge k-badge--outline">generation 2</span><span class="k-spacer"></span><button class="k-btn k-btn--ghost k-btn--icon k-btn--sm" aria-label="More"><svg class="k-icon k-icon--sm"><use href="#i-more"/></svg></button></header>
+        <div class="k-card__body" style="display:grid;gap:14px">
+          <div class="k-banner k-banner--attention"><svg class="k-icon"><use href="#i-gate"/></svg><div class="k-banner__text"><div class="k-banner__title">Gate waiting for you since 09:52 UTC</div><div class="k-banner__sub">2 NG · reviewer PASS · worker rounds 2</div></div><button class="k-btn k-btn--attention k-btn--sm" id="openGate">Review gate<svg class="k-icon k-icon--sm"><use href="#i-arrow-right"/></svg></button></div>
+          <div class="k-table-wrap"><table class="k-table">
+            <thead><tr><th>Unit</th><th>Tier · model</th><th>Verdict</th><th class="is-num">Tokens</th><th class="is-num">Rounds</th></tr></thead>
+            <tbody>
+              <tr><td>worker</td><td><span class="k-tier k-tier--sonnet">routine <span class="k-tier__model">· sonnet</span></span></td><td><span class="k-verdict k-verdict--pending"><svg class="k-icon k-icon--sm"><use href="#i-clock"/></svg>recorded</span></td><td class="is-num">157,309</td><td class="is-num">2</td></tr>
+              <tr><td>reviewer</td><td><span class="k-tier k-tier--sonnet">routine <span class="k-tier__model">· sonnet</span></span></td><td><span class="k-verdict k-verdict--pass"><svg class="k-icon k-icon--sm"><use href="#i-check-circle"/></svg>PASS</span></td><td class="is-num">45,401</td><td class="is-num">1</td></tr>
+            </tbody></table></div>
+          <div class="k-chips"><button class="k-chip"><svg class="k-icon"><use href="#i-file"/></svg>packet.md</button><button class="k-chip"><svg class="k-icon"><use href="#i-file"/></svg>result.md</button><button class="k-chip"><svg class="k-icon"><use href="#i-file"/></svg>run-report.md</button><button class="k-chip"><svg class="k-icon"><use href="#i-file"/></svg>STATUS.md</button></div>
+        </div>
+      </article>
+    </div>
+  </main>
+
+  <aside class="k-inspector">
+    <header class="k-inspector__head"><svg class="k-icon"><use href="#i-file"/></svg><b>run-report.md</b><span class="k-badge k-badge--outline">g2</span><span class="k-spacer"></span><button class="k-btn k-btn--sm"><svg class="k-icon k-icon--sm"><use href="#i-external"/></svg>Open in Zed</button></header>
+    <div class="k-inspector__body"><pre class="k-code" style="border:0;padding:0;background:none"><span class="t-h">## Summary</span>
+Planned 139 · run 138
+<span class="t-ok">OK 136</span> · <span class="t-bad">NG 2</span> · N/A 1
+
+<span class="t-h">## NG</span>
+<span class="t-bad">TC-TOOL-11</span>  grep "Todo" hits the
+            Swagger title
+            <span class="t-dim">src/app.setup.ts:60</span>
+<span class="t-bad">TC-DOCK-04</span>  /missing/x.db created
+            by root</pre></div>
+  </aside>
+
+  <section class="k-dock">
+    <section><div class="k-dock__head"><span class="k-overline">Sessions</span><span class="k-badge">3</span></div><div class="k-dock__list">
+      <div class="k-session"><span class="k-dot k-dot--attention"></span><span class="k-session__name">todo12-evidence2</span><span class="k-session__node">execute-and-evidence g2</span><span class="k-status k-status--attention">Waiting: your gate decision · 14m</span><span class="k-session__acts"><button class="k-btn k-btn--sm">Focus</button><button class="k-btn k-btn--sm k-btn--ghost">Stop</button></span></div>
+      <div class="k-session"><span class="k-dot k-dot--run"></span><span class="k-session__name">haise-eb</span><span class="k-session__node">driver / monitor</span><span class="k-status k-status--run">Busy · 2h 41m</span><span class="k-session__acts"><button class="k-btn k-btn--sm">Focus</button><button class="k-btn k-btn--sm k-btn--ghost">Stop</button></span></div>
+      <div class="k-session"><span class="k-dot k-dot--idle"></span><span class="k-session__name">todo12-review2</span><span class="k-session__node">code-review g2</span><span class="k-status">Stopped after gate</span><span class="k-session__acts"><button class="k-btn k-btn--sm">Focus</button><button class="k-btn k-btn--sm k-btn--ghost" disabled>Stop</button></span></div>
+    </div></section>
+    <section><div class="k-dock__head"><span class="k-overline">Decision log</span><span class="k-dot k-dot--run" style="width:6px;height:6px"></span><span class="k-muted" style="font-size:12px">live</span></div><div class="k-dock__list" style="padding:0 16px">
+      <div class="k-log"><div>09:52 <span class="is-accent">record</span> <b>execute-and-evidence reviewer PASS</b></div><div>09:31 <span class="is-accent">record</span> <b>execute-and-evidence worker g2</b></div><div>08:54 <span class="is-bad">invalidate</span> <b>coding reopened</b></div><div>08:40 <span class="is-ok">gate</span> <b>testcase-review approved</b></div><div>08:12 <span class="is-ok">gate</span> <b>testcase approved</b></div></div>
+    </div></section>
+  </section>
+</div>
+
+<div class="k-toasts" style="bottom:calc(var(--dock-height) + 16px)">
+  <div class="k-toast k-toast--attention"><span class="k-toast__icon"><svg class="k-icon"><use href="#i-gate"/></svg></span><div class="k-toast__body"><span class="k-toast__title">Gate needs you</span>execute-and-evidence g2 · 2 NG, reviewer PASS</div><button class="k-btn k-btn--ghost k-btn--icon k-btn--sm" aria-label="Dismiss" onclick="this.closest('.k-toast').remove()"><svg class="k-icon k-icon--sm"><use href="#i-x"/></svg></button></div>
+</div>
+
+<!-- gate dialog -->
+<div class="k-scrim" id="gate" hidden>
+<div class="k-dialog" role="dialog" aria-label="Gate approval">
+  <header class="k-dialog__head"><span class="k-dialog__icon"><svg class="k-icon"><use href="#i-gate"/></svg></span><div style="flex:1"><h3 class="k-dialog__title">Approve execute-and-evidence?</h3><p class="k-dialog__sub">TODO-1-2 · generation 2 · asked 09:52 UTC</p></div><button class="k-btn k-btn--ghost k-btn--icon k-btn--sm" aria-label="Close" data-close="gate"><svg class="k-icon k-icon--sm"><use href="#i-x"/></svg></button></header>
+  <div class="k-dialog__body">
+    <div class="k-evidence"><div class="k-evidence__item k-evidence__item--ok"><span class="k-evidence__value">136</span><span class="k-evidence__label">OK</span></div><div class="k-evidence__item k-evidence__item--bad"><span class="k-evidence__value">2</span><span class="k-evidence__label">NG</span></div><div class="k-evidence__item"><span class="k-evidence__value">1</span><span class="k-evidence__label">N/A</span></div></div>
+    <div class="k-table-wrap"><table class="k-table k-table--compact"><tbody><tr><td class="k-mono">TC-TOOL-11</td><td>grep for "Todo" hits the Swagger title</td><td class="k-muted">testcase wording</td></tr><tr><td class="k-mono">TC-DOCK-04</td><td>/missing/x.db is created by root</td><td class="k-muted">testcase wording</td></tr></tbody></table></div>
+    <div style="display:grid;gap:8px" id="choices">
+      <label class="k-choice is-selected" data-c="approve"><input type="radio" name="g" checked><span><span class="k-choice__title">Approve</span><br><span class="k-choice__sub">Accept the 2 wording NGs and continue to final-review.</span></span></label>
+      <label class="k-choice" data-c="reject"><input type="radio" name="g"><span><span class="k-choice__title">Reject and reopen testcase</span><br><span class="k-choice__sub">Later nodes become stale:</span><span class="k-stale-list">testcase → testcase-review → execute-and-evidence → final-review → delivery-drafts → deliverable-ready</span></span></label>
+    </div>
+    <label class="k-field"><span class="k-label">Note <span class="k-muted">(optional)</span></span><textarea class="k-textarea" id="note" style="min-height:56px" placeholder="e.g. wording NGs accepted; tracked for TODO-2"></textarea></label>
+    <div class="k-command"><div class="k-command__head"><svg class="k-icon k-icon--sm"><use href="#i-terminal"/></svg><span class="k-overline">Will run</span></div><pre class="k-command__body" id="cmd"></pre></div>
+  </div>
+  <footer class="k-dialog__foot"><span class="k-muted" style="font-size:12px">Logged as actor: user</span><span class="k-spacer"></span><button class="k-btn" data-close="gate">Cancel</button><button class="k-btn k-btn--primary" id="confirm">Approve<span class="k-btn__kbd">Ctrl ↵</span></button></footer>
+</div>
+</div>
+
+<!-- palette -->
+<div class="k-scrim" id="palette" hidden style="place-items:start center;padding-top:12vh">
+<div class="k-palette">
+  <div class="k-palette__input"><svg class="k-icon"><use href="#i-search"/></svg><input id="pq" placeholder="Type a command" aria-label="Command"><span class="k-kbd">Esc</span></div>
+  <div class="k-palette__list">
+    <div class="k-palette__group">Ticket TODO-1-2</div>
+    <div class="k-palette__item is-selected"><svg class="k-icon"><use href="#i-gate"/></svg>Review gate<span class="k-palette__meta">execute-and-evidence</span></div>
+    <div class="k-palette__item"><svg class="k-icon"><use href="#i-play"/></svg>Run next node</div>
+    <div class="k-palette__item"><svg class="k-icon"><use href="#i-reopen"/></svg>Reopen a node…</div>
+    <div class="k-palette__group">Sessions</div>
+    <div class="k-palette__item"><svg class="k-icon"><use href="#i-stop"/></svg>Stop session<span class="k-palette__meta">todo12-evidence2</span></div>
+  </div>
+  <div class="k-palette__foot"><span><span class="k-kbd">↑</span><span class="k-kbd">↓</span> move</span><span><span class="k-kbd">↵</span> run</span><span><span class="k-kbd">Esc</span> close</span></div>
+</div>
+</div>
+
+<script src="icons.js"></script>
+<script>
+(function () {
+  var $ = function (s) { return document.querySelector(s); }, choice = 'approve';
+  function cmd() {
+    var n = $('#note').value.trim(), note = n ? ' --note "' + n.replace(/"/g, "'") + '"' : '';
+    $('#cmd').innerHTML = '<span class="t-dim">sdlc</span> gate --ticket TODO-1-2 --node execute-and-evidence --status ' +
+      (choice === 'approve' ? 'approved' : 'rejected') + ' --actor user' + (choice === 'approve' ? '' : ' --reopen testcase') + note.replace(/</g, '&lt;');
+    $('#confirm').firstChild.textContent = choice === 'approve' ? 'Approve' : 'Reject and reopen';
+  }
+  function setTheme(t) { document.documentElement.setAttribute('data-theme', t); document.querySelectorAll('#theme button').forEach(function (b) { b.classList.toggle('is-selected', b.dataset.t === t); }); }
+  var q = new URLSearchParams(location.search);
+  if (q.get('theme')) setTheme(q.get('theme'));
+  if (q.get('open') === 'gate') $('#gate').hidden = false;
+  if (q.get('open') === 'palette') $('#palette').hidden = false;
+  document.querySelectorAll('#theme button').forEach(function (b) { b.onclick = function () { setTheme(b.dataset.t); }; });
+  ['#openGate', '#pill'].forEach(function (s) { $(s).onclick = function () { $('#gate').hidden = false; }; });
+  $('#openPalette').onclick = function () { $('#palette').hidden = false; $('#pq').focus(); };
+  document.querySelectorAll('[data-close]').forEach(function (b) { b.onclick = function () { document.getElementById(b.dataset.close).hidden = true; }; });
+  document.querySelectorAll('#choices .k-choice').forEach(function (l) { l.onclick = function () {
+    choice = l.dataset.c; document.querySelectorAll('#choices .k-choice').forEach(function (x) { x.classList.toggle('is-selected', x === l); }); cmd(); }; });
+  $('#note').oninput = cmd;
+  document.addEventListener('keydown', function (e) {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); $('#palette').hidden = false; $('#pq').focus(); }
+    if (e.key === 'Escape') { $('#palette').hidden = true; $('#gate').hidden = true; }
+  });
+  $('#palette').onclick = function (e) { if (e.target.id === 'palette') e.target.hidden = true; };
+  cmd();
+})();
+</script>
+</body>
+</html>
