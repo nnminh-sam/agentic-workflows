@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kaneki Design System</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="components.css">
+<style>
+/* gallery chrome only; everything inside a .g-stage is pure components.css */
+html,body{height:100%}
+body{display:grid;grid-template-columns:264px 1fr;grid-template-rows:52px 1fr;grid-template-areas:"side top" "side main";overflow:hidden}
+.g-side{grid-area:side;display:flex;flex-direction:column;min-height:0;background:var(--surface);border-right:1px solid var(--border)}
+.g-side__brand{display:flex;align-items:center;gap:10px;height:52px;padding:0 16px;border-bottom:1px solid var(--border)}
+.g-side__brand small{display:block;font-size:11px;color:var(--ink-3);font-weight:500}
+.g-side__search{padding:12px 12px 6px}
+.g-nav{flex:1;overflow:auto;padding:4px 8px 16px}
+.g-nav__group{padding:14px 8px 4px;font-size:11px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:var(--ink-3)}
+.g-nav a{display:flex;align-items:center;gap:8px;height:30px;padding:0 8px;border-radius:var(--radius-sm);color:var(--ink-2);text-decoration:none;font-size:13px}
+.g-nav a:hover{background:var(--surface-3);color:var(--ink)}
+.g-nav a.is-selected{background:var(--accent-soft);color:var(--accent-text);font-weight:600}
+.g-nav a .g-count{margin-left:auto;font-size:11px;color:var(--ink-3)}
+.g-top{grid-area:top;display:flex;align-items:center;gap:12px;padding:0 24px;background:var(--surface);border-bottom:1px solid var(--border)}
+.g-main{grid-area:main;overflow:auto;background:var(--canvas)}
+.g-page{max-width:1240px;margin:0 auto;padding:32px 32px 80px}
+.g-eyebrow{font-size:12px;font-weight:600;color:var(--accent-text);margin:0 0 6px}
+.g-h1{margin:0;font:600 30px/1.15 var(--font-display);letter-spacing:-.6px}
+.g-lead{margin:10px 0 0;max-width:72ch;font-size:15px;line-height:1.6;color:var(--ink-2)}
+.g-classes{display:flex;flex-wrap:wrap;gap:6px;margin:16px 0 0}
+.g-classes code{font:500 11px/1 var(--font-mono);padding:5px 7px;border-radius:var(--radius-xs);background:var(--surface);border:1px solid var(--border);color:var(--ink-2)}
+.g-section{margin-top:32px}
+.g-section__head{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.g-section__title{margin:0;font:600 15px/1.3 var(--font-display)}
+.g-example{border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--surface);overflow:hidden;box-shadow:var(--shadow-sm)}
+.g-stages{display:grid}
+.g-stages.is-split{grid-template-columns:1fr 1fr}
+.g-stage{position:relative;padding:32px;min-width:0;background-color:var(--canvas);color:var(--ink);
+  background-image:radial-gradient(color-mix(in srgb,var(--ink-3) 22%,transparent) 1px,transparent 1px);background-size:16px 16px}
+.g-stage+.g-stage{border-left:1px solid var(--border)}
+.g-stage__tag{position:absolute;top:8px;right:10px;font-size:10px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:var(--ink-3)}
+.g-stage .k-scrim{position:relative;inset:auto;padding:24px;border-radius:var(--radius-lg);backdrop-filter:none}
+.g-stage .k-toasts{position:static}
+.g-stages.is-split.is-wide{grid-template-columns:1fr}
+.g-stages.is-split.is-wide .g-stage+.g-stage{border-left:0;border-top:1px solid var(--border)}
+.g-codebar{display:flex;align-items:center;gap:8px;padding:6px 8px 6px 14px;border-top:1px solid var(--border);background:var(--surface-2)}
+.g-code{margin:0;max-height:360px;overflow:auto;padding:14px 16px;border-top:1px solid var(--border);background:var(--surface-2);font:400 12px/1.6 var(--font-mono);color:var(--ink-2);white-space:pre-wrap;overflow-wrap:anywhere}
+.g-row{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
+.g-row+.g-row{margin-top:14px}
+.g-grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
+.g-rules{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:32px}
+.g-rule{border-radius:var(--radius-lg);border:1px solid var(--border);background:var(--surface);padding:16px 18px}
+.g-rule h4{display:flex;align-items:center;gap:8px;margin:0 0 8px;font-size:13px}
+.g-rule--do h4{color:var(--ok-text)} .g-rule--dont h4{color:var(--bad-text)}
+.g-rule ul{margin:0;padding-left:18px;color:var(--ink-2);display:grid;gap:6px}
+.g-rule code,.g-lead code{font:500 12px var(--font-mono);background:var(--surface-3);padding:1px 5px;border-radius:4px}
+.g-overview{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:16px;margin-top:28px}
+.g-tile{display:flex;flex-direction:column;cursor:pointer;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--surface);overflow:hidden;text-decoration:none;color:inherit;box-shadow:var(--shadow-sm);
+  transition:transform var(--duration-fast) var(--ease-out),box-shadow var(--duration-fast) var(--ease-out)}
+.g-tile:hover{transform:translateY(-2px);box-shadow:var(--shadow-md)}
+.g-tile__view{height:170px;overflow:hidden;position:relative;background-color:var(--canvas);background-image:radial-gradient(color-mix(in srgb,var(--ink-3) 22%,transparent) 1px,transparent 1px);background-size:14px 14px;border-bottom:1px solid var(--border)}
+.g-tile__scale{position:absolute;left:18px;top:18px;width:520px;transform:scale(.72);transform-origin:top left;pointer-events:none}
+.g-tile__view .k-scrim{position:relative;inset:auto;padding:0;background:none;backdrop-filter:none}
+.g-tile__view .k-toasts{position:static}
+.g-tile__meta{padding:12px 14px}
+.g-tile__name{font-weight:600}
+.g-tile__group{font-size:12px;color:var(--ink-3)}
+.g-filter{display:flex;gap:6px;flex-wrap:wrap;margin-top:20px}
+/* foundations */
+.g-swatches{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+.g-swatch{border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;background:var(--surface)}
+.g-swatch__chip{display:grid;grid-template-columns:1fr 1fr;height:64px}
+.g-swatch__chip span{display:flex;align-items:flex-end;padding:6px 8px;font:500 10px var(--font-mono)}
+.g-swatch__meta{padding:10px 12px}
+.g-swatch__name{font:600 12px var(--font-mono)}
+.g-swatch__use{font-size:12px;color:var(--ink-3);margin-top:4px;line-height:1.4}
+.g-typerow{display:grid;grid-template-columns:150px 1fr 220px;gap:16px;align-items:baseline;padding:14px 0;border-bottom:1px solid var(--border)}
+.g-typerow__meta{font:400 11px/1.5 var(--font-mono);color:var(--ink-3)}
+.g-scale{display:grid;gap:10px}
+.g-scale__row{display:grid;grid-template-columns:120px 60px 1fr;gap:16px;align-items:center;font-size:12px}
+.g-scale__bar{height:12px;border-radius:3px;background:var(--accent)}
+.g-radius{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:16px}
+.g-radius__box{height:84px;border:1.5px solid var(--accent);background:var(--accent-soft)}
+.g-elev{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:24px}
+.g-elev__box{height:110px;border-radius:var(--radius-lg);background:var(--surface);display:grid;place-items:center;font:500 12px var(--font-mono);color:var(--ink-2)}
+.g-icons{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:8px}
+.g-icon{display:grid;justify-items:center;gap:8px;padding:16px 8px;border-radius:var(--radius-md);background:var(--surface);border:1px solid var(--border);font:400 11px var(--font-mono);color:var(--ink-3)}
+.g-icon .k-icon{width:22px;height:22px;color:var(--ink)}
+.g-contrast{width:100%}
+@media (max-width:900px){body{grid-template-columns:1fr;grid-template-areas:"top" "main"}.g-side{display:none}.g-stages.is-split{grid-template-columns:1fr}.g-rules{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<aside class="g-side">
+  <div class="g-side__brand"><span class="k-brand__mark"><svg class="k-icon"><use href="#i-pipeline"/></svg></span><div><b>Kaneki</b><small>Design system · v2</small></div></div>
+  <div class="g-side__search"><span class="k-input-wrap"><svg class="k-icon"><use href="#i-search"/></svg><input class="k-input k-input--sm" id="navq" placeholder="Filter components" aria-label="Filter components"></span></div>
+  <nav class="g-nav" id="nav"></nav>
+</aside>
+<header class="g-top">
+  <div class="k-breadcrumb" id="crumb"></div>
+  <span class="k-spacer"></span>
+  <a class="k-btn k-btn--sm" href="app-mock.html"><svg class="k-icon k-icon--sm"><use href="#i-layers"/></svg>Assembled window</a>
+  <div class="k-segmented" id="mode" role="group" aria-label="Theme">
+    <button data-m="light"><svg class="k-icon k-icon--sm"><use href="#i-sun"/></svg>Light</button>
+    <button data-m="dark"><svg class="k-icon k-icon--sm"><use href="#i-moon"/></svg>Dark</button>
+    <button data-m="split"><svg class="k-icon k-icon--sm"><use href="#i-layers"/></svg>Side by side</button>
+  </div>
+</header>
+<main class="g-main" id="main"></main>
+
+<script src="icons.js"></script>
+<script src="tokens.js"></script>
+<script src="gallery-data.js"></script>
+<script>
+(function () {
+  var T = window.KanekiTokens, COMPS = window.KanekiGallery, I = window.kIcon;
+  var FOUND = [
+    { id: 'colors', name: 'Colour' }, { id: 'type', name: 'Typography' }, { id: 'spacing', name: 'Spacing' },
+    { id: 'radius', name: 'Radius' }, { id: 'elevation', name: 'Elevation' }, { id: 'icons', name: 'Icons' }, { id: 'motion', name: 'Motion' }];
+  var mode = 'split';
+  try { mode = localStorage.getItem('k-gallery-mode') || 'split'; } catch (e) {}
+  var esc = function (s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };
+  var $ = function (s) { return document.querySelector(s); };
+
+  function themes() { return mode === 'split' ? ['light', 'dark'] : [mode]; }
+  function stages(html, wide) {
+    var ts = themes(), n = 0;
+    return '<div class="g-stages' + (ts.length > 1 ? ' is-split' : '') + (wide ? ' is-wide' : '') + '">' + ts.map(function (t) {
+      n++;
+      var h = html.replace(/name="([^"]+)"/g, 'name="$1-' + t + n + '"');
+      return '<div class="g-stage" data-theme="' + t + '"><span class="g-stage__tag">' + t + '</span>' + h + '</div>';
+    }).join('') + '</div>';
+  }
+  function example(ex, i) {
+    return '<section class="g-section"><div class="g-section__head"><h3 class="g-section__title">' + ex.title + '</h3></div>' +
+      '<div class="g-example">' + stages(ex.html, ex.wide) +
+      '<div class="g-codebar"><span class="k-overline">Markup</span><span class="k-spacer"></span>' +
+      '<button class="k-btn k-btn--ghost k-btn--sm" data-toggle="' + i + '">' + I('chevron-down', 'k-icon--sm') + 'Show</button>' +
+      '<button class="k-btn k-btn--ghost k-btn--sm" data-copy="' + i + '">' + I('copy', 'k-icon--sm') + 'Copy</button></div>' +
+      '<pre class="g-code" id="code-' + i + '" hidden>' + esc(ex.html.replace(/<svg class="k-icon([^"]*)" aria-hidden="true"><use href="#i-([a-z-]+)"\/><\/svg>/g, '<svg class="k-icon$1"><use href="#i-$2"/></svg>')) + '</pre></div></section>';
+  }
+  function compPage(c) {
+    var html = '<div class="g-page"><p class="g-eyebrow">' + c.group + '</p><h1 class="g-h1">' + c.name + '</h1><p class="g-lead">' + c.desc + '</p>' +
+      '<div class="g-classes">' + c.classes.map(function (k) { return '<code>.' + k + '</code>'; }).join('') + '</div>' +
+      c.examples.map(example).join('');
+    if (c.dos || c.donts) html += '<div class="g-rules"><div class="g-rule g-rule--do"><h4>' + I('check-circle') + 'Do</h4><ul>' + (c.dos || []).map(function (d) { return '<li>' + d + '</li>'; }).join('') + '</ul></div>' +
+      '<div class="g-rule g-rule--dont"><h4>' + I('x-circle') + 'Don\'t</h4><ul>' + (c.donts || []).map(function (d) { return '<li>' + d + '</li>'; }).join('') + '</ul></div></div>';
+    return html + '</div>';
+  }
+  function overview() {
+    var groups = []; COMPS.forEach(function (c) { if (groups.indexOf(c.group) < 0) groups.push(c.group); });
+    return '<div class="g-page"><p class="g-eyebrow">Kaneki Desktop · design system v2</p><h1 class="g-h1">Every component, one at a time</h1>' +
+      '<p class="g-lead">' + COMPS.length + ' components and ' + FOUND.length + ' foundation pages, all built from <code>tokens.json</code> and <code>components.css</code>. Open one to see its variants, states and markup in light, dark or side by side; open <b>Assembled window</b> to see them put together. Sample data: ticket TODO-1-2, 2026-11-17.</p>' +
+      '<div class="k-stats" style="margin-top:24px"><div class="k-stat"><span class="k-stat__label">Components</span><span class="k-stat__value">' + COMPS.length + '</span></div>' +
+      '<div class="k-stat"><span class="k-stat__label">Colour tokens</span><span class="k-stat__value">' + T.color.tokens.length + '</span><span class="k-stat__meta">× 2 themes</span></div>' +
+      '<div class="k-stat"><span class="k-stat__label">Icons</span><span class="k-stat__value">' + window.KanekiIcons.length + '</span></div>' +
+      '<div class="k-stat"><span class="k-stat__label">Contrast pairs checked</span><span class="k-stat__value">' + T.contrast.pairs.length + '</span><span class="k-stat__meta">all pass · build_tokens.py --contrast</span></div></div>' +
+      groups.map(function (g) {
+        return '<h2 class="g-section__title" style="margin-top:36px">' + g + '</h2><div class="g-overview" style="margin-top:12px">' + COMPS.filter(function (c) { return c.group === g; }).map(function (c) {
+          return '<div class="g-tile" role="link" tabindex="0" data-href="#' + c.id + '"><div class="g-tile__view" data-theme="' + (mode === 'dark' ? 'dark' : 'light') + '"><div class="g-tile__scale">' + c.examples[0].html.replace(/name="/g, 'name="ov-') + '</div></div>' +
+            '<div class="g-tile__meta"><div class="g-tile__name">' + c.name + '</div><div class="g-tile__group">' + c.examples.length + ' example' + (c.examples.length > 1 ? 's' : '') + ' · ' + c.classes.length + ' class' + (c.classes.length > 1 ? 'es' : '') + '</div></div></div>';
+        }).join('') + '</div>';
+      }).join('') + '</div>';
+  }
+  /* ---------------- foundations ---------------- */
+  function val(t, th) { var v = t.value; v = typeof v === 'string' ? v : (v[th] || v.light); return v; }
+  function onColor(c) { if (c[0] !== '#') return '#101828'; var h = c.slice(1), f = function (i) { var v = parseInt(h.substr(i, 2), 16) / 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+    var L = 0.2126 * f(0) + 0.7152 * f(2) + 0.0722 * f(4); return L > 0.18 ? '#101828' : '#ffffff'; }
+  function resolve(name, th) { var t = T.color.tokens.filter(function (x) { return x.name === name; })[0]; var v = val(t, th); return v[0] === '{' ? resolve(v.slice(1, -1), th) : v; }
+  function fpage(id) {
+    var h = '<div class="g-page"><p class="g-eyebrow">Foundations</p>';
+    if (id === 'colors') {
+      h += '<h1 class="g-h1">Colour</h1><p class="g-lead">Every colour is a role. Pick by meaning: if something waits on the user it is <code>warn</code>, whatever looks nicer. Text tokens (<code>*-text</code>, <code>ink*</code>) are checked for 4.5:1 on the grounds their notes name, in both themes.</p>';
+      var groups = [['Surfaces', ['canvas', 'surface', 'surface-2', 'surface-3', 'overlay', 'border', 'border-strong']], ['Text', ['ink', 'ink-2', 'ink-3', 'ink-disabled']],
+        ['Accent', ['accent', 'accent-hover', 'accent-soft', 'accent-text', 'on-accent', 'run']], ['Status', ['ok', 'ok-soft', 'ok-text', 'warn', 'warn-soft', 'warn-text', 'on-warn', 'bad', 'bad-soft', 'bad-text', 'on-bad']],
+        ['Models', ['haiku', 'haiku-soft', 'haiku-text', 'sonnet', 'sonnet-soft', 'sonnet-text', 'opus', 'opus-soft', 'opus-text']], ['Overlays', ['scrim', 'knob', 'tooltip', 'on-tooltip']]];
+      groups.forEach(function (g) {
+        h += '<section class="g-section"><h3 class="g-section__title">' + g[0] + '</h3><div class="g-swatches" style="margin-top:10px">' + g[1].map(function (n) {
+          var t = T.color.tokens.filter(function (x) { return x.name === n; })[0], l = resolve(n, 'light'), d = resolve(n, 'dark');
+          return '<div class="g-swatch"><div class="g-swatch__chip"><span style="background:' + l + ';color:' + onColor(l) + '">' + (l.length > 9 ? 'rgba' : l) + '</span><span style="background:' + d + ';color:' + onColor(d) + '">' + (d.length > 9 ? 'rgba' : d) + '</span></div>' +
+            '<div class="g-swatch__meta"><div class="g-swatch__name">' + n + (typeof t.value === 'string' ? ' <span class="k-badge" style="height:16px">alias</span>' : '') + '</div><div class="g-swatch__use">' + t.usage + '</div></div></div>';
+        }).join('') + '</div></section>';
+      });
+    } else if (id === 'type') {
+      h += '<h1 class="g-h1">Typography</h1><p class="g-lead">Windows 11 variable faces: <b>Segoe UI Variable</b> for text and display, <b>Cascadia Mono</b> for anything you could paste into a terminal. No font files ship; each stack falls back to the system face.</p><section class="g-section">';
+      T.type.groups.forEach(function (g) { g.styles.forEach(function (s) {
+        var fam = s.family || g.family;
+        h += '<div class="g-typerow"><div><b style="font-size:13px">' + s.name + '</b><div class="g-typerow__meta">' + g.name + '</div></div><div class="type-' + s.name + '" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap' + (s.name === 'overline' ? ';text-transform:uppercase' : '') + '">' + s.sample + '</div><div class="g-typerow__meta">' + fam + ' · ' + s.fontSize + ' / ' + s.lineHeight + ' · ' + s.fontWeight + (s.letterSpacing ? ' · ' + s.letterSpacing : '') + '<br>' + s.usage + '</div></div>'; }); });
+      h += '</section>';
+    } else if (id === 'spacing') {
+      h += '<h1 class="g-h1">Spacing</h1><p class="g-lead">' + T.spacing.note + ' Layout gaps use these tokens; component paddings are set in components.css from the same steps.</p><section class="g-section"><div class="g-scale">' +
+        T.spacing.tokens.map(function (t) { return '<div class="g-scale__row"><code class="k-code-inline">' + t.name + '</code><span class="k-num k-muted">' + t.value + '</span><div style="display:flex;align-items:center;gap:12px"><span class="g-scale__bar" style="width:' + parseInt(t.value, 10) * 4 + 'px"></span><span class="k-muted" style="font-size:12px">' + t.usage + '</span></div></div>'; }).join('') +
+        '</div></section><section class="g-section"><h3 class="g-section__title">Sizes</h3><div class="k-table-wrap" style="margin-top:10px"><table class="k-table k-table--compact"><thead><tr><th>Token</th><th class="is-num">Value</th><th>Use</th></tr></thead><tbody>' +
+        T.size.tokens.map(function (t) { return '<tr><td class="k-mono">' + t.name + '</td><td class="is-num">' + t.value + '</td><td>' + t.usage + '</td></tr>'; }).join('') + '</tbody></table></div></section>';
+    } else if (id === 'radius') {
+      h += '<h1 class="g-h1">Radius</h1><p class="g-lead">Corners grow with how far an element floats: badges are tight, controls a little softer, cards and overlays the softest.</p><section class="g-section"><div class="g-radius">' +
+        T.radius.tokens.map(function (t) { return '<div><div class="g-radius__box" style="border-radius:' + (t.value === '999px' ? '42px' : t.value) + '"></div><div style="margin-top:8px"><b class="k-mono">' + t.name + '</b> <span class="k-muted">' + t.value + '</span></div><div class="k-muted" style="font-size:12px">' + t.usage + '</div></div>'; }).join('') + '</div></section>';
+    } else if (id === 'elevation') {
+      h += '<h1 class="g-h1">Elevation</h1><p class="g-lead">Shadows say how far a layer floats. Docked panels use hairlines, never shadows. In dark, each shadow adds a faint light edge so layers stay apart.</p><section class="g-section">' + stages('<div class="g-elev">' +
+        T.shadow.tokens.map(function (t) { return '<div><div class="g-elev__box" style="box-shadow:var(--' + t.name + ')">' + t.name + '</div><div class="k-muted" style="font-size:12px;margin-top:10px">' + t.usage + '</div></div>'; }).join('') + '</div>') + '</section>';
+    } else if (id === 'icons') {
+      h += '<h1 class="g-h1">Icons</h1><p class="g-lead">' + window.KanekiIcons.length + ' line icons drawn for this system on a 24 grid, 1.75 stroke, round caps. Use <code>&lt;svg class="k-icon"&gt;&lt;use href="#i-name"/&gt;&lt;/svg&gt;</code> after loading <code>icons.js</code>. Icons take the text colour.</p><section class="g-section"><div class="g-icons">' +
+        window.KanekiIcons.map(function (n) { return '<div class="g-icon">' + I(n) + n + '</div>'; }).join('') + '</div></section>';
+    } else if (id === 'motion') {
+      h += '<h1 class="g-h1">Motion</h1><p class="g-lead">Short and quiet: things respond within 120 ms and enter within 260 ms. Everything stops when Windows asks for reduced motion.</p><section class="g-section"><div class="k-table-wrap"><table class="k-table"><thead><tr><th>Token</th><th>Value</th><th>Use</th></tr></thead><tbody>' +
+        T.motion.tokens.map(function (t) { return '<tr><td class="k-mono">' + t.name + '</td><td class="k-mono">' + t.value + '</td><td>' + t.usage + '</td></tr>'; }).join('') + '</tbody></table></div></section>' +
+        '<section class="g-section"><h3 class="g-section__title">Live states</h3>' + stages('<div class="g-row" style="gap:28px"><span class="k-status k-status--run"><span class="k-dot k-dot--run"></span>Running dot</span><div class="k-pipeline" style="padding:0"><button class="k-node k-node--run"><span class="k-node__dot">' + I('activity') + '</span><span class="k-node__label">running node</span></button></div><span class="k-spinner"></span><div class="k-skeleton" style="width:160px"></div></div>') + '</section>';
+    }
+    return h + '</div>';
+  }
+  /* ---------------- nav + routing ---------------- */
+  function nav(q) {
+    q = (q || '').toLowerCase();
+    var h = '<a href="#overview" data-id="overview">' + I('layers') + 'Overview</a><div class="g-nav__group">Foundations</div>' +
+      FOUND.filter(function (f) { return !q || f.name.toLowerCase().indexOf(q) >= 0; }).map(function (f) { return '<a href="#' + f.id + '" data-id="' + f.id + '">' + f.name + '</a>'; }).join('');
+    var groups = []; COMPS.forEach(function (c) { if (groups.indexOf(c.group) < 0) groups.push(c.group); });
+    groups.forEach(function (g) {
+      var items = COMPS.filter(function (c) { return c.group === g && (!q || (c.name + ' ' + c.classes.join(' ')).toLowerCase().indexOf(q) >= 0); });
+      if (items.length) h += '<div class="g-nav__group">' + g + '</div>' + items.map(function (c) { return '<a href="#' + c.id + '" data-id="' + c.id + '">' + c.name + '<span class="g-count">' + c.examples.length + '</span></a>'; }).join('');
+    });
+    $('#nav').innerHTML = h; mark();
+  }
+  function current() { return (location.hash || '#overview').slice(1); }
+  function mark() { var id = current(); document.querySelectorAll('.g-nav a').forEach(function (a) { a.classList.toggle('is-selected', a.dataset.id === id); }); }
+  function render() {
+    var id = current(), c = COMPS.filter(function (x) { return x.id === id; })[0], f = FOUND.filter(function (x) { return x.id === id; })[0];
+    $('#main').innerHTML = c ? compPage(c) : f ? fpage(id) : overview();
+    $('#crumb').innerHTML = 'Design system ' + I('chevron-right', 'k-icon--sm') + ' <b>' + (c ? c.group + '</b> ' + I('chevron-right', 'k-icon--sm') + ' <b>' + c.name : f ? 'Foundations</b> ' + I('chevron-right', 'k-icon--sm') + ' <b>' + f.name : 'Overview') + '</b>';
+    document.documentElement.setAttribute('data-theme', mode === 'dark' ? 'dark' : 'light');
+    document.querySelectorAll('#mode button').forEach(function (b) { b.classList.toggle('is-selected', b.dataset.m === mode); });
+    mark(); $('#main').scrollTop = 0;
+  }
+  document.addEventListener('click', function (e) {
+    var tile = e.target.closest('.g-tile'); if (tile) { location.hash = tile.dataset.href; return; }
+    var t = e.target.closest('[data-toggle]'); if (t) { var p = document.getElementById('code-' + t.dataset.toggle); p.hidden = !p.hidden; t.lastChild.textContent = p.hidden ? 'Show' : 'Hide'; return; }
+    var cp = e.target.closest('[data-copy]'); if (cp) { var txt = document.getElementById('code-' + cp.dataset.copy).textContent;
+      var done = function () { cp.lastChild.textContent = 'Copied'; setTimeout(function () { cp.lastChild.textContent = 'Copy'; }, 1400); };
+      if (navigator.clipboard) navigator.clipboard.writeText(txt).then(done, done); return; }
+    var m = e.target.closest('#mode button'); if (m) { mode = m.dataset.m; try { localStorage.setItem('k-gallery-mode', mode); } catch (er) {} render(); }
+  });
+  var q = new URLSearchParams(location.search); if (q.get('mode')) mode = q.get('mode');
+  $('#navq').addEventListener('input', function (e) { nav(e.target.value); });
+  document.addEventListener('keydown', function (e) { var t = e.target.closest && e.target.closest('.g-tile'); if (t && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); location.hash = t.dataset.href; } });
+  window.addEventListener('hashchange', render);
+  nav(''); render();
+})();
+</script>
+</body>
+</html>

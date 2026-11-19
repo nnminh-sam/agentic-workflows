@@ -344,6 +344,18 @@
           "## Summary\nAdd login\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)"
         ]
       }
+    },
+    {
+      "id": "GH010",
+      "name": "gh-disabled-in-browser-mode",
+      "title": "No gh commands when pull requests are opened in the browser",
+      "description": "When the profile sets pr_via to 'browser', the agent must not run gh at all: pull requests are opened by you from the compare link /my-git:pr prints. Direct API calls are already blocked by GH001. With pr_via unset or 'gh' this rule does nothing.",
+      "severity": "deny",
+      "params": { "pr_via": "${pr_via}" },
+      "examples": {
+        "good": ["(pr_via=browser) open https://github.com/<owner>/<repo>/compare/develop/base...<branch>?expand=1 yourself"],
+        "bad": ["(pr_via=browser) gh pr create --title ... --body-file pr.md", "(pr_via=browser) gh pr list"]
+      }
     }
   ]
 }

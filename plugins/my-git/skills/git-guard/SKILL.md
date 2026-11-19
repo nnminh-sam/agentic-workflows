@@ -11,8 +11,8 @@ git-guard is a PreToolUse hook on `Bash` and `PowerShell`. It parses each comman
 |---|---|---|
 | `identity` | ID001–ID005 | commit author name/email; the pinned credential on push/pull/fetch/clone (an SSH key with `-i <key>` + `IdentitiesOnly=yes`, or with `git_transport: gh` the gh credential helper as the expected gh account); remotes on allowed hosts and owners using the profile's transport; active `gh` account |
 | `commit-message` | CM001–CM016 | Conventional Commits 1.0 on `git commit -m/-F` and on `gh pr create/edit --title`; CM016: no AI co-author or "Generated with" attribution |
-| `github-cli` | GH001–GH009 | GitHub only through `gh`, risky `gh` commands denied or confirmed, `gh api` mutations, non-interactive `gh pr create`, repo owner scope, `gh repo create` visibility; GH008: PR body has Summary / Detailed changes / Explanation / Test results (unit + lint); GH009: no AI attribution in PR bodies |
-| `branching` | BR001–BR005 | no commits on `main` / `develop/base` (BR001); no pushes to them (BR002); work branches named `develop/<type>/<name>` (BR003) and started from `develop/base` (BR004); PRs target `develop/base`, and only `develop/base` targets `main` (BR005) |
+| `github-cli` | GH001–GH010 | GitHub only through `gh`, risky `gh` commands denied or confirmed, `gh api` mutations, non-interactive `gh pr create`, repo owner scope, `gh repo create` visibility; GH008: PR body has Summary / Detailed changes / Explanation / Test results (unit + lint); GH009: no AI attribution in PR bodies; GH010: no gh at all when `pr_via` is `browser` |
+| `branching` | BR001–BR005 | no commits on `main` / `develop/base` (BR001); no pushes to them (BR002); work branches named `develop/<type>/<name>` (BR003) and started from `develop/base` (BR004); PRs target `develop/base`, and only `develop/base` targets `main` (BR005); with `nested_work_branches` a work branch may start from and PR into a parent work branch |
 
 Each finding is `deny`, `ask` or `warn`, and the strictest one wins. The block reason names the rule id and says what to change.
 
@@ -33,6 +33,7 @@ On Windows, use `python` if `python3` is not on PATH.
    - **ID003, `gh` transport:** the user must run `gh auth setup-git` (helper missing) or `gh auth switch` (wrong account), or remove a token from the remote URL. Tell them; don't do it yourself.
    - **ID004:** use a remote of the profile's transport (`git@github.com:<owner>/<repo>.git` for `ssh`, `https://github.com/<owner>/<repo>.git` for `gh`) whose owner is the profile's `github_user` or one of its `github_orgs`.
    - **GH001:** call GitHub through `gh` instead of `curl`/`api.github.com`.
+   - **GH010:** this project opens PRs in the browser (`pr_via` = `browser`). Don't run gh; use `/my-git:pr`, which prints the compare link for the user.
    - **GH004 / GH008:** pass `--title` and `--body-file <file>` to `gh pr create`. The body needs `## Summary`, `## Detailed changes`, `## Explanation` and `## Test results`, with unit test and lint results. Check it first with `python3 <root>/scripts/check_pr.py --title ... --body-file ... --base ... --head ...`. Prefer the `/my-git:pr` skill.
    - **CM016 / GH009:** remove the AI `Co-Authored-By:` trailer, the "Generated with ..." line or the 🤖 from the message or body.
    - **BR001 / BR002:** don't commit on or push to `main` / `develop/base`. Make a work branch, `git switch -c develop/<type>/<name> develop/base`, push it, and open a PR with `/my-git:pr`.
@@ -53,6 +54,7 @@ The contracts never name an account. The values come from a profile:
 | `git_email` | `GIT_GUARD_GIT_EMAIL` | allowed author emails (comma-separated) |
 | `git_transport` | `GIT_GUARD_GIT_TRANSPORT` | `ssh` (default): SSH remotes + pinned `ssh_key`. `gh`: HTTPS remotes through the gh credential helper, no SSH key |
 | `ssh_key` | `GIT_GUARD_SSH_KEY` | private key path, or path suffix, that must be pinned (`ssh` transport only) |
+| `signing_key` | `GIT_GUARD_SIGNING_KEY` | how `/my-git:commit` signs: `default` = git's own signing config (`git commit -S`); a path = that SSH key (`gpg.format=ssh`); unset = unsigned |
 
 Values are resolved in this order: env var, then the project profile, then the user profile (`~/.claude/git-guard/profile.json`). The project profile is `<project>/.claude/git-guard/profile.local.json` for a plugin install, or `.claude/hooks/git-guard/profile.local.json` for a vendored install. Both are git-ignored. When a value is unset, its rule only checks that something is present.
 
@@ -63,6 +65,8 @@ python3 <root>/scripts/setup_profile.py show                      # values, thei
 python3 <root>/scripts/setup_profile.py init --from-current       # copy current git config + gh login (+ detect transport)
 python3 <root>/scripts/setup_profile.py init --from-current --transport gh   # single GitHub account: HTTPS + gh, no SSH key
 python3 <root>/scripts/setup_profile.py init --github-user <login> --ssh-key "<path>" --git-email a@b.c
+python3 <root>/scripts/setup_profile.py init --signing-key default            # sign commits with git's signing config
+python3 <root>/scripts/setup_profile.py init --signing-key "<path to SSH key>" # sign commits with this SSH key
 python3 <root>/scripts/setup_profile.py init --scope user ...     # applies to all projects
 python3 <root>/scripts/setup_profile.py unset github_orgs
 ```
@@ -70,6 +74,8 @@ python3 <root>/scripts/setup_profile.py unset github_orgs
 `init` writes the user's identity to disk, so confirm the values with the user before running it. If the project's `CLAUDE.md` names the required account or key, propose those values.
 
 Picking the transport: if the user has a single GitHub account, HTTPS remotes and gh set up as git's credential helper (`git config --get-urlmatch credential.helper https://github.com` prints `... gh auth git-credential`), propose `--transport gh`; `--from-current` detects it. Commits are still checked against `git_name`/`git_email`, and every push/pull/fetch is checked to go through gh as `github_user`. If the helper isn't set up yet, the user runs `gh auth setup-git` once. With several accounts or SSH remotes, use `ssh` with an `ssh_key`.
+
+Picking the signing key: ask the user whether commits should be signed. If they already sign with git (`git config commit.gpgsign` is `true`, or `user.signingkey` is set; `--from-current` detects this), propose `--signing-key default`. If they want a specific SSH key, use `--signing-key <path>` (private key or `.pub`; needs git 2.34+). The signing key can differ from `ssh_key`.
 
 ## Setting up a repository (branching model template)
 

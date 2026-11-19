@@ -180,6 +180,27 @@ class SetupProfileCli(unittest.TestCase):
                 with mock.patch("sys.stderr"), self.assertRaises(SystemExit):
                     setup_profile.main(["init", "--transport", "https"])
 
+    def test_signing_key(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            proj = Path(tmp, "proj.json")
+            key = Path(tmp, "id_sign.pub")
+            key.write_text("ssh-ed25519 AAAA test\n", encoding="utf-8")
+            r = FakeRunner(ssh=None, gh_login=None)
+            self.assertNotIn("signing_key", setup_profile.detect_current(tmp, run=r, env={"GH_CONFIG_DIR": tmp}))
+            r.config["commit.gpgsign"] = "true"
+            self.assertEqual(setup_profile.detect_current(tmp, run=r, env={"GH_CONFIG_DIR": tmp})["signing_key"], "default")
+            r = FakeRunner(ssh=None, gh_login=None)
+            r.config["user.signingkey"] = "ABCD1234"
+            self.assertEqual(setup_profile.detect_current(tmp, run=r, env={"GH_CONFIG_DIR": tmp})["signing_key"], "default")
+            self.assertIsNone(setup_profile.signing_key_problem("default"))
+            self.assertIsNone(setup_profile.signing_key_problem(str(key)))
+            self.assertIn("not an existing file", setup_profile.signing_key_problem(str(Path(tmp, "missing"))))
+            with mock.patch.dict(setup_profile.FILES, {"project": proj}), mock.patch("builtins.print"):
+                self.assertEqual(setup_profile.main(["init", "--signing-key", "default"]), 0)
+                self.assertEqual(json.loads(proj.read_text(encoding="utf-8")), {"signing_key": "default"})
+                self.assertEqual(setup_profile.main(["init", "--signing-key", str(key)]), 0)
+                self.assertEqual(json.loads(proj.read_text(encoding="utf-8")), {"signing_key": str(key)})
+
     def test_bad_transport_value_rejected(self):
         decls = {"git_transport": {"type": "string", "env": "T", "choices": ["ssh", "gh"]}}
         with self.assertRaises(P.ProfileError):

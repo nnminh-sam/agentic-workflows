@@ -24,7 +24,7 @@ CONTRACT_FILES = {
 KNOWN_RULES = {
     "identity": {"ID001", "ID002", "ID003", "ID004", "ID005"},
     "commit-message": {f"CM{n:03d}" for n in range(1, 17)},
-    "github-cli": {f"GH{n:03d}" for n in range(1, 10)},
+    "github-cli": {f"GH{n:03d}" for n in range(1, 11)},
     "branching": {f"BR{n:03d}" for n in range(1, 6)},
 }
 
@@ -203,6 +203,8 @@ def _validate_specific(name: str, data: dict) -> list[str]:
         for key in ("production_branch", "staging_branch", "remote"):
             if not (isinstance(st.get(key), str) and st.get(key)):
                 errs.append(f"branching: settings.{key} must be a non-empty string")
+        if "nested_work_branches" in st and not isinstance(st["nested_work_branches"], bool):
+            errs.append("branching: settings.nested_work_branches must be true or false")
         if st.get("production_branch") and st.get("production_branch") == st.get("staging_branch"):
             errs.append("branching: production_branch and staging_branch must differ")
         for r in data["rules"]:

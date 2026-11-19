@@ -1,0 +1,44 @@
+{
+  "kind": "delivery",
+  "id": "github-pr",
+  "description": "Deliver as a GitHub pull request per repository.",
+  "drafts": {
+    "commit-msg": {
+      "template": "templates/commit-msg.md",
+      "rules": [
+        "Conventional Commits subject <= 72 chars",
+        "body explains why, references the ticket"
+      ]
+    },
+    "pr-body": {
+      "template": "templates/pr-body.md"
+    },
+    "tracker-reply": {
+      "template": "templates/tracker-reply.md"
+    }
+  },
+  "review": {
+    "fetch": "gh pr view {pr} --repo {repo} --json reviews,comments,headRefOid && gh api repos/{repo}/pulls/{pr}/comments",
+    "instructions": "Run `sdlc review-fetch --ticket <id> --repo <repo>`: it exports reviews and line comments (with commit ids) and starts the review round."
+  },
+  "ship": {
+    "requiresUserGo": true,
+    "push": true,
+    "pr": {
+      "via": "my-git"
+    },
+    "steps": [
+      "sdlc ship-request --ticket <id> --repo <repo>  (show the full request to the user)",
+      "sdlc ship --ticket <id> --repo <repo> --approve <requestDigest>  (only after the user approves that exact request; stages the files)",
+      "/my-git:commit, /my-git:push, /my-git:pr  (the `next` steps ship prints)",
+      "sdlc ship-record --ticket <id> --repo <repo> --pr <url>"
+    ],
+    "note": "kaneki-ship stages exactly the reviewed files; my-git commits as the my-git profile identity (signed if set), pushes with the profile's credential and opens the PR (gh, or a prefilled browser link when pr_via is browser)."
+  },
+  "reship": {
+    "requiresUserGo": true,
+    "steps": [
+      "after the review round reaches deliverable-ready again: ship-request, approval, ship (same branch; the push updates the open PR)"
+    ]
+  }
+}
