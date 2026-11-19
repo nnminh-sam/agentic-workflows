@@ -7,7 +7,7 @@
                                                 # GitHub compare link, built from <repo>'s origin remote
 
 Rules: GH005 title (commit header rules), GH008 required body sections, GH009 / CM016 no AI attribution,
-BR005 PR target (work branches -> staging; only staging -> production).
+BR005 PR target (work branches -> staging or a parent work branch; only staging -> production).
 Exit code: 0 = ok or warnings only, 1 = a deny/ask rule fired, 2 = usage / contract error.
 """
 from __future__ import annotations

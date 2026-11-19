@@ -1,15 +1,23 @@
 import unittest
 
-from helpers import FakeRunner, evaluate, ids
+from helpers import FakeRunner, contracts, evaluate, ids
 
 GOOD_BODY = ("## Summary\nAdd x.\n\n## Detailed changes\n- add x\n\n## Explanation\nNeeded.\n\n"
              "## Test results\n### Unit\n`npm test`: 3 passed\n### Lint\n`npm run lint`: clean\n")
 FILES = {"pr.md": GOOD_BODY}
 
 
+def _strict(raw):
+    raw["branching"]["settings"]["nested_work_branches"] = False
+
+
+STRICT = contracts(_strict)
+
+
 def run(cmd, **kw):
     files = kw.pop("files", FILES)
-    return evaluate(cmd, runner=FakeRunner(**kw), files=files)
+    strict = kw.pop("strict", False)
+    return evaluate(cmd, runner=FakeRunner(**kw), files=files, contracts_obj=STRICT if strict else None)
 
 
 class ProtectedCommit(unittest.TestCase):
@@ -65,13 +73,31 @@ class NewBranch(unittest.TestCase):
         self.assertEqual(run("git switch -c develop/feat/login", branch="develop/base").findings, [])
 
     def test_bad_name(self):
-        for name in ("login", "feat/login", "develop/feat/Login", "develop/feature/x"):
+        for name in ("login", "feat/login", "develop/feature/x", "develop/feat/-x", "develop/feat/a/b"):
             v = run(f"git switch -c {name} develop/base")
             self.assertEqual(ids(v), ["BR003"], name)
 
+    def test_uppercase_ticket_ids_allowed(self):
+        self.assertEqual(run("git switch -c develop/feat/kh-P1-T07-13 develop/base").findings, [])
+
     def test_bad_base(self):
-        self.assertEqual(ids(run("git switch -c develop/feat/x main")), ["BR004"])
-        self.assertEqual(ids(run("git checkout -b develop/feat/x")), ["BR004"])  # current branch is a work branch
+        for cmd in ("git switch -c develop/feat/x main", "git switch -c develop/feat/x origin/main",
+                    "git switch -c develop/feat/x v1.2.0", "git switch -c develop/feat/x some-old-branch"):
+            self.assertEqual(ids(run(cmd)), ["BR004"], cmd)
+        self.assertEqual(ids(run("git checkout -b develop/feat/x", branch="main")), ["BR004"])
+
+    def test_parent_work_branch_as_base(self):
+        for cmd in ("git switch -c develop/feat/kh-P1-T07 develop/feat/kaneki-harness",
+                    "git switch -c develop/feat/kh-P1-T07 origin/develop/feat/kaneki-harness",
+                    "git branch develop/fix/kh-x refs/remotes/origin/develop/feat/kaneki-harness"):
+            self.assertEqual(run(cmd).findings, [], cmd)
+        # no start point: the checked-out work branch is the parent
+        self.assertEqual(run("git checkout -b develop/feat/x", branch="develop/feat/kaneki-harness").findings, [])
+
+    def test_strict_mode_keeps_staging_only(self):
+        self.assertEqual(ids(run("git switch -c develop/feat/x develop/feat/kaneki-harness", strict=True)), ["BR004"])
+        self.assertEqual(ids(run("git checkout -b develop/feat/x", strict=True)), ["BR004"])
+        self.assertEqual(run("git switch -c develop/feat/x origin/develop/base", strict=True).findings, [])
 
     def test_protected_names_and_listing_ok(self):
         self.assertEqual(run("git switch -c develop/base origin/develop/base", branch="main").findings, [])
@@ -93,8 +119,27 @@ class PullRequest(unittest.TestCase):
         self.assertEqual(run("gh pr create -B main --title 'chore(release): v1.0.0' -F pr.md", branch="develop/base").findings, [])
 
     def test_other_bases_denied(self):
-        self.assertIn("BR005", ids(run("gh pr create --base develop/feat/y --title 'feat: add x' -F pr.md")))
+        for base in ("release-1", "feature/y", "develop/feature/y"):
+            self.assertIn("BR005", ids(run(f"gh pr create --base {base} --title 'feat: add x' -F pr.md")), base)
         self.assertIn("BR005", ids(run("gh pr edit 3 --base main")))
+
+    def test_parent_work_branch_as_base(self):
+        ok = "gh pr create --base develop/feat/kaneki-harness --head develop/feat/kh-P1-T07 --title 'feat: add x' -F pr.md"
+        self.assertEqual(run(ok).findings, [])
+        self.assertEqual(run("gh pr create --base develop/feat/kaneki-harness --title 'feat: add x' -F pr.md",
+                             branch="develop/feat/kh-P1-T07").findings, [])
+        self.assertEqual(run("gh pr edit 3 --base develop/feat/kaneki-harness").findings, [])
+
+    def test_pr_into_itself_denied(self):
+        self.assertIn("BR005", ids(run("gh pr create --base develop/feat/x --title 'feat: add x' -F pr.md",
+                                       branch="develop/feat/x")))
+
+    def test_parent_still_cannot_release(self):
+        self.assertIn("BR005", ids(run("gh pr create --base main --head develop/feat/kaneki-harness "
+                                       "--title 'feat: add x' -F pr.md")))
+
+    def test_strict_mode_denies_parent_base(self):
+        self.assertIn("BR005", ids(run("gh pr create --base develop/feat/y --title 'feat: add x' -F pr.md", strict=True)))
 
     def test_body_sections(self):
         bad = {"pr.md": "## Summary\nAdd x.\n\n## Explanation\n\n## Test results\nUnit: ok\n"}

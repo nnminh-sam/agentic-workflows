@@ -1,8 +1,8 @@
 {
   "contract": "branching",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "title": "Branching model",
-  "description": "Two long-lived branches: the production branch (main) and the staging branch (develop/base). Both only change through pull requests. Work branches start from staging, are named develop/<type>/<name>, and open their PR into staging. A release is a PR from staging into production.",
+  "description": "Two long-lived branches: the production branch (main) and the staging branch (develop/base). Both only change through pull requests. Work branches are named develop/<type>/<name>. They start from staging and open their PR into staging, or, with settings.nested_work_branches, start from another work branch (a parent feature branch) and open their PR into that parent. A release is a PR from staging into production.",
   "applies_to": [
     "git commit / merge / cherry-pick / revert / am / rebase",
     "git push",
@@ -12,7 +12,8 @@
   "settings": {
     "production_branch": "main",
     "staging_branch": "develop/base",
-    "remote": "origin"
+    "remote": "origin",
+    "nested_work_branches": true
   },
   "rules": [
     {
@@ -51,37 +52,41 @@
       "description": "A new branch (git checkout -b, git switch -c, git branch <name>) must match one of 'patterns' or be the production or staging branch itself.",
       "severity": "deny",
       "params": {
-        "patterns": ["^develop/(feat|fix|chore|docs|refactor|perf|test|build|ci)/[a-z0-9][a-z0-9._-]*$"]
+        "patterns": ["^develop/(feat|fix|chore|docs|refactor|perf|test|build|ci)/[A-Za-z0-9][A-Za-z0-9._-]*$"]
       },
       "examples": {
-        "good": ["git switch -c develop/feat/oauth-login develop/base", "git switch -c develop/fix/token-expiry develop/base"],
-        "bad": ["git switch -c login-feature", "git switch -c feat/login", "git switch -c develop/feat/Login"]
+        "good": ["git switch -c develop/feat/oauth-login develop/base", "git switch -c develop/fix/token-expiry develop/base",
+                 "git switch -c develop/feat/kh-P1-T07 develop/feat/kaneki-harness"],
+        "bad": ["git switch -c login-feature", "git switch -c feat/login", "git switch -c develop/feature/login",
+                "git switch -c develop/feat/kaneki-harness/p1   (git cannot hold a branch and a folder of the same name; use develop/feat/kh-p1)"]
       }
     },
     {
       "id": "BR004",
       "name": "branch-from-staging",
-      "title": "Work branches start from develop/base",
-      "description": "A new work branch must start from the staging branch (settings.staging_branch, locally or on settings.remote) or one of 'extra_base_refs'. Pass it explicitly (git switch -c develop/feat/x develop/base) or create the branch while develop/base is checked out.",
+      "title": "Work branches start from develop/base or a parent work branch",
+      "description": "A new work branch must start from the staging branch (settings.staging_branch, locally or on settings.remote), from one of 'extra_base_refs', or, when settings.nested_work_branches is true, from another work branch (a name matching BR003's patterns, locally or on settings.remote). Pass the start point explicitly (git switch -c develop/feat/x develop/base) or create the branch while it is checked out. Never from the production branch.",
       "severity": "deny",
       "params": {
         "extra_base_refs": []
       },
       "examples": {
-        "good": ["git switch -c develop/feat/login origin/develop/base"],
-        "bad": ["git switch -c develop/feat/login main"]
+        "good": ["git switch -c develop/feat/login origin/develop/base",
+                 "git switch -c develop/feat/kh-P1-T07 origin/develop/feat/kaneki-harness   (nested_work_branches)"],
+        "bad": ["git switch -c develop/feat/login main", "git switch -c develop/feat/login v1.2.0"]
       }
     },
     {
       "id": "BR005",
       "name": "pr-target",
-      "title": "PRs target develop/base; only develop/base releases into main",
-      "description": "gh pr create must pass --base. Work branches open their PR into the staging branch. A PR into the production branch must come from the staging branch (a release). gh pr edit --base follows the same rule.",
+      "title": "PRs target develop/base or a parent work branch; only develop/base releases into main",
+      "description": "gh pr create must pass --base. Work branches open their PR into the staging branch or, when settings.nested_work_branches is true, into another work branch (their parent feature branch, never themselves). A PR into the production branch must come from the staging branch (a release). gh pr edit --base follows the same rule.",
       "severity": "deny",
       "params": {},
       "examples": {
         "good": ["gh pr create --base develop/base --title \"feat: add login\" --body-file pr.md",
-                 "gh pr create --base main --head develop/base --title \"chore(release): v1.2.0\" --body-file pr.md"],
+                 "gh pr create --base main --head develop/base --title \"chore(release): v1.2.0\" --body-file pr.md",
+                 "gh pr create --base develop/feat/kaneki-harness --head develop/feat/kh-P1-T07 --title \"feat(kaneki): add schemas\" --body-file pr.md   (nested_work_branches)"],
         "bad": ["gh pr create --base main --title \"feat: add login\" --body-file pr.md", "gh pr create --title \"feat: x\" --body-file pr.md"]
       }
     }

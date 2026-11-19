@@ -1,4 +1,8 @@
-"""Branching model rules BR001-BR005: protected branches, branch naming/base, PR targets."""
+"""Branching model rules BR001-BR005: protected branches, branch naming/base, PR targets.
+
+With settings.nested_work_branches a work branch may serve as the parent of other work branches: children start
+from it (BR004) and open their PR into it (BR005); the parent then opens its own PR into staging.
+"""
 from __future__ import annotations
 
 import re
@@ -14,6 +18,26 @@ _ZERO = "0" * 40
 def _settings(c: Contract) -> tuple[str, str, str]:
     s = c.settings
     return s.get("production_branch", "main"), s.get("staging_branch", "develop/base"), s.get("remote", "origin")
+
+
+def nested(c: Contract) -> bool:
+    """settings.nested_work_branches: work branches may start from and PR into another work branch."""
+    return c.settings.get("nested_work_branches", False) is True
+
+
+def local_name(ref: str, remote: str) -> str:
+    """'origin/develop/feat/x', 'refs/remotes/origin/develop/feat/x', 'refs/heads/develop/feat/x' -> 'develop/feat/x'."""
+    for p in (f"refs/remotes/{remote}/", "refs/heads/", f"{remote}/"):
+        if ref.startswith(p):
+            return ref[len(p):]
+    return ref
+
+
+def is_work_branch(name: str | None, c: Contract) -> bool:
+    """A name matching BR003's patterns (read even when BR003 is off), other than the protected branches."""
+    if not name or name in protected(c):
+        return False
+    return any(re.search(p, name) for p in c.rule("BR003").params.get("patterns", []))
 
 
 def protected(c: Contract) -> list[str]:
@@ -187,9 +211,11 @@ def check_new_branch(call: GitCall, c: Contract, run) -> Verdict:
         allowed = {staging, f"{remote}/{staging}", f"refs/heads/{staging}", f"refs/remotes/{remote}/{staging}",
                    *r4.params.get("extra_base_refs", [])}
         base = start if start is not None else current_branch(run, call.cwd)
-        if base not in allowed:
+        parent_ok = nested(c) and base is not None and is_work_branch(local_name(base, remote), c)
+        if base not in allowed and not parent_ok:
             shown = f"'{start}'" if start is not None else f"the current branch '{base}'"
-            v.add("BR004", r4.severity, f"work branch '{name}' must start from {staging}, not {shown}: "
+            also = " or a parent work branch (develop/<type>/<name>)" if nested(c) else ""
+            v.add("BR004", r4.severity, f"work branch '{name}' must start from {staging}{also}, not {shown}: "
                                         f"git switch -c {name} {remote}/{staging}")
     return v
 
@@ -247,6 +273,13 @@ def pr_target_problem(base: str | None, head: str | None, c: Contract) -> str | 
         return f"--base is required ({staging} for work, {prod} for a release)"
     if base == prod and head != staging:
         return f"only {staging} may open a PR into {prod} (release); '{head}' must target {staging}"
-    if base not in (prod, staging):
-        return f"PR base '{base}' is not allowed; use {staging} (or {prod} for a release)"
-    return None
+    if base in (prod, staging):
+        return None
+    if nested(c) and is_work_branch(base, c):
+        if head and head == base:
+            return f"PR from '{head}' into itself"
+        return None
+    if nested(c):
+        return (f"PR base '{base}' is not allowed; use {staging}, a parent work branch (develop/<type>/<name>), "
+                f"or {prod} for a release")
+    return f"PR base '{base}' is not allowed; use {staging} (or {prod} for a release)"
