@@ -1,6 +1,6 @@
 # learning-kit: system design
 
-Status: v1.4 (2026-11-10, library web app + MCP server) · Owner: nnminh-sam · Keep this file current. Every behaviour change
+Status: v1.5 (2026-11-12, bite-sized lesson mode) · Owner: nnminh-sam · Keep this file current. Every behaviour change
 updates the relevant section and adds a row to the **Decision log**.
 
 ---
@@ -28,6 +28,8 @@ done by Claude while the bookkeeping (state, scores, schedules) is deterministic
 | Goal-first scoping, prerequisites before dependents | Learning paths: intake → reviewed plan → one topic per node, in dependency order (§4a) |
 | Don't re-teach what's known (expertise reversal) | Path placement quiz: high score *and* high confidence → the learner may test out |
 | Integration and transfer | Capstone nodes and milestone checkpoints that mix earlier topics |
+| Small chunks, attention-friendly (segmenting) | Bite mode (§4b): one idea per piece, one paragraph each; stop between any two pieces |
+| Question before the answer; immediate feedback | Each piece: question → paragraph → own-words answer (paragraph hidden) → small check, graded on the spot |
 | Sleep consolidation | Max 3 gate rounds per topic per day |
 
 Non-goals: a general LMS, multi-user support, mobile apps, flashcard decks for trivia.
@@ -39,13 +41,14 @@ Non-goals: a general LMS, multi-user support, mobile apps, flashcard decks for t
    │  /path  /learn  /quiz  /note  /recall   ← Claude Code skills (judgement + orchestration)
    ▼
  Claude Code main session ──spawns──► subagents (Agent tool; model/effort from config.agents)
-   │                                    collect (sonnet·med) · aggregate / quiz_author / quiz_review /
-   │                                    reteach / note_review / reword (opus·med) ·
+   │                                    collect (sonnet·med) · aggregate / lesson_author / lesson_review /
+   │                                    quiz_author / quiz_review / reteach / note_review / reword (opus·med) ·
    │                                    path_plan (opus·high) / path_review (opus·med)
    │  shell: lk <cmd>
    ▼
  lk (Python ≥ 3.9, stdlib only)         ← deterministic core: state machine, storage, validation,
-   │  ├─ topics.py   state machine + concepts         scoring, gate, FSRS, sessions
+   │  ├─ topics.py   state machine (per mode) + concepts   scoring, gate, FSRS, sessions
+   │  ├─ lesson.py   bite mode: piece drafts, import, the current round, coverage
    │  ├─ learnpath.py learning paths: plan contract, versions, derived status, next step
    │  ├─ sources.py  global source bank (fetch, dedupe, search)
    │  ├─ quiz.py     item schema, validation, coverage, presentation, auto-grading
@@ -102,13 +105,18 @@ the Python install, re-run `python lk.py install`.** It refuses to overwrite a s
   sources/index.json          [{id S0001, url, norm_url, title, kind, quality 1-3, topics[], fetched, chars}]
   sources/S0001.md            snapshot (header marks it untrusted)
   topics/<slug>/
-    state.json                {stage, depth, version, round, relearn, history[], rounds_log[]}
+    state.json                {stage, depth, mode bite|doc, version, round, relearn, history[], rounds_log[]}
+                              (no "mode" = a topic from before v1.5 = doc)
     prior.md                  my words, before research
     research.md               aggregated, every claim cites [S####]; may hold lk-steps/lk-sequence/lk-arch blocks
     research.html             derived by `lk read` (never edited; rebuilt from research.md any time)
+    lesson.json               bite mode: {pieces:[{id p001, concept, title, question, body, source_ids,
+                              recall_item, check_items[], round, added_in}]} (§4b)
+    lesson.md                 bite mode: every piece on one page, derived on import (for looking back)
     concepts.json             {concepts:[{id, name, summary, core, source_ids, related, added_in, status, mastered_at}]}
     qa.md                     questions I asked while reading
-    quiz.json                 {items:[...]} the topic's question bank (ids q0001…)
+    quiz.json                 {items:[...]} the topic's question bank (ids q0001…); a lesson's questions and
+                              checks live here too, with `piece` and `role` recall|check
     attempts.jsonl            one line per answered item (mode, score, confidence, time)
     reteach/round-N.md        targeted reteach for round N
     lab/README.md, RESULTS.md (deep only)
@@ -141,6 +149,8 @@ The browser never receives `answer`, `rubric`, `reference_answer`, `blanks` or `
 
 ## 4. Topic state machine
 
+Two flows, picked per topic by `mode` (§4b). **doc** mode:
+
 ```
  prior ─► research ─► read ─► quiz_gen ─► quiz ──gate pass──► lab (deep) ─► note ─► scheduled
                                   ▲         │                  note (use)     │        │  │
@@ -150,15 +160,27 @@ The browser never receives `answer`, `rubric`, `reference_answer`, `blanks` or `
                                                          scheduled ──extend (version+1)──► research
 ```
 
+**bite** mode (`topics.BITE_TRANSITIONS`): the lesson replaces read + quiz_gen + quiz, and it is the gate.
+
+```
+ prior ─► research ─► lesson ──gate pass──► lab (deep) ─► note ─► scheduled
+                        ▲  │                note (use)     │        │  │
+                        │  │                scheduled (aware, relearn) │
+                        │  └─gate fail─► reteach ◄──── note: correctness fail
+                        └───────────────────┘ ◄────────── scheduled: lapsed concepts
+                                    scheduled ──extend (version+1)──► research
+```
+
 Guards (`topics._guard`): research needs prior.md; read needs research.md + target concepts + no broken
 visual blocks (`lk read --check`);
 quiz needs coverage (≥2 fresh items per target concept, 1 for aware; ≥1 fresh free-recall per core
 concept); quiz_gen-after-reteach needs `reteach/round-N.md`; note-after-lab needs `lab/RESULTS.md`;
-scheduled-from-note needs a passed note review. Transitions out of `quiz` are **gate-only**.
+scheduled-from-note needs a passed note review; lesson (from research or reteach) needs target concepts and a
+piece for each of them in the current round. Transitions out of `quiz` and `lesson` are **gate-only**.
 Entering `reteach` increments `round`. Entering `scheduled` enrolls cards.
 
 Depth controls scope (config `depth.*`): `aware` (3–5 sources, 1–2 items/concept, no note/lab),
-`use` (6–10, 2–3, note), `deep` (10–15, 3–4, lab + note).
+`use` (6–10, 2–3, note), `deep` (10–15, 3–4, lab + note). Bite mode sizes by `pieces_per_concept`: 1, 1–3, 2–4.
 
 ## 4a. Learning paths (goals too broad for one topic)
 
@@ -226,9 +248,51 @@ outcomes, kind, prereq and unlocked topics). Research facets start from `focus`;
 between their prereqs. `/learn` also refuses to silently start a topic that is really a field: it offers a
 path, a narrower slice, or an `aware` overview.
 
+## 4b. Bite-sized mode (lessons)
+
+Reading one long research doc and then sitting one long quiz takes a lot of sustained attention. Bite mode cuts
+the topic into **pieces**, each small enough to hold in mind at once, and runs the whole cycle inside each piece:
+
+```
+ question (alone: think first) ─► one paragraph (≤ 150 words, cited) ─► answer the question in your own words
+ (paragraph hidden; a "peek" is allowed and recorded) ─► 1–3 checks ─► feedback right away ─► next piece / break
+```
+
+- **Mode.** `state.mode` is `bite` or `doc`. New topics take `learn.default_mode` (default `bite`); `lk topic new
+  --mode` overrides it. State files without the field are `doc`, so older topics keep their flow. `lk topic mode`
+  switches at prior, research, reteach, lab, note or scheduled (not mid-round). Concepts, sources, the bank and
+  SRS cards are shared by both modes.
+- **Pieces as items.** `lk lesson import` validates a draft (`lesson.validate_draft`) and stores each piece's
+  question as an `explain` item (`role: recall`: its reference answer and rubric grade the own-words answer, and
+  its `explanation` defaults to the paragraph) and its checks as ordinary items (`role: check`). So grading,
+  answer hiding, the mistakes log, practice, recall and checkpoints need no special cases. The piece keeps the
+  paragraph and the item ids.
+- **Validation.** Errors: a body over `lesson.max_body_words` prose words (code and citation ids don't count) or
+  under 15; citations not in the bank; a rubric under 2 points; 0 or more than `lesson.max_checks_per_piece`
+  checks; a check on another concept; unknown fields (typo guard). Warnings: no `?` in the question, no citation,
+  several paragraphs, only free-recall checks. Authoring and review rules: `docs/authoring/lesson-authoring.md`.
+- **Rounds.** Pieces carry the topic `round` they were imported in. The current lesson = pieces of the current
+  round, for target concepts, not yet answered in a gate-mode session. Entering reteach bumps the round, so a
+  reteach lesson has only the fresh pieces for the missed concepts; extend does the same for new concepts.
+- **Session.** `sessions.create_lesson` builds a `lesson` session: per piece the recall item, then its checks, in
+  authored order (no shuffling: the order is the teaching order). The paragraphs go to the browser (they're
+  teaching, not answers); answer keys and model answers never do.
+- **Graded piece by piece.** `POST /api/sessions/<id>/pieces/<p>/check` (`sessions.check_piece`) grades one fully
+  answered piece while the session is still open (script, plus one model call for the own-words answer, outside
+  the lock) and returns its results. It's idempotent, and a graded answer can't be changed. If the model fails,
+  the script-graded checks are kept and the learner can carry on; `finish` grades whatever is left.
+- **The lesson is the gate.** `quiz.GATE_MODES = (gate, lesson)`: lesson answers are logged as attempts (mode
+  `lesson`), spend their items, run `gate.evaluate/apply` (the same 80% rule; the own-words answers satisfy the
+  core-concept free-recall rule) and seed SRS cards at enrollment. The round cap applies. The trade-off: answers
+  come minutes after reading, so the gate measures short-term retention. Spaced recall starts a day later and
+  sends anything that didn't stick back to relearn.
+- **Breaks.** A lesson can span several sittings: every answer is saved, and `lk serve` and the library resume at
+  the first unfinished piece. The app suggests a short break every `lesson.break_every` (4) pieces.
+
 ## 5. The gate (80% of the topic as it stands now)
 
-Measured per gate session, over the **target concepts** (status new / learning / lapsed):
+Measured per gate session (a doc-mode gate quiz or a bite-mode lesson), over the **target concepts** (status
+new / learning / lapsed):
 
 1. overall mean score ≥ `gate.pass_score` (0.8), **and**
 2. every **core** target concept has ≥1 free-recall answer scoring ≥ `gate.free_recall_pass` (0.7).
@@ -274,8 +338,8 @@ In the terminal: `lk grade <id>` retries, or `lk grade <id> --pending` → the a
 
 ## 7. Spaced recall (FSRS-4.5)
 
-- One card per gate-attempted item of a mastered concept, keyed `<slug>/<qid>`. It's seeded at
-  enrollment from that item's last gate attempt.
+- One card per gate-attempted item (gate quiz or lesson) of a mastered concept, keyed `<slug>/<qid>`. It's
+  seeded at enrollment from that item's last gate attempt.
 - Grade mapping (`fsrs.grade_from`): score < 0.5 → Again; < 0.8 → Hard; ≥ 0.8 → Hard / Good / Easy by
   confidence (guess / unsure / sure). Again → due next day, lapses += 1, concept → `lapsed`.
 - Default weights, desired retention 0.9, max interval 365 days, daily limit 30.
@@ -297,16 +361,16 @@ One app, one JSON API (`lk/server.py`, stdlib `ThreadingHTTPServer`), every rout
   `SESSION_RESULT=<json>`. If a live `lk web` serves the same home (checked via `/api/health`), it opens the
   session there and waits on the session file; otherwise it starts its own server that exits on close.
 - **Views** (hash router, no build): `#/` library (recall due, unfinished sessions, paths, topics, recent
-  sessions), `#/path/<slug>` (milestones, node status, the `next` step), `#/topic/<slug>` (stage and next
-  step, docs, concepts, quiz coverage, sessions), `#/session/<id>[/<n>]` (the quiz; `n` deep-links a
-  question), `#/mistakes`. Docs open as reader pages at `/read/<slug>?file=…` (§8a), rendered on request.
-- **What the web app can start:** practice, gate (with a confirm), recall (unreworded; `/recall` rewords
+  sessions), `#/path/<slug>` (milestones, node status, the `next` step), `#/topic/<slug>` (stage, mode and next
+  step, the lesson, docs, concepts, quiz coverage, sessions), `#/session/<id>[/<n>]` (the quiz, or a lesson piece
+  by piece; `n` deep-links a question or a piece), `#/mistakes`. Docs open as reader pages at `/read/<slug>?file=…` (§8a), rendered on request.
+- **What the web app can start:** practice, gate (with a confirm), a lesson (start or resume), recall (unreworded; `/recall` rewords
   first) and a due milestone checkpoint. Anything needing judgement (research, quiz authoring, note review,
   planning) shows the Claude Code command instead of a button.
 - API: `GET /api/health | overview | paths[/<slug>] | topics[/<slug>] | topics/<slug>/doc?file= |
   sessions?topic=&mode=&limit= | sessions/<id> | sessions/<id>/result | recall | mistakes | sources?q=`;
   `POST /api/sessions {kind, topic|path, milestone, n, limit}`, `POST /api/sessions/<id>/answer | finish |
-  done`. Grading runs in a background thread per session; the UI polls `result`.
+  done`, `POST /api/sessions/<id>/pieces/<piece>/check` (one lesson piece, graded synchronously). Grading runs in a background thread per session; the UI polls `result`.
 - Answers are saved on every Next, so a reload or crash resumes where you left off.
 - Dictation uses the browser Web Speech API (en-US / vi-VN; Chrome, Edge, Safari). When it's missing or
   errors, the UI names the OS tool: Win+H on Windows, macOS Dictation, or the desktop's own tool.
@@ -325,7 +389,7 @@ extra: `pip install -e ".[mcp]"` (Python ≥ 3.10); the core stays stdlib and 3.
 | Tools, chat quiz | `start_quiz` (practice / recall), `next_question`, `answer_question`, `finish_quiz` | questions as presented (no keys); grading and side effects as in the browser |
 | Resources | `lk://overview`, `lk://paths/{path}`, `lk://topics/{topic}`, `lk://topics/{topic}/docs/{+file}` | doc paths pass the SDK's traversal checks and the service's `.md`-inside-topic rule |
 
-- **Gate, placement and checkpoint stay in the browser.** They change stages and plans, and they need the
+- **Gate, lesson, placement and checkpoint stay in the browser.** They change stages and plans, and they need the
   learner's own typed or dictated free recall. `start_quiz` refuses them and names the skill.
 - The server instructions tell the agent to pass the learner's words verbatim with their own confidence,
   never answer or hint, and keep correctness hidden until `finish_quiz`.
@@ -410,7 +474,7 @@ Ubuntu, macOS and Windows × Python 3.9, 3.12 and 3.13 on push.
 
 ## 11. Testing
 
-`python -m unittest discover -s tests` (61 tests, 3 of them skipped without the `mcp` SDK; ~8 s; same on every OS). `tests/fake_grader.py` stands in for `claude -p`.
+`python -m unittest discover -s tests` (76 tests, 3 of them skipped without the `mcp` SDK; ~11 s; same on every OS). `tests/fake_grader.py` stands in for `claude -p`.
 Covers: source dedupe and HTML extraction; validation of every type; auto-grading; answers hidden from the
 client; stage guards; gate pass/fail/partial/core rule/weak concepts/round cap; grader failure → manual
 grading; extend targeting; FSRS monotonicity and grade mapping; the review cycle with variants and lapses;
@@ -426,7 +490,14 @@ guard, path containment for `--file`, CLI; the web app (`tests/test_kit.py` Test
 per-session routes and the server stopping on close, library routes, doc path containment, Host and Origin
 guards, the lock (reentrant, exclusive across threads and processes); MCP (`tests/test_mcp.py`, needs the SDK):
 tools and resources over an in-memory client, errors as tool errors, gate refused in chat, a practice quiz
-answered and graded in chat, and `lk mcp` launched as a stdio subprocess. Manually verified (2026-11-10):
+answered and graded in chat, and `lk mcp` launched as a stdio subprocess; bite mode (`tests/test_lesson.py`):
+the default mode and legacy state, each mode held to its own flow, the per-concept piece guard, draft validation
+(every error kind, the warnings, code not counted as words), import (ids, bank items, the derived page without
+model answers), a lesson passed piece by piece into note and SRS, idempotent checks and locked graded answers, a
+failed lesson → reteach round with only fresh pieces, the core own-words rule, recorded peeks, grader failure
+mid-lesson, extend, the round cap, the HTTP flow (no answer keys or model answers before a check, bad piece ids)
+and a CLI round trip. Manually verified (2026-11-12, headless Chrome over CDP): the topic page, intro, every piece
+step, resuming mid-piece, feedback, finish and results at 900 px and 380 px, light and dark. Manually verified (2026-11-10):
 library, path, topic, session and results views at desktop width and below the 520 px breakpoint; `lk serve`
 handing a session to a running `lk web`. Manually verified (2026-11-09): real fetch of a postgresql.org
 page, real Opus grading, UI screenshots at desktop and 360 px, light and dark.
@@ -449,6 +520,8 @@ page, real Opus grading, UI screenshots at desktop and 360 px, light and dark.
 - [ ] Move the remaining CLI handlers onto `service.py`.
 - [ ] Web app: placement quiz button (needs to know a placement bank exists), recall with reworded variants.
 - [ ] Concept-level prereqs across topics (a later node's concepts linked to the earlier concepts they build on).
+- [ ] Lesson: an optional "first guess" box on the question step (generation before the paragraph), stored, ungraded.
+- [ ] Lesson: allow one `lk-steps` / `lk-sequence` block in a piece (render the reader's visuals in the app).
 
 ## 13. Decision log
 
@@ -488,4 +561,10 @@ page, real Opus grading, UI screenshots at desktop and 360 px, light and dark.
 | 2026-11-09 | Placement writes no attempts or mistakes | Not knowing what you haven't studied isn't a mistake; it would pollute the mistakes log and recall extras |
 | 2026-11-09 | Module named `learnpath.py`, data in `<home>/paths/` | `lk/paths.py` already means file locations |
 | 2026-11-09 | Research is read as an HTML page rendered from research.md (`lk read`), with JSON visual blocks | Dense Markdown was tiring to read and processes were narrated, not shown; keeping Markdown as the source keeps agents, citations and editors working, and deterministic rendering keeps styling consistent and testable (the agent chooses what to draw, Python draws it) |
+| 2026-11-12 | Bite-sized mode: question → one paragraph → own words → small check, per piece; the default for new topics | The learner can't sustain a long read and a long quiz. One idea at a time keeps attention; asking before teaching and answering in their own words straight after are retrieval, not rereading |
+| 2026-11-12 | In bite mode the pieces are the gate (no final quiz) | The learner's choice: a long final quiz is the cost this mode removes. Short-term inflation is caught by spaced recall a day later, and the core own-words rule still blocks passing on recognition |
+| 2026-11-12 | Pieces stored as ordinary bank items (`role` recall/check), not a new item kind | Grading, answer hiding, mistakes, practice, recall and checkpoints work unchanged; the rules stay in one place |
+| 2026-11-12 | Each piece graded right after it, in the open session; `finish` applies the gate | Feedback while the paragraph is fresh is the point of the small check; grading the rest at finish keeps one gate decision |
+| 2026-11-12 | The own-words answer is closed-book, with a recorded peek | Copying the paragraph isn't recall; a hard block would frustrate a stuck learner, so a peek is allowed and shown in the results |
+| 2026-11-12 | Topics without `mode` are doc; switching is refused mid-round | Existing topics keep their flow; a half-finished round can't be stranded in the other mode's stages |
 | 2026-11-09 | Broken visual blocks block `research → read`; long paragraphs only warn | A broken diagram is a defect the learner would see; paragraph length is a style call the aggregator should fix but shouldn't stall the loop |

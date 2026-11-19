@@ -17,6 +17,9 @@ AUTO_TYPES = {"mcq", "multi", "order", "cloze"}
 LLM_TYPES = {"predict", "explain"}
 TYPES = AUTO_TYPES | LLM_TYPES
 FREE_RECALL = LLM_TYPES
+# Session modes whose answers decide mastery: the doc-mode gate quiz and the bite-mode lesson. Their items
+# are spent (never reused in a later gate) and seed the topic's spaced-recall cards.
+GATE_MODES = ("gate", "lesson")
 
 _BLANK = re.compile(r"\{\{(\d+)\}\}")
 
@@ -153,7 +156,7 @@ def import_items(slug: str, data, reviewed_by: str = "") -> list[str]:
 # ---------------------------------------------------------------- coverage
 
 def gate_attempted_ids(slug: str) -> set[str]:
-    return {a["item_id"] for a in topics.attempts(slug) if a.get("mode") == "gate"}
+    return {a["item_id"] for a in topics.attempts(slug) if a.get("mode") in GATE_MODES}
 
 
 def coverage(slug: str, cfg: dict | None = None) -> dict:

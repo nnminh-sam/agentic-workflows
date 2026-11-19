@@ -1,0 +1,1131 @@
+<!doctype html>
+<html lang="en" data-haise="doc" data-haise-version="3.1.0">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>learning-kit use cases</title>
+<script>
+/* haise: apply the saved theme before first paint (no flash) */
+(function(){try{var t=localStorage.getItem('haise.theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
+<style id="haise-shell-css">
+/* ===== haise-doc shell v3.1.0 — do not edit per document ===== */
+:root{
+  --bg:#f7f7f5; --panel:#ffffff; --panel-2:#f0efeb; --ink:#1d1d1b; --muted:#6b6a66; --line:#e2e0da;
+  --accent:#3b5bdb; --accent-soft:#e9edff; --ok:#2b8a3e; --ok-soft:#e7f5ea;
+  --bad:#c92a2a; --bad-soft:#ffebeb; --warn:#d9480f; --warn-soft:#fff0e6;
+  --info:#7048e8; --info-soft:#f0ebff;
+  --code:#f3f2ee; --hit:#ffe58a; --hit-cur:#ffb84d;
+  --c1:#3b5bdb; --c2:#d9480f; --c3:#2b8a3e; --c4:#7048e8; --c5:#0c8599;
+  --p1:#3b5bdb; --p1-soft:#e9edff; --p2:#0c8599; --p2-soft:#e3f6f8; --p3:#7048e8; --p3-soft:#f0ebff;
+  --p4:#d9480f; --p4-soft:#fff0e6; --p5:#2b8a3e; --p5-soft:#e7f5ea; --p6:#c2255c; --p6-soft:#fdebf1;
+  --sans:system-ui,-apple-system,"Segoe UI","Hiragino Sans","Noto Sans JP",Roboto,"Noto Sans",sans-serif;
+  --mono:ui-monospace,"Cascadia Code","JetBrains Mono",Consolas,Menlo,monospace;
+  --radius:10px; --topbar-h:52px; --nav-w:280px;
+  --fig-label:"Figure"; --tbl-label:"Table";
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#141413; --panel:#1d1d1b; --panel-2:#262624; --ink:#ecebe6; --muted:#a3a29c; --line:#34342f;
+    --accent:#91a7ff; --accent-soft:#1f2547; --ok:#69db7c; --ok-soft:#1b2e20;
+    --bad:#ff8787; --bad-soft:#3a1c1c; --warn:#ffa94d; --warn-soft:#3a2412;
+    --info:#b197fc; --info-soft:#271f45;
+    --code:#232321; --hit:#6b5a12; --hit-cur:#a8671a;
+    --c1:#91a7ff; --c2:#ffa94d; --c3:#69db7c; --c4:#b197fc; --c5:#66d9e8;
+    --p1:#91a7ff; --p1-soft:#1f2547; --p2:#66d9e8; --p2-soft:#10303a; --p3:#b197fc; --p3-soft:#271f45;
+    --p4:#ffa94d; --p4-soft:#3a2412; --p5:#69db7c; --p5-soft:#1b2e20; --p6:#f783ac; --p6-soft:#3a1825;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#141413; --panel:#1d1d1b; --panel-2:#262624; --ink:#ecebe6; --muted:#a3a29c; --line:#34342f;
+  --accent:#91a7ff; --accent-soft:#1f2547; --ok:#69db7c; --ok-soft:#1b2e20;
+  --bad:#ff8787; --bad-soft:#3a1c1c; --warn:#ffa94d; --warn-soft:#3a2412;
+  --info:#b197fc; --info-soft:#271f45;
+  --code:#232321; --hit:#6b5a12; --hit-cur:#a8671a;
+  --c1:#91a7ff; --c2:#ffa94d; --c3:#69db7c; --c4:#b197fc; --c5:#66d9e8;
+  --p1:#91a7ff; --p1-soft:#1f2547; --p2:#66d9e8; --p2-soft:#10303a; --p3:#b197fc; --p3-soft:#271f45;
+  --p4:#ffa94d; --p4-soft:#3a2412; --p5:#69db7c; --p5-soft:#1b2e20; --p6:#f783ac; --p6-soft:#3a1825;
+}
+:root:lang(vi){ --fig-label:"Hình"; --tbl-label:"Bảng"; }
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.65 var(--sans)}
+a{color:var(--accent)}
+[id]{scroll-margin-top:calc(var(--topbar-h) + 14px)}
+/* phase / series colour sets: add .p1 … .p6 to a step, chip, card or callout */
+.p1{--pc:var(--p1);--ps:var(--p1-soft)} .p2{--pc:var(--p2);--ps:var(--p2-soft)} .p3{--pc:var(--p3);--ps:var(--p3-soft)}
+.p4{--pc:var(--p4);--ps:var(--p4-soft)} .p5{--pc:var(--p5);--ps:var(--p5-soft)} .p6{--pc:var(--p6);--ps:var(--p6-soft)}
+
+/* --- progress + top bar --- */
+.progress{position:fixed;top:0;left:0;height:3px;width:0;background:var(--accent);z-index:60}
+.topbar{position:sticky;top:0;z-index:50;height:var(--topbar-h);display:flex;align-items:center;gap:8px;
+  padding:0 12px;background:var(--panel);border-bottom:1px solid var(--line)}
+.topbar .doc-title{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1 1 auto}
+.iconbtn{flex:none;display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:8px;
+  border:1px solid var(--line);background:var(--panel-2);color:var(--ink);cursor:pointer;font-size:15px;line-height:1}
+.iconbtn:hover{border-color:var(--muted)}
+.iconbtn svg{width:17px;height:17px;margin:0}
+.search{flex:0 1 400px;display:flex;align-items:center;gap:6px;min-width:0}
+.search .box{position:relative;flex:1;min-width:0}
+.search input{width:100%;height:34px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);
+  padding:0 10px 0 32px;font:inherit;font-size:.88rem}
+.search input:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.search .box svg{position:absolute;left:9px;top:9px;width:16px;height:16px;margin:0;color:var(--muted)}
+.search .count{font-size:.78rem;color:var(--muted);min-width:60px;text-align:center;white-space:nowrap}
+.search .iconbtn{width:28px;height:28px;font-size:12px}
+
+/* --- sidebar (table of contents) --- */
+.sidebar{position:fixed;top:var(--topbar-h);bottom:0;left:0;width:var(--nav-w);overflow-y:auto;z-index:40;
+  background:var(--bg);border-right:1px solid var(--line);padding:22px 12px 48px;transition:transform .2s ease}
+.sidebar h2{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 8px 10px}
+.toc ol{list-style:none;margin:0;padding:0}
+.toc ol ol{padding-left:10px;margin:2px 0 8px 14px;border-left:1px solid var(--line)}
+.toc a{display:flex;gap:6px;align-items:baseline;padding:4px 8px;border-radius:6px;color:var(--muted);
+  text-decoration:none;font-size:.87rem;line-height:1.45}
+.toc > ol > li > a{font-weight:500}
+.toc ol ol a{font-size:.82rem}
+.toc a:hover{background:var(--panel-2);color:var(--ink)}
+.toc a.active{background:var(--panel-2);color:var(--ink);font-weight:600}
+.toc .num{opacity:.75;font-variant-numeric:tabular-nums;flex:none}
+.toc .badge{margin-left:auto;flex:none;font-size:.7rem;font-weight:700;padding:0 6px;border-radius:999px;
+  background:var(--hit);color:var(--ink)}
+.toc .badge:empty{display:none}
+.backdrop{display:none}
+.page{margin-left:var(--nav-w);transition:margin .2s ease}
+body.nav-collapsed .sidebar{transform:translateX(-100%)}
+body.nav-collapsed .page{margin-left:0}
+@media (max-width:960px){
+  .page{margin-left:0}
+  .sidebar{transform:translateX(-100%);background:var(--panel);box-shadow:4px 0 24px rgba(0,0,0,.18)}
+  body.nav-open .sidebar{transform:none}
+  body.nav-open .backdrop{display:block;position:fixed;inset:var(--topbar-h) 0 0 0;background:rgba(0,0,0,.35);z-index:35}
+  .topbar .doc-title{display:none}
+  .search{flex:1 1 auto}
+}
+
+/* --- document body --- */
+.wrap{max-width:860px;margin:0 auto;padding:32px 24px 96px}
+.doc-head{margin:0 0 8px}
+.doc-head .eyebrow{margin:0 0 6px;font-size:.76rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.doc-head h1{font-size:1.9rem;line-height:1.25;margin:0 0 6px}
+.doc-head .sub{color:var(--muted);margin:0 0 14px}
+.meta{display:flex;flex-wrap:wrap;gap:6px;margin:0;padding:0;list-style:none}
+.meta li{background:var(--panel-2);border-radius:999px;padding:2px 11px;font-size:.8rem;color:var(--ink);min-width:0}
+.meta li b{color:var(--muted);font-weight:600;margin-right:5px}
+section{margin:40px 0 0}
+section > h2{font-size:1.4rem;line-height:1.3;margin:0 0 14px;padding-top:20px;border-top:1px solid var(--line)}
+h3{font-size:1.15rem;line-height:1.35;margin:32px 0 8px}
+h4{font-size:1rem;margin:20px 0 6px}
+h2 .num,h3 .num{color:var(--muted);font-weight:600;margin-right:.45em;font-variant-numeric:tabular-nums}
+p{margin:0 0 14px}
+ul,ol{margin:0 0 14px;padding-left:24px}
+li{margin:4px 0}
+li > ul,li > ol{margin-bottom:4px}
+code,.mono{font-family:var(--mono);font-size:.86em;background:var(--code);padding:1px 5px;border-radius:5px}
+pre{background:var(--code);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;overflow-x:auto;
+  font-size:.84rem;line-height:1.5;margin:0 0 14px}
+pre code{background:none;padding:0;font-size:inherit}
+p code,li code,td code,.card code{overflow-wrap:anywhere}
+blockquote{margin:0 0 16px;padding:2px 16px;border-left:3px solid var(--line);color:var(--muted)}
+.tbl{overflow-x:auto;margin:0 0 18px}
+table{width:100%;border-collapse:separate;border-spacing:0;font-size:.92rem;background:var(--panel);
+  border:1px solid var(--line);border-radius:var(--radius)}
+th,td{padding:8px 12px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}
+tr:last-child > td,tr:last-child > th{border-bottom:0}
+th{background:var(--panel-2);font-weight:600}
+tr:first-child > :first-child{border-top-left-radius:calc(var(--radius) - 1px)}
+tr:first-child > :last-child{border-top-right-radius:calc(var(--radius) - 1px)}
+tr:last-child > :first-child{border-bottom-left-radius:calc(var(--radius) - 1px)}
+tr:last-child > :last-child{border-bottom-right-radius:calc(var(--radius) - 1px)}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+tr.hl td{background:var(--warn-soft)}
+.small{font-size:.86rem;color:var(--muted)}
+.good{color:var(--ok);font-weight:600} .badv{color:var(--bad);font-weight:600}
+hr{border:none;border-top:1px solid var(--line);margin:28px 0}
+
+/* translated keyword + original */
+strong.kw{font-weight:700}
+.orig{color:var(--muted);font-size:.94em;white-space:nowrap}
+
+/* lead answer / callouts / tags / chips */
+.verdict{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;margin:0 0 18px;
+  box-shadow:0 1px 2px rgb(0 0 0 / .04)}
+.verdict .label{display:block;font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);margin-bottom:6px}
+.verdict p{margin:0 0 8px;font-size:1.05rem} .verdict > :last-child{margin-bottom:0}
+.callout{--cc:var(--pc,var(--accent));margin:0 0 18px;padding:12px 16px;border-radius:var(--radius);background:var(--panel);
+  border:1px solid var(--line);border-left:4px solid var(--cc)}
+.callout.ok,.callout.tip{--cc:var(--ok)} .callout.bad,.callout.myth{--cc:var(--bad)} .callout.warn{--cc:var(--warn)}
+.callout.info,.callout.interview{--cc:var(--info)} .callout.example{--cc:var(--p2)} .callout.tldr{--cc:var(--muted)}
+.callout > :first-child{margin-top:0} .callout > :last-child{margin-bottom:0}
+.kind{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--cc,var(--pc,var(--accent)));margin-right:6px}
+.callout .ct{font-weight:600;margin:0 0 6px}
+.tag{display:inline-block;font-size:.7rem;font-weight:700;padding:0 7px;border-radius:999px;border:1px solid currentColor;
+  margin-left:4px;vertical-align:1px;white-space:nowrap;line-height:1.6}
+.tag.sure{color:var(--ok)} .tag.infer{color:var(--warn)} .tag.open{color:var(--bad)}
+.sev{display:inline-block;font-size:.72rem;font-weight:700;padding:0 7px;border-radius:4px;white-space:nowrap}
+.sev.high{background:var(--bad-soft);color:var(--bad)} .sev.med{background:var(--warn-soft);color:var(--warn)} .sev.low{background:var(--panel-2);color:var(--muted)}
+.chip{display:inline-block;font-size:.75rem;font-weight:600;line-height:1.5;padding:1px 9px;border-radius:999px;margin-left:6px;
+  vertical-align:1px;white-space:nowrap;background:var(--ps,var(--panel-2));color:var(--pc,var(--muted))}
+.ex{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;margin:6px 0 8px;font-size:.88rem}
+.ex > .k{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.ex code{white-space:pre-wrap;word-break:break-word}
+
+/* findings list */
+ol.findings{counter-reset:f;list-style:none;padding:0;margin:0 0 18px}
+ol.findings > li{counter-increment:f;position:relative;padding:10px 4px 10px 48px;margin:0;border-bottom:1px solid var(--line)}
+ol.findings > li:last-child{border-bottom:none}
+ol.findings > li::before{content:counter(f);position:absolute;left:4px;top:9px;width:30px;height:30px;border-radius:50%;
+  background:var(--accent-soft);color:var(--accent);border:2px solid var(--accent);font-weight:700;font-size:.85rem;
+  display:flex;align-items:center;justify-content:center}
+
+/* cards, grids, stat tiles, step cards */
+.grid2,.grid3{display:grid;gap:14px;margin:0 0 18px}
+.grid2{grid-template-columns:1fr 1fr} .grid3{grid-template-columns:repeat(3,1fr)}
+.grid2>*,.grid3>*{min-width:0}
+.card{border:1px solid var(--line);border-top:3px solid var(--pc,var(--line));border-radius:var(--radius);padding:12px 14px;background:var(--panel)}
+.card h4{margin:0 0 6px}
+.card > :last-child{margin-bottom:0}
+.card.ok{--pc:var(--ok)} .card.bad{--pc:var(--bad)} .card.warn{--pc:var(--warn)} .card.info{--pc:var(--info)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:0 0 18px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px}
+.stat .v{display:block;font-size:1.6rem;font-weight:700;line-height:1.2;font-variant-numeric:tabular-nums}
+.stat .k{display:block;font-size:.82rem;color:var(--muted)}
+.stat.ok .v{color:var(--ok)} .stat.bad .v{color:var(--bad)} .stat.warn .v{color:var(--warn)}
+ol.steps{list-style:none;padding:0;margin:0 0 18px;counter-reset:s;position:relative}
+ol.steps::before{content:"";position:absolute;left:17px;top:10px;bottom:10px;width:2px;background:var(--line)}
+ol.steps > li{counter-increment:s;position:relative;margin:0 0 12px 52px;padding:10px 14px;background:var(--panel);
+  border:1px solid var(--line);border-top:3px solid var(--pc,var(--accent));border-radius:var(--radius);font-size:.96rem}
+ol.steps > li::before{content:counter(s);position:absolute;left:-52px;top:-3px;width:36px;height:36px;border-radius:50%;
+  background:var(--ps,var(--accent-soft));color:var(--pc,var(--accent));border:2px solid var(--pc,var(--accent));
+  font-weight:700;font-size:.92rem;display:flex;align-items:center;justify-content:center;z-index:1}
+ol.steps > li.ok{--pc:var(--ok);--ps:var(--ok-soft)} ol.steps > li.bad{--pc:var(--bad);--ps:var(--bad-soft)}
+ol.steps > li.warn{--pc:var(--warn);--ps:var(--warn-soft)}
+ol.steps > li > :last-child{margin-bottom:0}
+
+/* phase focus: hover (or tap to pin) anything with data-phase="…" to light up that phase in every step card and diagram */
+[data-phase]{transition:opacity .15s,box-shadow .15s}
+body.focus-on main [data-phase]:not(.on){opacity:.22}
+main :not(svg *)[data-phase]{cursor:pointer}
+ol.steps > li.on,.card.on{box-shadow:0 0 0 2px var(--pc,var(--accent))}
+.phase-key{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 16px;font-size:.82rem;color:var(--muted)}
+.phase-key .chip{margin-left:0}
+
+/* collapsible deep dives */
+details.more{border:1px solid var(--line);border-radius:var(--radius);margin:0 0 18px;background:var(--panel)}
+details.more > summary{cursor:pointer;padding:10px 14px;font-weight:600;list-style:none}
+details.more > summary::-webkit-details-marker{display:none}
+details.more > summary::before{content:"▸";display:inline-block;width:1.1em;color:var(--muted);transition:transform .15s}
+details.more[open] > summary::before{transform:rotate(90deg)}
+details.more > .body{padding:2px 16px 14px}
+details.more > .body > :last-child{margin-bottom:0}
+
+/* figures (diagrams, charts) */
+figure.fig{margin:4px 0 24px;padding:14px 14px 10px;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel)}
+figure.fig svg{max-width:100%;height:auto;display:block;margin:4px auto}
+figure.fig svg text{font-family:var(--sans)}
+figure.fig .grid2,figure.fig .grid3{margin-bottom:8px}
+main{counter-reset:fig tbl}
+figure.fig > figcaption{font-size:.86rem;color:var(--muted);margin-top:8px}
+figure.fig > figcaption::before{counter-increment:fig;content:var(--fig-label) " " counter(fig) " — ";font-weight:700;color:var(--ink)}
+.tbl > .cap{font-size:.86rem;color:var(--muted);margin:0 0 6px}
+.tbl > .cap::before{counter-increment:tbl;content:var(--tbl-label) " " counter(tbl) " — ";font-weight:700;color:var(--ink)}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:.82rem;color:var(--muted);margin:4px 0 0}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+figure.fig img{max-width:100%;height:auto;display:block}
+
+/* zoom viewer: click a figure image or diagram to open it full screen */
+.zoomable{cursor:zoom-in;transition:outline-color .15s}
+.zoomable:hover,.zoomable:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:6px}
+.zoom-ov{position:fixed;inset:0;z-index:100;display:none;overflow:hidden;touch-action:none;cursor:grab;
+  background:color-mix(in srgb,var(--bg) 94%,transparent);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.zoom-ov.on{display:block}
+.zoom-ov.drag{cursor:grabbing}
+.zoom-ov .zoom-item{position:absolute;left:0;top:0;max-width:none!important;max-height:none!important;margin:0!important;
+  border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);box-shadow:0 10px 40px rgb(0 0 0 / .3);
+  user-select:none;-webkit-user-drag:none;cursor:inherit}
+.zoom-bar{position:absolute;top:12px;right:12px;z-index:1;display:flex;align-items:center;gap:6px;padding:4px;
+  border:1px solid var(--line);border-radius:var(--radius);background:var(--panel)}
+.zoom-bar .iconbtn{min-width:34px;height:34px;font-size:.95rem}
+.zoom-pct{min-width:52px;text-align:center;font-size:.82rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.zoom-cap{position:absolute;left:50%;bottom:12px;z-index:1;transform:translateX(-50%);width:max-content;max-width:min(920px,calc(100vw - 32px));
+  padding:8px 14px;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);color:var(--muted);font-size:.85rem;
+  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.zoom-cap:empty{display:none}
+.zoom-cap b{color:var(--ink)}
+
+/* citations */
+a.cite{display:inline-block;font:600 .66rem/1 var(--mono);vertical-align:2px;padding:3px 5px;margin-left:3px;border-radius:5px;
+  background:var(--panel-2);color:var(--muted);text-decoration:none;white-space:nowrap}
+a.cite + a.cite{margin-left:2px}
+a.cite:hover{color:var(--accent)}
+a.cite.broken{background:var(--bad-soft);color:var(--bad)}
+a.cite:target{outline:2px solid var(--accent)}
+ol.sources{list-style:none;padding:0;margin:0 0 14px}
+ol.sources > li{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px 16px;margin:0 0 10px}
+ol.sources > li:target{outline:2px solid var(--accent)}
+.src-head{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline}
+.src-id{font:700 .8rem var(--mono);color:var(--accent);font-variant-numeric:tabular-nums}
+.src-title{font-weight:600}
+.src-type{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:1px 7px;border-radius:999px;
+  background:var(--panel-2);color:var(--muted)}
+.src-loc{font-size:.84rem;margin:6px 0;color:var(--muted);overflow-wrap:anywhere}
+blockquote.src-quote{margin:8px 0;padding:6px 12px;border-left:3px solid var(--line);background:var(--bg);color:var(--ink);font-size:.88rem;border-radius:0 6px 6px 0}
+blockquote.src-quote .tr{display:block;color:var(--muted);margin-top:4px}
+.src-note{font-size:.84rem;color:var(--muted)}
+.backrefs{font-size:.8rem;color:var(--muted);margin-top:4px}
+.backrefs a{margin-right:6px}
+
+/* search hits */
+mark.hit{background:var(--hit);color:inherit;border-radius:2px;padding:0 1px}
+mark.hit.cur{background:var(--hit-cur);outline:2px solid var(--warn)}
+
+footer.doc-foot{color:var(--muted);font-size:.8rem;margin-top:56px;padding-top:14px;border-top:1px solid var(--line)}
+@media (max-width:700px){
+  body{font-size:16px}
+  .wrap{padding:24px 16px 80px}
+  .grid2,.grid3{grid-template-columns:1fr}
+  .doc-head h1{font-size:1.55rem}
+  ol.steps > li{margin-left:46px} ol.steps > li::before{left:-46px}
+}
+@media print{
+  .topbar,.sidebar,.backdrop,.progress,.zoom-ov{display:none!important}
+  .page{margin:0!important}
+  figure.fig,ol.steps > li,.callout{break-inside:avoid-page}
+  details.more{border:none} details.more > .body{display:block}
+  mark.hit{background:none}
+}
+</style>
+</head>
+<body>
+<div class="progress" id="haise-progress"></div>
+
+<header class="topbar no-search">
+  <button class="iconbtn" id="haise-nav-btn" type="button" aria-controls="haise-sidebar">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+  </button>
+  <div class="doc-title">learning-kit use cases</div>
+  <div class="search" role="search">
+    <div class="box">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <input id="haise-q" type="search" autocomplete="off" spellcheck="false">
+    </div>
+    <span class="count" id="haise-count" aria-live="polite"></span>
+    <button class="iconbtn" id="haise-prev" type="button">▲</button>
+    <button class="iconbtn" id="haise-next" type="button">▼</button>
+  </div>
+  <button class="iconbtn" id="haise-reload" type="button">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg>
+  </button>
+  <button class="iconbtn" id="haise-theme" type="button"></button>
+</header>
+
+<aside class="sidebar no-search" id="haise-sidebar">
+  <h2 id="haise-toc-label"></h2>
+  <nav class="toc" id="haise-toc"></nav>
+</aside>
+<div class="backdrop" id="haise-backdrop"></div>
+
+<div class="page">
+<main id="content" class="wrap">
+<!-- ===================== DOCUMENT CONTENT START ===================== -->
+<header class="doc-head">
+  <p class="eyebrow">Software design document · 2 of 5 · Use cases</p>
+  <h1>learning-kit use cases</h1>
+  <p class="sub">Who uses learning-kit, what each of them can do, which front door offers each action, and the step-by-step flow of the main use cases.</p>
+  <ul class="meta">
+    <li><b>Updated</b>2026-11-11</li>
+    <li><b>Scope</b><code>agentic-workflows/learning-kit</code> · branch <code>feat/learning-kit</code> @ <code>5663e54</code></li>
+    <li><b>Doc set</b><a href="sdd-1-architecture.html">1 Architecture</a> · <a href="sdd-2-use-cases.html">2 Use cases</a> · <a href="sdd-3-sequences.html">3 Sequences</a> · <a href="sdd-4-data-model.html">4 Data model</a> · <a href="sdd-5-interfaces.html">5 Interfaces</a></li>
+  </ul>
+</header>
+
+<!-- The outline is chosen per document (references/writing-guide.md §1).
+     One top-level <section id="..."><h2>…</h2>…</section> per part, in reading order.
+     If the doc cites anything, the last section is <section id="sources"> with <ol class="sources">. -->
+<section id="point">
+  <h2>The use cases at a glance</h2>
+  <div class="verdict">
+    <span class="label">In short</span>
+    <p>There is one human actor, the <strong>learner</strong>. Every use case starts with them, either directly or through an agent acting for them. The 22 use cases fall into five groups: the <strong>topic loop</strong>, <strong>practice and recall</strong>, <strong>learning paths</strong>, the <strong>library and agents</strong>, and <strong>operations</strong>. Anything that needs judgement starts in Claude Code. The browser covers reading and quizzing. MCP agents can read everything, but they can only run no-stakes quizzes. <a class="cite" href="#src-1">S1</a><a class="cite" href="#src-2">S2</a></p>
+  </div>
+  <div class="stats">
+    <div class="stat"><span class="v">22</span><span class="k">use cases</span></div>
+    <div class="stat"><span class="v">1</span><span class="k">human actor</span></div>
+    <div class="stat"><span class="v">3</span><span class="k">external systems: grader, web, MCP client</span></div>
+    <div class="stat"><span class="v">5</span><span class="k">quiz modes</span></div>
+  </div>
+</section>
+
+<section id="actors">
+  <h2>Actors</h2>
+  <p>The system boundary is <strong>learning-kit as installed</strong>: the five skills, their subagents and the <code>lk</code> core. Subagents are inside the boundary because the skills spawn and control them. They aren't independent actors. <a class="cite" href="#src-3">S3</a></p>
+  <div class="tbl">
+    <p class="cap">Primary and secondary actors</p>
+    <table>
+      <tr><th>Actor</th><th>Kind</th><th>Goal / role</th><th>Talks to the system through</th></tr>
+      <tr><td><strong>Learner</strong></td><td>Primary, human</td><td>Build lasting, usable knowledge of a topic or a broad goal</td><td>Claude Code slash commands, browser</td></tr>
+      <tr><td><strong>MCP client agent</strong></td><td>Primary, software (acts for the learner)</td><td>Read the learner's data; run practice or recall quizzes in chat</td><td><code>lk mcp</code> tools and resources <a class="cite" href="#src-2">S2</a></td></tr>
+      <tr><td><strong>Grader</strong> (<code>claude -p</code>)</td><td>Secondary, software</td><td>Judge each rubric point of an explain/predict answer</td><td>Subprocess called by <code>grader.py</code> <a class="cite" href="#src-4">S4</a></td></tr>
+      <tr><td><strong>Web sources</strong></td><td>Secondary, external</td><td>Supply research material (untrusted)</td><td><code>lk source fetch</code>, or WebFetch then <code>lk source add</code></td></tr>
+    </table>
+  </div>
+</section>
+
+<section id="diagram">
+  <h2>Use case diagram</h2>
+  <figure class="fig">
+  <svg viewBox="0 0 900 690" role="img" aria-label="Use case diagram of learning-kit">
+    <g font-size="13" fill="var(--ink)">
+      <rect x="190" y="10" width="520" height="665" rx="14" fill="none" stroke="var(--ink)" stroke-width="1.4"/>
+      <text x="450" y="30" text-anchor="middle" font-weight="700">learning-kit (skills + subagents + lk core)</text>
+
+      <!-- groups -->
+      <g data-phase="loop">
+        <rect x="205" y="40" width="490" height="196" rx="10" fill="var(--p1-soft)" stroke="var(--p1)"/>
+        <text x="215" y="60" font-weight="600" fill="var(--p1)">Topic loop</text>
+        <g font-size="12">
+          <rect x="215" y="72" width="230" height="26" rx="13" fill="var(--panel)" stroke="var(--p1)"/><text x="330" y="90" text-anchor="middle">UC-01 Start / resume a topic</text>
+          <rect x="455" y="72" width="230" height="26" rx="13" fill="var(--panel)" stroke="var(--p1)"/><text x="570" y="90" text-anchor="middle">UC-02 Capture prior knowledge</text>
+          <rect x="215" y="104" width="230" height="26" rx="13" fill="var(--panel)" stroke="var(--p1)"/><text x="330" y="122" text-anchor="middle">UC-03 Research a topic</text>
+          <rect x="455" y="104" width="230" height="26" rx="13" fill="var(--panel)" stroke="var(--p1)"/><text x="570" y="122" text-anchor="middle">UC-04 Read the research</text>
+          <rect x="215" y="136" width="230" height="26" rx="13" fill="var(--panel)" stroke="var(--p1)"/><text x="330" y="154" text-anchor="middle">UC-05 Generate the quiz</text>
+          <rect x="455" y="136" width="230" height="26" rx="13" fill="var(--panel)" stroke="var(--p1)"/><text x="570" y="154" text-anchor="middle">UC-06 Take a gate round</text>
+          <rect x="215" y="168" width="230" height="26" rx="13" fill="var(--panel)" stroke="var(--p1)"/><text x="330" y="186" text-anchor="middle">UC-07 Relearn missed concepts</text>
+          <rect x="455" y="168" width="230" height="26" rx="13" fill="var(--panel)" stroke="var(--p1)"/><text x="570" y="186" text-anchor="middle">UC-08 Run a lab (deep)</text>
+          <rect x="215" y="200" width="230" height="26" rx="13" fill="var(--panel)" stroke="var(--p1)"/><text x="330" y="218" text-anchor="middle">UC-09 Write &amp; review the note</text>
+          <rect x="455" y="200" width="230" height="26" rx="13" fill="var(--panel)" stroke="var(--p1)"/><text x="570" y="218" text-anchor="middle">UC-10 Extend a finished topic</text>
+        </g>
+      </g>
+      <g data-phase="recall">
+        <rect x="205" y="250" width="490" height="100" rx="10" fill="var(--p2-soft)" stroke="var(--p2)"/>
+        <text x="215" y="270" font-weight="600" fill="var(--p2)">Practice &amp; recall</text>
+        <g font-size="12">
+          <rect x="215" y="282" width="230" height="26" rx="13" fill="var(--panel)" stroke="var(--p2)"/><text x="330" y="300" text-anchor="middle">UC-11 Practice quiz</text>
+          <rect x="455" y="282" width="230" height="26" rx="13" fill="var(--panel)" stroke="var(--p2)"/><text x="570" y="300" text-anchor="middle">UC-12 Spaced recall session</text>
+          <rect x="215" y="314" width="230" height="26" rx="13" fill="var(--panel)" stroke="var(--p2)"/><text x="330" y="332" text-anchor="middle">UC-13 Review the mistakes log</text>
+        </g>
+      </g>
+      <g data-phase="paths">
+        <rect x="205" y="364" width="490" height="100" rx="10" fill="var(--p3-soft)" stroke="var(--p3)"/>
+        <text x="215" y="384" font-weight="600" fill="var(--p3)">Learning paths</text>
+        <g font-size="12">
+          <rect x="215" y="396" width="230" height="26" rx="13" fill="var(--panel)" stroke="var(--p3)"/><text x="330" y="414" text-anchor="middle">UC-14 Plan a learning path</text>
+          <rect x="455" y="396" width="230" height="26" rx="13" fill="var(--panel)" stroke="var(--p3)"/><text x="570" y="414" text-anchor="middle">UC-15 Placement &amp; decisions</text>
+          <rect x="215" y="428" width="230" height="26" rx="13" fill="var(--panel)" stroke="var(--p3)"/><text x="330" y="446" text-anchor="middle">UC-16 Walk the path</text>
+          <rect x="455" y="428" width="230" height="26" rx="13" fill="var(--panel)" stroke="var(--p3)"/><text x="570" y="446" text-anchor="middle">UC-17 Milestone checkpoint</text>
+        </g>
+      </g>
+      <g data-phase="library">
+        <rect x="205" y="478" width="490" height="100" rx="10" fill="var(--p4-soft)" stroke="var(--p4)"/>
+        <text x="215" y="498" font-weight="600" fill="var(--p4)">Library &amp; agents</text>
+        <g font-size="12">
+          <rect x="215" y="510" width="230" height="26" rx="13" fill="var(--panel)" stroke="var(--p4)"/><text x="330" y="528" text-anchor="middle">UC-18 Browse the library (web)</text>
+          <rect x="455" y="510" width="230" height="26" rx="13" fill="var(--panel)" stroke="var(--p4)"/><text x="570" y="528" text-anchor="middle">UC-19 Quiz in chat (MCP)</text>
+          <rect x="215" y="542" width="230" height="26" rx="13" fill="var(--panel)" stroke="var(--p4)"/><text x="330" y="560" text-anchor="middle">UC-20 Browse data (MCP)</text>
+        </g>
+      </g>
+      <g data-phase="ops">
+        <rect x="205" y="592" width="490" height="70" rx="10" fill="var(--p5-soft)" stroke="var(--p5)"/>
+        <text x="215" y="612" font-weight="600" fill="var(--p5)">Operations</text>
+        <g font-size="12">
+          <rect x="215" y="626" width="230" height="26" rx="13" fill="var(--panel)" stroke="var(--p5)"/><text x="330" y="644" text-anchor="middle">UC-21 Install &amp; configure</text>
+          <rect x="455" y="626" width="230" height="26" rx="13" fill="var(--panel)" stroke="var(--p5)"/><text x="570" y="644" text-anchor="middle">UC-22 Recover failed grading</text>
+        </g>
+      </g>
+
+      <!-- learner -->
+      <g stroke="var(--ink)" stroke-width="1.6" fill="none">
+        <circle cx="80" cy="300" r="13"/><line x1="80" y1="313" x2="80" y2="350"/><line x1="58" y1="326" x2="102" y2="326"/>
+        <line x1="80" y1="350" x2="62" y2="378"/><line x1="80" y1="350" x2="98" y2="378"/>
+      </g>
+      <text x="80" y="398" text-anchor="middle" font-weight="600">Learner</text>
+      <g stroke="var(--muted)" stroke-width="1.3">
+        <line x1="104" y1="326" x2="205" y2="138"/><line x1="104" y1="328" x2="205" y2="300"/>
+        <line x1="104" y1="330" x2="205" y2="414"/><line x1="104" y1="332" x2="205" y2="528"/><line x1="104" y1="334" x2="205" y2="626"/>
+      </g>
+
+      <!-- secondary / software actors -->
+      <rect x="740" y="60" width="140" height="56" rx="8" fill="var(--panel)" stroke="var(--line)" stroke-dasharray="5 4"/>
+      <text x="810" y="84" text-anchor="middle" font-size="12" fill="var(--muted)">«external»</text><text x="810" y="102" text-anchor="middle" font-weight="600">Web sources</text>
+      <rect x="740" y="296" width="140" height="56" rx="8" fill="var(--panel)" stroke="var(--line)" stroke-dasharray="5 4"/>
+      <text x="810" y="320" text-anchor="middle" font-size="12" fill="var(--muted)">«system»</text><text x="810" y="338" text-anchor="middle" font-weight="600">Grader claude -p</text>
+      <rect x="740" y="500" width="140" height="56" rx="8" fill="var(--panel)" stroke="var(--line)" stroke-dasharray="5 4"/>
+      <text x="810" y="524" text-anchor="middle" font-size="12" fill="var(--muted)">«agent»</text><text x="810" y="542" text-anchor="middle" font-weight="600">MCP client</text>
+      <g stroke="var(--muted)" stroke-width="1.3">
+        <line x1="740" y1="88" x2="695" y2="118"/><line x1="740" y1="100" x2="695" y2="400"/>
+        <line x1="740" y1="318" x2="695" y2="160"/><line x1="740" y1="322" x2="695" y2="296"/>
+        <line x1="740" y1="326" x2="695" y2="440"/><line x1="740" y1="330" x2="695" y2="520"/>
+        <line x1="740" y1="528" x2="695" y2="540"/>
+      </g>
+    </g>
+  </svg>
+  <figcaption>Lines go to a whole group to keep the picture readable. The grader takes part in every use case that grades free recall: gate (UC-06), practice (UC-11), recall (UC-12), placement (UC-15), checkpoint (UC-17) and chat quizzes (UC-19). Web sources feed topic research (UC-03) and curriculum research for paths (UC-14). <a class="cite" href="#src-1">S1</a><a class="cite" href="#src-2">S2</a></figcaption>
+  </figure>
+</section>
+
+<section id="matrix">
+  <h2>Which front door offers which use case</h2>
+  <p>The same data is reachable from three places, but each one is allowed to do different things. The rule: actions that need judgement, or that change a topic's stage or a path's plan, start in Claude Code. The only exception is the gate round, which the web app can start after a confirm. <a class="cite" href="#src-5">S5</a><a class="cite" href="#src-2">S2</a></p>
+  <div class="tbl">
+    <p class="cap">✓ can start it · view = shows the data or the next command · ✗ not offered <a class="cite" href="#src-5">S5</a><a class="cite" href="#src-6">S6</a><a class="cite" href="#src-2">S2</a></p>
+    <table>
+      <tr><th>Use case</th><th>Claude Code skill / CLI</th><th>Web app</th><th>MCP</th></tr>
+      <tr><td>UC-01–05 topic stages up to the quiz</td><td class="good">✓ <code>/learn</code></td><td>view (stage, docs, the command)</td><td>view (<code>get_topic</code>, <code>read_doc</code>)</td></tr>
+      <tr><td>UC-06 Gate round</td><td class="good">✓ <code>/learn</code>, <code>/quiz</code></td><td class="good">✓ "Gate round" button, with a confirm</td><td class="badv">✗ refused: gate stays in the browser</td></tr>
+      <tr><td>UC-07 Relearn · UC-08 Lab · UC-10 Extend</td><td class="good">✓ <code>/learn</code></td><td>view (reteach docs)</td><td class="badv">✗</td></tr>
+      <tr><td>UC-09 Note</td><td class="good">✓ <code>/note</code></td><td>view (note, note review)</td><td>view</td></tr>
+      <tr><td>UC-11 Practice quiz</td><td class="good">✓ <code>/quiz --practice</code></td><td class="good">✓ "Practice" (10 random items)</td><td class="good">✓ <code>start_quiz kind=practice</code></td></tr>
+      <tr><td>UC-12 Spaced recall</td><td class="good">✓ <code>/recall</code> (reworded)</td><td class="good">✓ "Start recall" (not reworded)</td><td class="good">✓ <code>start_quiz kind=recall</code> (not reworded)</td></tr>
+      <tr><td>UC-13 Mistakes log</td><td><code>mistakes.md</code> in the data home</td><td class="good">✓ <code>#/mistakes</code></td><td class="good">✓ <code>mistakes</code></td></tr>
+      <tr><td>UC-14 Plan · UC-16 Walk the path</td><td class="good">✓ <code>/path</code></td><td>view (<code>#/path/&lt;slug&gt;</code> + next step)</td><td>view (<code>get_path</code> + <code>next</code>)</td></tr>
+      <tr><td>UC-15 Placement quiz</td><td class="good">✓ <code>/path</code> → <code>lk serve --placement</code></td><td class="badv">✗ no button (the API accepts it)</td><td class="badv">✗</td></tr>
+      <tr><td>UC-17 Checkpoint</td><td class="good">✓ <code>/path</code></td><td class="good">✓ "Start checkpoint" when one is due</td><td class="badv">✗</td></tr>
+      <tr><td>UC-18 Browse library</td><td>—</td><td class="good">✓</td><td>—</td></tr>
+      <tr><td>UC-19 / UC-20 MCP</td><td>—</td><td>—</td><td class="good">✓</td></tr>
+      <tr><td>UC-21 Install</td><td class="good">✓ <code>lk install</code></td><td class="badv">✗</td><td class="badv">✗</td></tr>
+      <tr><td>UC-22 Recover grading</td><td class="good">✓ <code>lk grade</code> (retry, <code>--pending</code>, <code>--apply</code>)</td><td class="good">✓ "Retry grading"</td><td>re-run <code>finish_quiz</code></td></tr>
+    </table>
+  </div>
+  <div class="callout info"><span class="kind">Note</span>No front door can <strong>retake an old session as-is</strong>. A graded session opens as read-only results. "Practice" always samples a new set from the bank, and a gate round only uses items that no earlier gate round has used. <a class="cite" href="#src-7">S7</a><a class="cite" href="#src-5">S5</a></div>
+</section>
+
+<section id="loop-specs">
+  <h2>Topic loop use cases</h2>
+  <p>A topic moves through fixed stages. Each use case below is one stage, or a branch off it. <code>lk</code> refuses a move whose guard isn't met, so the order can't be skipped by accident. <a class="cite" href="#src-8">S8</a></p>
+
+  <h3 id="uc01">UC-01 Start or resume a topic</h3>
+  <div class="grid2">
+    <div class="card p1"><h4>Goal · trigger</h4>Pick up a topic wherever it is. Trigger: <code>/learn &lt;topic&gt; [--new] [--extend] [--depth aware|use|deep]</code>.</div>
+    <div class="card"><h4>Postcondition</h4>The topic exists, and the stage that comes next is either done or waiting on the learner with a clear instruction.</div>
+  </div>
+  <ol class="steps">
+    <li class="p1"><strong>Resolve the slug</strong><p>The skill matches the name to an existing topic (<code>lk topic list --json</code>). If there is none, it creates one with <code>lk topic new</code>.</p></li>
+    <li class="p1"><strong>Size check</strong><p>If the name is a whole field ("system design") and not a path node, the skill asks once: build a path (UC-14), narrow the topic, or do an <code>aware</code> overview.</p></li>
+    <li class="p1"><strong>Path context</strong><p><code>lk path for-topic</code> gives the node's goal, focus, outcomes and prereqs. These steer research and the quiz.</p></li>
+    <li class="p1"><strong>Dispatch on stage</strong><p><code>lk topic status</code> → run that stage → <code>lk topic advance</code> → carry on in the same turn until a stage needs the learner (read, quiz, lab, note).</p></li>
+  </ol>
+  <p class="small"><strong>Exceptions:</strong> <code>--new</code> on an existing topic resumes it. <code>--extend</code> works only from <code>scheduled</code>. <a class="cite" href="#src-3">S3</a></p>
+
+  <h3 id="uc02">UC-02 Capture prior knowledge</h3>
+  <p>Before any teaching, the learner says what they already believe, plus 3 questions and 1 prediction (for <code>--new</code>: only the questions and the prediction). The skill writes their words verbatim to <code>prior.md</code> and corrects nothing. <strong>Guard to move on:</strong> <code>prior.md</code> exists and has at least 20 characters. <a class="cite" href="#src-3">S3</a><a class="cite" href="#src-8">S8</a></p>
+
+  <h3 id="uc03">UC-03 Research a topic</h3>
+  <ol class="steps">
+    <li class="p1"><strong>Plan facets</strong><p>2–5 facets come from the prior questions and the depth (a path node starts from its <code>focus</code>). The skill reuses sources first (<code>lk source search</code>).</p></li>
+    <li class="p1"><strong>Collect in parallel</strong><p>One <code>collect</code> subagent per facet saves pages with <code>lk source fetch</code>. If a page can't be fetched: WebFetch, then <code>lk source add --file</code>.</p></li>
+    <li class="p1"><strong>Aggregate</strong><p>An <code>aggregate</code> subagent writes <code>research.md</code> (every claim cites <code>[S####]</code>, with visual blocks for processes) and a draft concept list.</p></li>
+    <li class="p1"><strong>Merge and check</strong><p><code>lk concepts merge</code> adds new concepts as <code>new</code>. <code>lk read --check</code> must report no broken visual blocks.</p></li>
+  </ol>
+  <p class="small"><strong>Guard to move on (<code>read</code>):</strong> <code>research.md</code> is at least 200 characters, at least one target concept exists, and there are no visual-block errors. <a class="cite" href="#src-8">S8</a></p>
+
+  <h3 id="uc04">UC-04 Read the research</h3>
+  <p><code>lk read &lt;slug&gt;</code> renders <code>research.md</code> into <code>research.html</code> (diagrams, step cards, source chips, reading time) and opens it. The learner asks questions in chat. Each one and its short answer are appended to <code>qa.md</code>, and later become quiz material. The same page is served at <code>/read/&lt;slug&gt;</code> in the web app. <a class="cite" href="#src-3">S3</a></p>
+
+  <h3 id="uc05">UC-05 Generate the quiz</h3>
+  <ol class="steps">
+    <li class="p1"><strong>Author</strong><p>A <code>quiz_author</code> subagent drafts items for the target concepts. Its inputs include the prior beliefs and recent mistakes, which make good distractors. About half the items are free recall, and every core concept gets at least one.</p></li>
+    <li class="p1"><strong>Validate</strong><p><code>lk quiz validate</code> checks the schema per type, that sources are cited, and that an explanation is present.</p></li>
+    <li class="p1"><strong>Fresh review</strong><p>A separate <code>quiz_review</code> subagent sees only the draft and the snapshots. It writes a corrected file.</p></li>
+    <li class="p1"><strong>Import</strong><p><code>lk quiz import --reviewed-by opus</code> assigns ids <code>q0001…</code>, the round and the version.</p></li>
+  </ol>
+  <p class="small"><strong>Guard to move on (<code>quiz</code>):</strong> every target concept has ≥ 2 fresh items (1 at <code>aware</code>), and every core concept has ≥ 1 fresh explain/predict item. <a class="cite" href="#src-9">S9</a></p>
+
+  <h3 id="uc06">UC-06 Take a gate round</h3>
+  <div class="grid2">
+    <div class="card p1"><h4>Preconditions</h4>Stage is <code>quiz</code>. Coverage has no issues. Fewer than 3 gate rounds today, or an open gate session exists (it is resumed).</div>
+    <div class="card p1"><h4>Postconditions</h4>Attempts and mistakes are logged. Concepts are marked <code>mastered</code> or <code>learning</code>. The stage moves to <code>note</code>, <code>lab</code>, <code>scheduled</code> or <code>reteach</code>.</div>
+  </div>
+  <ol class="steps">
+    <li class="p1"><strong>Open</strong><p><code>/quiz</code> or <code>/learn</code> runs <code>lk serve --topic</code> in the background, or the learner presses "Gate round" in the web app. The session takes fresh items for each target concept, easy to hard, with concepts interleaved.</p></li>
+    <li class="p1"><strong>Answer</strong><p>Each answer has a confidence rating (guessing / unsure / sure) or "I don't know", and is saved on every Next. A reload resumes the quiz.</p></li>
+    <li class="p1"><strong>Grade</strong><p>mcq/multi/order/cloze are graded by script. explain/predict go to the grader in batches of 8.</p></li>
+    <li class="p1"><strong>Gate</strong><p>Pass = overall ≥ 80% <em>and</em> every core concept has an explain/predict answer ≥ 70%. Concepts that pass on their own are mastered even when the round fails.</p></li>
+    <li class="p1"><strong>Report</strong><p>The results page shows per-concept bars, each answer against the expected one, and the next step. Closing the session ends <code>lk serve</code>, and the skill reports in at most 6 lines.</p></li>
+  </ol>
+  <p class="small"><strong>Exceptions:</strong> grader failure → <code>grade_failed</code> (UC-22). Daily cap reached → refused with "sleep on it". Not enough fresh items → refused with the coverage issues. <a class="cite" href="#src-10">S10</a><a class="cite" href="#src-11">S11</a></p>
+
+  <h3 id="uc07">UC-07 Relearn missed concepts</h3>
+  <p>After a failed gate (or when recall lapses a concept on a scheduled topic), the stage is <code>reteach</code> and <code>round</code> goes up by 1. A <code>reteach</code> subagent writes <code>reteach/round-N.md</code> aimed only at what was missed. The learner reads it, then UC-05 runs again for the remaining targets with <strong>fresh</strong> items. A relearn that passes goes straight back to <code>scheduled</code>. <a class="cite" href="#src-8">S8</a><a class="cite" href="#src-12">S12</a></p>
+
+  <h3 id="uc08">UC-08 Run a lab (deep topics)</h3>
+  <p>At depth <code>deep</code>, a passed gate leads to <code>lab</code>. The skill designs one small experiment, and the learner writes their prediction before running it. <code>lab/RESULTS.md</code> records prediction vs actual. <strong>Guard to move on:</strong> <code>lab/RESULTS.md</code> exists. <a class="cite" href="#src-8">S8</a></p>
+
+  <h3 id="uc09">UC-09 Write and review the own-words note</h3>
+  <ol class="steps">
+    <li class="p1"><strong>Capture</strong><p><code>/note</code> saves the note typed, dictated, or from the editor. Only dictation slips are fixed, and earlier notes are kept as <code>note.vN.md</code>.</p></li>
+    <li class="p1"><strong>Review</strong><p>A fresh <code>note_review</code> subagent scores 5 criteria from 0 to 2: correctness, coverage, own_words, when_not, connections. It checks hardest on the gate's weak concepts.</p></li>
+    <li class="p1"><strong>Record</strong><p><code>lk note record</code> computes the result. Pass = total ≥ 8, correctness = 2, and no criterion at 0. On a pass the stage moves to <code>scheduled</code> and recall cards are created.</p></li>
+  </ol>
+  <p class="small"><strong>Alternative:</strong> a failed correctness check leads to a relearn (concepts set to <code>learning</code>, then <code>reteach</code>). Any other failure means revising the note. <a class="cite" href="#src-13">S13</a></p>
+
+  <h3 id="uc10">UC-10 Extend a finished topic</h3>
+  <p><code>/learn &lt;topic&gt; --extend</code> calls <code>lk topic extend</code>: <code>version</code> + 1, <code>round</code> + 1, stage back to <code>research</code>. New concepts come in as <code>new</code> with <code>added_in = version</code>, so the next gate covers only the new material. Mastered concepts stay in recall. <a class="cite" href="#src-8">S8</a></p>
+</section>
+
+<section id="recall-specs">
+  <h2>Practice and recall use cases</h2>
+  <h3 id="uc11">UC-11 Practice quiz</h3>
+  <p>A no-stakes round: up to <code>n</code> items (10 by default) picked at random from the topic's whole bank, spent items included. It can start from <code>/quiz --practice</code>, the web app's "Practice" button, or MCP <code>start_quiz</code>. It writes attempts (mode <code>practice</code>) and the mistakes log, but doesn't change the stage or the recall schedule. Practice attempts don't count as spent gate items. <a class="cite" href="#src-7">S7</a><a class="cite" href="#src-14">S14</a></p>
+
+  <h3 id="uc12">UC-12 Spaced recall session</h3>
+  <ol class="steps">
+    <li class="p2"><strong>Due queue</strong><p>Cards due today or earlier, ordered by due date and then lowest retrievability, capped at 30 a day. Up to 3 not-yet-due confident mistakes (last seen ≥ 3 days ago) are added. The list is shuffled, then interleaved round-robin across topics.</p></li>
+    <li class="p2"><strong>Reword</strong> <span class="chip p2">/recall only</span><p>A <code>reword</code> subagent writes variants that keep each card's <code>origin</code> and concept. Variants that fail validation are dropped, and the original item is used instead.</p></li>
+    <li class="p2"><strong>Answer and reschedule</strong><p>Each result becomes an FSRS grade (score &lt; 0.5 → Again, &lt; 0.8 → Hard, otherwise Hard/Good/Easy depending on confidence) and updates the origin card.</p></li>
+    <li class="p2"><strong>Lapse</strong><p>An Again marks the concept <code>lapsed</code>. The topic page and <code>lk path next</code> then send the learner to relearn (UC-07).</p></li>
+  </ol>
+  <p class="small"><strong>Exception:</strong> nothing due → refused with the next due date. <a class="cite" href="#src-15">S15</a><a class="cite" href="#src-16">S16</a></p>
+
+  <h3 id="uc13">UC-13 Review the mistakes log</h3>
+  <p>Every answer scoring below 0.5 in any mode except placement is appended to <code>mistakes.jsonl</code> and <code>mistakes.md</code>, with the learner's answer, the expected one and the reason. A confidence of "sure" marks it ⚠ confident. The web app lists them at <code>#/mistakes</code>, MCP through <code>mistakes</code>. <a class="cite" href="#src-14">S14</a></p>
+</section>
+
+<section id="path-specs">
+  <h2>Learning path use cases</h2>
+  <h3 id="uc14">UC-14 Plan a learning path</h3>
+  <ol class="steps">
+    <li class="p3"><strong>Intake</strong> <span class="chip p3">needs the learner</span><p>One AskUserQuestion call (purpose, level, hours per week, deadline) and one open question → <code>intake.md</code>.</p></li>
+    <li class="p3"><strong>Curriculum research</strong><p>2–3 <code>collect</code> subagents save syllabi, books' tables of contents and roadmaps into the source bank.</p></li>
+    <li class="p3"><strong>Plan, then review</strong><p>A <code>path_plan</code> subagent writes <code>plan.md</code> and a draft. A fresh <code>path_review</code> subagent corrects it. <code>lk path validate</code> must pass.</p></li>
+    <li class="p3"><strong>Approve and import</strong> <span class="chip p3">needs the learner</span><p>The learner sees a compact table and asks for changes once. Then <code>lk path import</code> stores version 1.</p></li>
+  </ol>
+  <p class="small"><strong>Rules checked by the import:</strong> prereqs point only to earlier nodes; ≤ 15 nodes; a capstone has ≥ 2 prereqs; the first node is <code>full</code>; <code>intake.md</code> and <code>plan.md</code> exist. A re-plan needs <code>--reason</code>. Removing a node whose topic has started needs <code>--force</code>. <a class="cite" href="#src-17">S17</a></p>
+
+  <h3 id="uc15">UC-15 Placement quiz and per-node decisions</h3>
+  <p>A short quiz (≤ 3 items per node, ≤ 24 in total) finds steps the learner already knows. The result is stored only in <code>path.placement</code>: no attempts, no mistakes, no topics created. Per node, <code>test_out</code> needs mean ≥ 0.8 <em>and</em> mean confidence ≥ 2.5. <code>fast_track</code> needs mean ≥ 0.5. Anything lower is <code>learn</code>. These are recommendations only. The learner decides, and <code>lk path override … tested_out</code> refuses without evidence at the bar unless <code>--force</code> is given. <a class="cite" href="#src-18">S18</a></p>
+
+  <h3 id="uc16">UC-16 Walk the path</h3>
+  <p><code>/path &lt;slug&gt;</code> asks <code>lk path next</code> for exactly one action and carries it out. Actions are checked in this order: <code>plan</code> → <code>placement</code> → <code>review</code> (a node finished since the last plan review) → <code>relearn</code> (a finished node has lapsed concepts) → <code>checkpoint</code> → <code>resume</code> → <code>expand</code> / <code>learn</code> → <code>complete</code>. Any session gets the same answer, so the path resumes correctly from anywhere. <a class="cite" href="#src-19">S19</a></p>
+
+  <h3 id="uc17">UC-17 Milestone checkpoint</h3>
+  <p>When every node of a milestone is satisfied, at least 2 of them have actually been learned, and no checkpoint has been taken yet, a mixed quiz is due. It draws up to 3 items from each learned node (free recall first), interleaved across topics. Its answers update the existing recall cards, and an Again lapses the concept. The result is stored in <code>path.checkpoints[&lt;milestone&gt;]</code> with its weak topics. <a class="cite" href="#src-19">S19</a><a class="cite" href="#src-14">S14</a></p>
+</section>
+
+<section id="library-specs">
+  <h2>Library, agent and operations use cases</h2>
+  <h3 id="uc18">UC-18 Browse the library</h3>
+  <p><code>lk web</code> serves the library at <code>127.0.0.1:8765</code>. It has five views: <code>#/</code> (recall due, unfinished sessions, paths, topics, recent sessions), <code>#/path/&lt;slug&gt;</code>, <code>#/topic/&lt;slug&gt;</code> (stage, docs, concepts, quiz coverage as counts, session history), <code>#/session/&lt;id&gt;</code> (quiz or results), and <code>#/mistakes</code>. Docs open as reader pages. The quiz bank is shown only as counts, so browsing can't spoil fresh gate items. <a class="cite" href="#src-6">S6</a><a class="cite" href="#src-20">S20</a></p>
+
+  <h3 id="uc19">UC-19 Quiz in chat through MCP</h3>
+  <p>The agent calls <code>start_quiz</code> (practice or recall), then repeats <code>next_question</code> → asks the learner → <code>answer_question</code> with the learner's words verbatim and their own confidence, and ends with <code>finish_quiz</code>. The server instructions forbid answering for the learner, giving hints, or revealing correctness before the finish. Gate, placement and checkpoint are refused with a message naming the skill to use. <a class="cite" href="#src-2">S2</a></p>
+
+  <h3 id="uc20">UC-20 Browse data through MCP</h3>
+  <p>Read-only tools (<code>overview</code>, <code>get_path</code>, <code>get_topic</code>, <code>read_doc</code>, <code>list_sessions</code>, <code>session_results</code>, <code>recall_due</code>, <code>mistakes</code>, <code>search_sources</code>, <code>read_source</code>) plus four <code>lk://</code> resources. Source text comes back labelled untrusted. <a class="cite" href="#src-2">S2</a></p>
+
+  <h3 id="uc21">UC-21 Install and configure</h3>
+  <p><code>python lk.py install --home &lt;dir&gt;</code> writes <code>~/.learning-kit.json</code>, creates <code>topics/ paths/ sources/ sessions/</code>, a starter <code>config.json</code> and a README, and renders the 5 skills into <code>~/.claude/skills</code>. It must be re-run after editing a skill or moving the repo. <a class="cite" href="#src-21">S21</a></p>
+
+  <h3 id="uc22">UC-22 Recover from failed grading</h3>
+  <p>If <code>claude -p</code> is missing, times out or returns bad JSON, the session becomes <code>grade_failed</code>. The answers and the script-graded results are kept. The learner presses "Retry grading" or runs <code>lk grade &lt;id&gt;</code>. As a last resort, <code>lk grade &lt;id&gt; --pending</code> prints what still needs grading, the agent grades it by hand, and <code>lk grade &lt;id&gt; --apply file.json</code> finishes the session. <a class="cite" href="#src-11">S11</a><a class="cite" href="#src-22">S22</a></p>
+</section>
+
+<section id="sources">
+  <h2>Sources</h2>
+  <ol class="sources">
+    <li id="src-1">
+      <div class="src-head"><span class="src-id">S1</span><span class="src-type">Doc</span><span class="src-title">README: commands and what they do</span></div>
+      <div class="src-loc"><code>learning-kit/README.md:42-54</code> · <code>5663e54</code></div>
+      <blockquote class="src-quote">| `/path &lt;goal&gt;` | turn a broad goal ("system design") into a path of topics: intake, plan, placement, then one `/learn` loop per node |</blockquote>
+    </li>
+    <li id="src-2">
+      <div class="src-head"><span class="src-id">S2</span><span class="src-type">Code</span><span class="src-title">mcp_server.py: instructions, tools, refusal</span></div>
+      <div class="src-loc"><code>learning-kit/lk/mcp_server.py:25-34, 69-184</code> · <code>5663e54</code></div>
+      <blockquote class="src-quote">raise ToolError(f"'{kind}' can't run in chat: kind is practice or recall. Gate, placement and checkpoint rounds run in the browser (the /quiz or /path skill, or `lk web`).")</blockquote>
+    </li>
+    <li id="src-3">
+      <div class="src-head"><span class="src-id">S3</span><span class="src-type">Code</span><span class="src-title">/learn skill</span></div>
+      <div class="src-loc"><code>learning-kit/skills/learn/SKILL.md:22-96</code> · <code>5663e54</code></div>
+      <blockquote class="src-quote">After finishing a stage, run `LK topic advance &lt;slug&gt; &lt;next&gt;` and **continue into the next stage in the same turn** unless that stage needs the learner (read, quiz, lab, note).</blockquote>
+    </li>
+    <li id="src-4">
+      <div class="src-head"><span class="src-id">S4</span><span class="src-type">Code</span><span class="src-title">grader.grade</span></div>
+      <div class="src-loc"><code>learning-kit/lk/grader.py:145-173</code> · <code>5663e54</code></div>
+      <blockquote class="src-quote">"""entries: [{uid, item, response}] -&gt; {uid: {score, correct, feedback, missed, wrong_claims}}."""</blockquote>
+    </li>
+    <li id="src-5">
+      <div class="src-head"><span class="src-id">S5</span><span class="src-type">Code</span><span class="src-title">web/app.js topic view: Practice and Gate buttons</span></div>
+      <div class="src-loc"><code>learning-kit/web/app.js:630-640</code> · <code>5663e54</code></div>
+      <blockquote class="src-quote">t.can_gate ? h("button", { class: "btn primary", onclick: () =&gt; startSession({ kind: "gate", topic: t.slug },
+  "Start the gate round? It decides whether this topic moves on (bar: 80%). Answer from memory.") }, "Gate round") : null</blockquote>
+    </li>
+    <li id="src-6">
+      <div class="src-head"><span class="src-id">S6</span><span class="src-type">Code</span><span class="src-title">web/app.js home and path views</span></div>
+      <div class="src-loc"><code>learning-kit/web/app.js:537-577</code> · <code>5663e54</code></div>
+      <blockquote class="src-quote">nx.action === "checkpoint" ? h("div", { class: "actions" }, h("span"), h("button", { class: "btn primary",
+  onclick: () =&gt; startSession({ kind: "checkpoint", path: p.id, milestone: nx.milestone.id }) }, "Start checkpoint")) : null</blockquote>
+    </li>
+    <li id="src-7">
+      <div class="src-head"><span class="src-id">S7</span><span class="src-type">Code</span><span class="src-title">sessions.create_practice and viewSession</span></div>
+      <div class="src-loc"><code>learning-kit/lk/sessions.py:125-132</code>; <code>learning-kit/web/app.js:657-668</code> · <code>5663e54</code></div>
+      <blockquote class="src-quote">pick = rng.sample(bank, min(n, len(bank)))
+...
+if (S.session.status === "applied" || S.session.status === "grade_failed") return poll();</blockquote>
+    </li>
+    <li id="src-8">
+      <div class="src-head"><span class="src-id">S8</span><span class="src-type">Code</span><span class="src-title">topics: transitions and guards</span></div>
+      <div class="src-loc"><code>learning-kit/lk/topics.py:15-26, 124-193</code> · <code>5663e54</code></div>
+      <blockquote class="src-quote">if to == "research" and st["stage"] == "prior" and not _file_ok(d / "prior.md"):
+    raise LkError("prior.md is missing or empty: capture what you know first")</blockquote>
+    </li>
+    <li id="src-9">
+      <div class="src-head"><span class="src-id">S9</span><span class="src-type">Code</span><span class="src-title">quiz.coverage</span></div>
+      <div class="src-loc"><code>learning-kit/lk/quiz.py:159-180</code> · <code>5663e54</code></div>
+      <blockquote class="src-quote">if c.get("core") and not fr:
+    issues.append(f"{c['id']}: core concept needs &gt;= 1 fresh explain/predict item")</blockquote>
+    </li>
+    <li id="src-10">
+      <div class="src-head"><span class="src-id">S10</span><span class="src-type">Code</span><span class="src-title">sessions.create_gate</span></div>
+      <div class="src-loc"><code>learning-kit/lk/sessions.py:91-122</code> · <code>5663e54</code></div>
+      <blockquote class="src-quote">raise LkError(f"{topics.rounds_today(st)} gate rounds already today. Sleep on it and come back tomorrow: consolidation overnight is part of the method (--force to override).")</blockquote>
+    </li>
+    <li id="src-11">
+      <div class="src-head"><span class="src-id">S11</span><span class="src-type">Code</span><span class="src-title">gate.evaluate / gate.apply</span></div>
+      <div class="src-loc"><code>learning-kit/lk/gate.py:20-86</code> · <code>5663e54</code></div>
+      <blockquote class="src-quote">passed = overall &gt;= pass_score and not blocking</blockquote>
+    </li>
+    <li id="src-12">
+      <div class="src-head"><span class="src-id">S12</span><span class="src-type">Code</span><span class="src-title">gate.next_stage_after_pass</span></div>
+      <div class="src-loc"><code>learning-kit/lk/gate.py:57-60</code> · <code>5663e54</code></div>
+      <blockquote class="src-quote">if st.get("relearn") or st["depth"] == "aware":
+    return "scheduled"
+return "lab" if st["depth"] == "deep" else "note"</blockquote>
+    </li>
+    <li id="src-13">
+      <div class="src-head"><span class="src-id">S13</span><span class="src-type">Code</span><span class="src-title">cli.cmd_note: the note bar</span></div>
+      <div class="src-loc"><code>learning-kit/lk/cli.py:274-306</code> · <code>5663e54</code></div>
+      <blockquote class="src-quote"># Same 80% bar as the quiz: &gt;= 8/10, correctness must be full, no criterion at zero.
+passed = total &gt;= 8 and scores["correctness"] == 2 and min(scores.values()) &gt; 0</blockquote>
+    </li>
+    <li id="src-14">
+      <div class="src-head"><span class="src-id">S14</span><span class="src-type">Code</span><span class="src-title">sessions._apply: side effects per mode</span></div>
+      <div class="src-loc"><code>learning-kit/lk/sessions.py:265-304</code> · <code>5663e54</code></div>
+      <blockquote class="src-quote">if s["mode"] == "placement":
+    # Placement measures what the learner knew *before* the path: no attempts, no mistakes log</blockquote>
+    </li>
+    <li id="src-15">
+      <div class="src-head"><span class="src-id">S15</span><span class="src-type">Code</span><span class="src-title">srs.due</span></div>
+      <div class="src-loc"><code>learning-kit/lk/srs.py:62-87</code> · <code>5663e54</code></div>
+      <blockquote class="src-quote">if c and u not in chosen and (on - _dt.date.fromisoformat(c["last"])).days &gt;= 3:</blockquote>
+    </li>
+    <li id="src-16">
+      <div class="src-head"><span class="src-id">S16</span><span class="src-type">Code</span><span class="src-title">/recall skill</span></div>
+      <div class="src-loc"><code>learning-kit/skills/recall/SKILL.md:16-26</code> · <code>5663e54</code></div>
+      <blockquote class="src-quote">Then `LK quiz validate &lt;variants&gt; --variant`. If some fail, drop them (the original is used instead).</blockquote>
+    </li>
+    <li id="src-17">
+      <div class="src-head"><span class="src-id">S17</span><span class="src-type">Code</span><span class="src-title">learnpath.validate_plan / import_plan</span></div>
+      <div class="src-loc"><code>learning-kit/lk/learnpath.py:93-280</code> · <code>5663e54</code></div>
+      <blockquote class="src-quote">if p["version"] &gt;= 1 and not reason.strip():
+    raise LkError("re-planning needs --reason (it goes into the path history)")</blockquote>
+    </li>
+    <li id="src-18">
+      <div class="src-head"><span class="src-id">S18</span><span class="src-type">Code</span><span class="src-title">learnpath.evaluate_placement / set_override</span></div>
+      <div class="src-loc"><code>learning-kit/lk/learnpath.py:402-421, 468-494</code> · <code>5663e54</code></div>
+      <blockquote class="src-quote">if mean &gt;= cfg["gate"]["pass_score"] and conf &gt;= pc["test_out_confidence"]:
+    rec = "test_out"</blockquote>
+    </li>
+    <li id="src-19">
+      <div class="src-head"><span class="src-id">S19</span><span class="src-type">Code</span><span class="src-title">learnpath.next_action and _milestone_due</span></div>
+      <div class="src-loc"><code>learning-kit/lk/learnpath.py:324-385</code> · <code>5663e54</code></div>
+      <blockquote class="src-quote">Order: plan -&gt; placement -&gt; review a just-finished node -&gt; relearn lapsed -&gt; milestone checkpoint
+       -&gt; resume an in-progress node -&gt; expand a stub / learn the next ready node -&gt; complete.</blockquote>
+    </li>
+    <li id="src-20">
+      <div class="src-head"><span class="src-id">S20</span><span class="src-type">Code</span><span class="src-title">service.quiz_summary</span></div>
+      <div class="src-loc"><code>learning-kit/lk/service.py:137-151</code> · <code>5663e54</code></div>
+      <blockquote class="src-quote">"""The bank as counts only: browsing must not spoil fresh gate items."""</blockquote>
+    </li>
+    <li id="src-21">
+      <div class="src-head"><span class="src-id">S21</span><span class="src-type">Code</span><span class="src-title">install.init_home / install</span></div>
+      <div class="src-loc"><code>learning-kit/lk/install.py:56-115</code> · <code>5663e54</code></div>
+      <blockquote class="src-quote">for sub in ("topics", "paths", "sources", "sessions"):</blockquote>
+    </li>
+    <li id="src-22">
+      <div class="src-head"><span class="src-id">S22</span><span class="src-type">Code</span><span class="src-title">web/app.js viewFailed; cli.cmd_grade</span></div>
+      <div class="src-loc"><code>learning-kit/web/app.js:372-377</code>; <code>learning-kit/lk/cli.py:239-246</code> · <code>5663e54</code></div>
+      <blockquote class="src-quote">"Your answers are saved. Retry here, or run `lk grade &lt;session&gt;` in the terminal (the agent can also grade them by hand)."</blockquote>
+    </li>
+  </ol>
+</section>
+
+<footer class="doc-foot">Legend: <span class="tag sure">VERIFIED</span> seen directly in the cited source · <span class="tag infer">INFERRED</span> reasoned from evidence, not confirmed end-to-end · <span class="tag open">OPEN</span> unresolved, needs an answer. Press <code>/</code> to search; the ⟳ button reloads the latest version of this file.</footer>
+<!-- ===================== DOCUMENT CONTENT END ===================== -->
+</main>
+</div>
+
+<script id="haise-shell-js">
+/* ===== haise-doc shell v3.1.0 — do not edit per document ===== */
+(function(){
+  var root=document.documentElement, body=document.body;
+  var LANG=(root.lang||'en').slice(0,2).toLowerCase();
+  var I18N={
+    en:{toc:'Contents',search:'Search this document…  ( / )',none:'No matches',nav:'Show / hide contents',
+        prev:'Previous match (Shift+Enter)',next:'Next match (Enter)',citedIn:'Cited in',
+        reload:'Reload latest version (keeps your place)',
+        zoom:{hint:'Click to enlarge',zin:'Zoom in (+)',zout:'Zoom out (−)',fit:'Fit to screen (0)',one:'Actual size (1)',close:'Close (Esc)'},
+        theme:{auto:'Theme: auto',light:'Theme: light',dark:'Theme: dark'}},
+    vi:{toc:'Mục lục',search:'Tìm trong tài liệu…  ( / )',none:'Không có kết quả',nav:'Ẩn / hiện mục lục',
+        prev:'Kết quả trước (Shift+Enter)',next:'Kết quả sau (Enter)',citedIn:'Được dẫn ở',
+        reload:'Tải lại bản mới nhất (giữ vị trí đang đọc)',
+        zoom:{hint:'Nhấn để phóng to',zin:'Phóng to (+)',zout:'Thu nhỏ (−)',fit:'Vừa màn hình (0)',one:'Kích thước thật (1)',close:'Đóng (Esc)'},
+        theme:{auto:'Giao diện: tự động',light:'Giao diện: sáng',dark:'Giao diện: tối'}}
+  };
+  var T=I18N[LANG]||I18N.en;
+  var store={get:function(k){try{return localStorage.getItem(k);}catch(e){return null;}},
+             set:function(k,v){try{localStorage.setItem(k,v);}catch(e){}}};
+  var $=function(id){return document.getElementById(id);};
+  var main=$('content');
+
+  /* ---------- theme ---------- */
+  var themeBtn=$('haise-theme'), ICON={auto:'◐',light:'☀',dark:'☾'};
+  function applyTheme(t){
+    if(t==='light'||t==='dark') root.setAttribute('data-theme',t); else root.removeAttribute('data-theme');
+    themeBtn.textContent=ICON[t]; themeBtn.title=T.theme[t]; themeBtn.setAttribute('aria-label',T.theme[t]);
+  }
+  var theme=store.get('haise.theme'); if(theme!=='light'&&theme!=='dark') theme='auto';
+  applyTheme(theme);
+  themeBtn.addEventListener('click',function(){
+    theme=theme==='auto'?'light':theme==='light'?'dark':'auto';
+    store.set('haise.theme',theme); applyTheme(theme);
+  });
+
+  /* ---------- numbering + table of contents ---------- */
+  $('haise-toc-label').textContent=T.toc;
+  var toc=$('haise-toc'), ol=document.createElement('ol'), tocLinks=[], sections=[];
+  [].forEach.call(main.querySelectorAll('section'),function(sec,i){
+    var h2=sec.querySelector(':scope > h2'); if(!h2) return;
+    if(!sec.id) sec.id='s'+(i+1);
+    var n=String(sections.length+1);
+    sections.push(sec);
+    var num=document.createElement('span'); num.className='num'; num.textContent=n+'.'; h2.insertBefore(num,h2.firstChild);
+    var li=document.createElement('li'), a=mkLink('#'+sec.id,n+'.',h2);
+    a.dataset.sec=sec.id; li.appendChild(a); tocLinks.push({el:sec,a:a});
+    var subs=sec.querySelectorAll('h3');
+    if(subs.length){
+      var sub=document.createElement('ol');
+      [].forEach.call(subs,function(h3,j){
+        if(!h3.id) h3.id=sec.id+'-'+(j+1);
+        var m=n+'.'+(j+1);
+        var s=document.createElement('span'); s.className='num'; s.textContent=m; h3.insertBefore(s,h3.firstChild);
+        var sli=document.createElement('li'), sa=mkLink('#'+h3.id,m,h3);
+        sli.appendChild(sa); sub.appendChild(sli); tocLinks.push({el:h3,a:sa});
+      });
+      li.appendChild(sub);
+    }
+    ol.appendChild(li);
+  });
+  toc.appendChild(ol);
+  function mkLink(href,n,h){
+    var a=document.createElement('a'); a.href=href;
+    var s=document.createElement('span'); s.className='num'; s.textContent=n;
+    var t=document.createElement('span'); t.className='t';
+    var clone=h.cloneNode(true); var c=clone.querySelector('.num'); if(c) c.remove();
+    [].forEach.call(clone.querySelectorAll('a.cite,.tag'),function(x){x.remove();});
+    t.textContent=clone.textContent.trim();
+    var b=document.createElement('span'); b.className='badge';
+    a.appendChild(s); a.appendChild(t); a.appendChild(b);
+    a.addEventListener('click',function(){ if(isMobile()) body.classList.remove('nav-open'); });
+    return a;
+  }
+
+  /* ---------- sidebar toggle ---------- */
+  var navBtn=$('haise-nav-btn'); navBtn.title=T.nav; navBtn.setAttribute('aria-label',T.nav);
+  var mq=window.matchMedia('(max-width:960px)');
+  function isMobile(){return mq.matches;}
+  if(store.get('haise.nav')==='collapsed') body.classList.add('nav-collapsed');
+  navBtn.addEventListener('click',function(){
+    if(isMobile()){ body.classList.toggle('nav-open'); }
+    else{ body.classList.toggle('nav-collapsed'); store.set('haise.nav',body.classList.contains('nav-collapsed')?'collapsed':'open'); }
+  });
+  $('haise-backdrop').addEventListener('click',function(){body.classList.remove('nav-open');});
+
+  /* ---------- scroll spy + progress ---------- */
+  var ticking=false, prog=$('haise-progress');
+  function onScroll(){
+    ticking=false;
+    var y=window.scrollY, H=document.documentElement.scrollHeight-window.innerHeight;
+    prog.style.width=(H>0?Math.min(100,y/H*100):0)+'%';
+    var off=parseInt(getComputedStyle(root).getPropertyValue('--topbar-h'))+30, cur=null;
+    for(var i=0;i<tocLinks.length;i++){ if(tocLinks[i].el.getBoundingClientRect().top-off<=0) cur=tocLinks[i]; }
+    if(!cur&&tocLinks.length) cur=tocLinks[0];
+    tocLinks.forEach(function(t){t.a.classList.toggle('active',t===cur);});
+    if(cur&&!isMobile()){
+      var r=cur.a.getBoundingClientRect(), sb=$('haise-sidebar').getBoundingClientRect();
+      if(r.top<sb.top+20||r.bottom>sb.bottom-20) cur.a.scrollIntoView({block:'nearest'});
+    }
+  }
+  window.addEventListener('scroll',function(){ if(!ticking){ticking=true;requestAnimationFrame(onScroll);} },{passive:true});
+  onScroll();
+
+  /* ---------- citations: tooltips + back-references ---------- */
+  var back={};
+  [].forEach.call(main.querySelectorAll('a.cite'),function(a,i){
+    var id=(a.getAttribute('href')||'').replace(/^#/,''), src=document.getElementById(id);
+    if(!a.id) a.id='cite-'+(i+1);
+    if(!src){a.classList.add('broken');return;}
+    var t=src.querySelector('.src-title'); if(t) a.title=t.textContent.trim();
+    (back[id]=back[id]||[]).push(a);
+  });
+  Object.keys(back).forEach(function(id){
+    var src=document.getElementById(id), box=src.querySelector('.backrefs');
+    if(!box){box=document.createElement('div');box.className='backrefs';src.appendChild(box);}
+    box.textContent=T.citedIn+': ';
+    back[id].forEach(function(a){
+      var sec=a.closest('section'), n=sec?sec.querySelector(':scope > h2 .num'):null;
+      var l=document.createElement('a'); l.href='#'+a.id; l.textContent='↩ §'+(n?n.textContent.replace('.',''):'?');
+      var h=sec?sec.querySelector(':scope > h2'):null; if(h) l.title=h.textContent.trim();
+      box.appendChild(l);
+    });
+  });
+
+  /* ---------- search (case- and accent-insensitive) ---------- */
+  var q=$('haise-q'), countEl=$('haise-count'), hits=[], cur=-1, opened=[], timer=null;
+  q.placeholder=T.search; q.setAttribute('aria-label',T.search);
+  $('haise-prev').title=T.prev; $('haise-prev').setAttribute('aria-label',T.prev);
+  $('haise-next').title=T.next; $('haise-next').setAttribute('aria-label',T.next);
+  function foldChar(c){
+    if(c==='đ'||c==='Đ') return 'd';
+    return c.normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
+  }
+  function fold(s){
+    var out='', map=[];
+    for(var i=0;i<s.length;i++){ var f=foldChar(s[i]); for(var j=0;j<f.length;j++){out+=f[j];map.push(i);} }
+    return {s:out,map:map};
+  }
+  function clear(){
+    var parents=[];
+    hits.forEach(function(m){ var p=m.parentNode; if(!p) return; p.replaceChild(document.createTextNode(m.textContent),m); if(parents.indexOf(p)<0) parents.push(p); });
+    parents.forEach(function(p){p.normalize();});
+    opened.forEach(function(d){d.open=false;}); opened=[];
+    hits=[]; cur=-1;
+    tocLinks.forEach(function(t){t.a.querySelector('.badge').textContent='';});
+  }
+  function run(noJump){
+    clear();
+    var raw=q.value.trim(); if(raw.length<2){countEl.textContent='';return;}
+    var needle=fold(raw).s, nodes=[];
+    var w=document.createTreeWalker(main,NodeFilter.SHOW_TEXT,{acceptNode:function(n){
+      if(!n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+      var p=n.parentNode;
+      if(p.closest('script,style,svg,.no-search,textarea')) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;}});
+    while(w.nextNode()) nodes.push(w.currentNode);
+    for(var k=0;k<nodes.length&&hits.length<3000;k++){
+      var node=nodes[k], text=node.nodeValue, f=fold(text), idx=f.s.indexOf(needle);
+      if(idx<0) continue;
+      var frag=document.createDocumentFragment(), last=0;
+      while(idx>=0){
+        var a=f.map[idx], b=f.map[idx+needle.length-1]+1;
+        if(a>=last){
+          frag.appendChild(document.createTextNode(text.slice(last,a)));
+          var m=document.createElement('mark'); m.className='hit'; m.textContent=text.slice(a,b);
+          frag.appendChild(m); hits.push(m); last=b;
+        }
+        idx=f.s.indexOf(needle,idx+needle.length);
+      }
+      frag.appendChild(document.createTextNode(text.slice(last)));
+      node.parentNode.replaceChild(frag,node);
+    }
+    hits.forEach(function(m){
+      var d=m.parentNode.closest('details');
+      while(d){ if(!d.open){d.open=true;opened.push(d);} d=d.parentNode.closest('details'); }
+    });
+    tocLinks.forEach(function(t){
+      var scope=t.el.tagName==='SECTION'?t.el:null; if(!scope) return;
+      var n=scope.querySelectorAll('mark.hit').length;
+      t.a.querySelector('.badge').textContent=n?String(n):'';
+    });
+    if(!hits.length) countEl.textContent=T.none;
+    else if(noJump===true) countEl.textContent='– / '+hits.length;
+    else go(0);
+  }
+  function go(i){
+    if(!hits.length) return;
+    if(cur>=0&&hits[cur]) hits[cur].classList.remove('cur');
+    cur=(i+hits.length)%hits.length;
+    hits[cur].classList.add('cur');
+    hits[cur].scrollIntoView({block:'center',behavior:'smooth'});
+    countEl.textContent=(cur+1)+' / '+hits.length;
+  }
+  q.addEventListener('input',function(){clearTimeout(timer);timer=setTimeout(run,180);});
+  q.addEventListener('keydown',function(e){
+    if(e.key==='Enter'){e.preventDefault(); if(timer){clearTimeout(timer);timer=null;} if(!hits.length) run(); else go(cur+(e.shiftKey?-1:1));}
+    else if(e.key==='Escape'){q.value='';clear();countEl.textContent='';q.blur();}
+  });
+  $('haise-prev').addEventListener('click',function(){go(cur-1);});
+  $('haise-next').addEventListener('click',function(){go(cur+1);});
+
+  /* ---------- reload: re-read the file from disk, keep the reader's place ---------- */
+  var RK='haise.reload:'+location.pathname, reloadBtn=$('haise-reload');
+  reloadBtn.title=T.reload; reloadBtn.setAttribute('aria-label',T.reload);
+  function ss(k,v){try{if(v===undefined){var r=sessionStorage.getItem(k);sessionStorage.removeItem(k);return r;}sessionStorage.setItem(k,v);}catch(e){return null;}}
+  function reload(){
+    var anchor=null, top=0;
+    for(var i=tocLinks.length-1;i>=0;i--){ var r=tocLinks[i].el.getBoundingClientRect(); if(r.top<=window.innerHeight/3){anchor=tocLinks[i].el.id;top=r.top;break;} }
+    var open=[].map.call(main.querySelectorAll('details'),function(d){return d.open&&opened.indexOf(d)<0;});
+    ss(RK,JSON.stringify({y:window.scrollY,anchor:anchor,top:top,q:q.value,open:open}));
+    location.reload();
+  }
+  reloadBtn.addEventListener('click',reload);
+  (function restore(){
+    var s=ss(RK); if(!s) return;
+    try{s=JSON.parse(s);}catch(e){return;}
+    if('scrollRestoration' in history) history.scrollRestoration='manual';
+    var ds=main.querySelectorAll('details');
+    (s.open||[]).forEach(function(o,i){ if(o&&ds[i]) ds[i].open=true; });
+    if(s.q){q.value=s.q; run(true);}
+    var el=s.anchor&&document.getElementById(s.anchor);
+    var y=el?el.getBoundingClientRect().top+window.scrollY-s.top:s.y;
+    root.style.scrollBehavior='auto'; window.scrollTo(0,y); root.style.scrollBehavior='';
+    onScroll();
+  })();
+  /* ---------- zoom: click a figure image or diagram to view it large (vector stays sharp) ---------- */
+  (function zoom(){
+    var items=[].slice.call(main.querySelectorAll('figure.fig img, figure.fig svg')).filter(function(el){
+      return !el.closest('[data-nozoom]') && !(el.tagName.toLowerCase()==='svg' && el.parentElement.closest('svg'));
+    });
+    if(!items.length) return;
+    var Z=T.zoom, ov=document.createElement('div');
+    ov.className='zoom-ov'; ov.setAttribute('role','dialog'); ov.setAttribute('aria-modal','true');
+    ov.innerHTML='<div class="zoom-bar"><span class="zoom-pct"></span>'+
+      '<button class="iconbtn" type="button" data-z="out">−</button><button class="iconbtn" type="button" data-z="fit">⤢</button>'+
+      '<button class="iconbtn" type="button" data-z="one">1:1</button><button class="iconbtn" type="button" data-z="in">+</button>'+
+      '<button class="iconbtn" type="button" data-z="close">✕</button></div><div class="zoom-cap"></div>';
+    body.appendChild(ov);
+    var bar=ov.querySelector('.zoom-bar'), cap=ov.querySelector('.zoom-cap'), pct=ov.querySelector('.zoom-pct');
+    var TT={out:Z.zout,fit:Z.fit,one:Z.one,'in':Z.zin,close:Z.close};
+    [].forEach.call(bar.querySelectorAll('button'),function(b){b.title=TT[b.dataset.z];b.setAttribute('aria-label',TT[b.dataset.z]);});
+    var node=null,isSvg=false,w=1,h=1,s=1,fit=1,x=0,y=0,idx=-1,lastFocus=null,pts={},moved=false;
+    function dims(el){
+      if(el.tagName.toLowerCase()==='svg'){var vb=el.viewBox&&el.viewBox.baseVal; if(vb&&vb.width) return [vb.width,vb.height];}
+      else if(el.naturalWidth) return [el.naturalWidth,el.naturalHeight];
+      var r=el.getBoundingClientRect(); return [r.width||1,r.height||1];
+    }
+    function vw(){return ov.clientWidth;} function vh(){return ov.clientHeight;}
+    function lim(){var b=Math.max(fit,1); return [fit*0.5, b*(isSvg?10:4)];}
+    function render(){
+      node.style.width=(w*s)+'px'; node.style.height=(h*s)+'px';
+      node.style.transform='translate('+Math.round(x)+'px,'+Math.round(y)+'px)';
+      pct.textContent=Math.round(s*100)+'%';
+    }
+    function setScale(ns,cx,cy){
+      var l=lim(); ns=Math.min(l[1],Math.max(l[0],ns));
+      if(cx===undefined){cx=vw()/2;cy=vh()/2;}
+      x=cx-(cx-x)*ns/s; y=cy-(cy-y)*ns/s; s=ns; render();
+    }
+    function toFit(){
+      var top=60, bottom=(cap.textContent?cap.offsetHeight+24:16), room=vh()-top-bottom;
+      fit=Math.min((vw()-32)/w,room/h);
+      s=fit; x=(vw()-w*s)/2; y=top+(room-h*s)/2; render();
+    }
+    function open(i){
+      idx=(i+items.length)%items.length;
+      var src=items[idx]; isSvg=src.tagName.toLowerCase()==='svg';
+      if(node) node.remove();
+      node=src.cloneNode(true); node.removeAttribute('id'); node.removeAttribute('tabindex');
+      node.classList.remove('zoomable'); node.removeAttribute('style'); node.classList.add('zoom-item');
+      if(isSvg){node.removeAttribute('width');node.removeAttribute('height');node.setAttribute('preserveAspectRatio','xMidYMid meet');}
+      var d=dims(src); w=d[0]; h=d[1];
+      ov.insertBefore(node,bar);
+      var fig=src.closest('figure'), fc=fig&&fig.querySelector(':scope > figcaption');
+      var label=src.getAttribute('alt')||src.getAttribute('aria-label')||'';
+      cap.innerHTML='';
+      if(items.length>1){var n=document.createElement('b');n.textContent=(idx+1)+' / '+items.length+'  ';cap.appendChild(n);}
+      cap.appendChild(document.createTextNode([label,fc?fc.textContent.trim():''].filter(Boolean).join(' — ')));
+      if(!ov.classList.contains('on')){lastFocus=document.activeElement; ov.classList.add('on'); body.style.overflow='hidden';}
+      toFit(); bar.querySelector('[data-z="close"]').focus();
+    }
+    function close(){
+      ov.classList.remove('on'); body.style.overflow=''; pts={};
+      if(node){node.remove();node=null;} if(lastFocus&&lastFocus.focus) lastFocus.focus();
+    }
+    function act(z){
+      if(z==='close') close(); else if(z==='fit') toFit(); else if(z==='one') setScale(1);
+      else if(z==='in') setScale(s*1.4); else if(z==='out') setScale(s/1.4);
+    }
+    items.forEach(function(el,i){
+      el.classList.add('zoomable'); el.setAttribute('tabindex','0');
+      if(el.tagName.toLowerCase()==='img') el.title=Z.hint;
+      el.addEventListener('click',function(e){ if(e.target.closest&&e.target.closest('a')) return; open(i); });
+      el.addEventListener('keydown',function(e){ if(e.key==='Enter'||e.key===' '){e.preventDefault();open(i);} });
+    });
+    bar.addEventListener('click',function(e){var b=e.target.closest('button'); if(b) act(b.dataset.z);});
+    ov.addEventListener('wheel',function(e){
+      e.preventDefault(); setScale(s*Math.exp(-e.deltaY*(e.ctrlKey?0.01:0.0015)),e.clientX,e.clientY);
+    },{passive:false});
+    ov.addEventListener('pointerdown',function(e){
+      if(e.target.closest('.zoom-bar')) return;
+      try{ov.setPointerCapture(e.pointerId);}catch(_){}
+      pts[e.pointerId]={x:e.clientX,y:e.clientY,t:e.target}; if(Object.keys(pts).length===1) moved=false;
+      ov.classList.add('drag');
+    });
+    ov.addEventListener('pointermove',function(e){
+      var p=pts[e.pointerId]; if(!p) return;
+      var ids=Object.keys(pts);
+      if(ids.length===1){
+        var dx=e.clientX-p.x, dy=e.clientY-p.y; if(Math.abs(dx)+Math.abs(dy)>2) moved=true;
+        x+=dx; y+=dy; p.x=e.clientX; p.y=e.clientY; render();
+      }else if(ids.length===2){
+        var o=pts[ids[0]===String(e.pointerId)?ids[1]:ids[0]];
+        var d0=Math.hypot(p.x-o.x,p.y-o.y); p.x=e.clientX; p.y=e.clientY;
+        var d1=Math.hypot(p.x-o.x,p.y-o.y); moved=true;
+        if(d0>0) setScale(s*d1/d0,(p.x+o.x)/2,(p.y+o.y)/2);
+      }
+    });
+    function up(e){
+      var p=pts[e.pointerId]; delete pts[e.pointerId];
+      if(!Object.keys(pts).length){ ov.classList.remove('drag'); if(e.type==='pointerup'&&!moved&&p&&p.t===ov) close(); }
+    }
+    ov.addEventListener('pointerup',up); ov.addEventListener('pointercancel',up);
+    ov.addEventListener('dblclick',function(e){
+      if(!node||!node.contains(e.target)) return;
+      if(s>fit*1.05) toFit(); else setScale(isSvg?fit*2.5:Math.max(1,fit*2),e.clientX,e.clientY);
+    });
+    document.addEventListener('keydown',function(e){
+      if(!ov.classList.contains('on')) return;
+      var k=e.key, map={'Escape':'close','+':'in','=':'in','-':'out','_':'out','0':'fit','1':'one'};
+      if(map[k]) act(map[k]);
+      else if(k==='ArrowRight') open(idx+1);
+      else if(k==='ArrowLeft') open(idx-1);
+      else if(k==='Tab'){ /* keep focus inside the viewer */
+        var bs=bar.querySelectorAll('button'), f=bs[0], l=bs[bs.length-1];
+        if(e.shiftKey&&document.activeElement===f){l.focus();} else if(!e.shiftKey&&document.activeElement===l){f.focus();} else return;
+      } else return;
+      e.preventDefault(); e.stopImmediatePropagation();
+    },true);
+    window.addEventListener('resize',function(){ if(ov.classList.contains('on')) toFit(); });
+  })();
+
+  /* ---------- phase focus: hover anything with data-phase to light up the same phase everywhere; tap/click pins it ---------- */
+  (function phases(){
+    var els=[].slice.call(main.querySelectorAll('[data-phase]'));
+    if(!els.length) return;
+    var pinned=null;
+    function focus(p){
+      body.classList.toggle('focus-on',!!p);
+      els.forEach(function(el){el.classList.toggle('on',!!p&&el.getAttribute('data-phase')===p);});
+    }
+    els.forEach(function(el){
+      var p=el.getAttribute('data-phase');
+      el.addEventListener('mouseenter',function(){focus(p);});
+      el.addEventListener('mouseleave',function(){focus(pinned);});
+      if(!el.closest('svg')){ /* clicks inside diagrams stay with the zoom viewer */
+        el.addEventListener('click',function(e){
+          if(e.target.closest('a,button,summary,input,code')) return;
+          e.stopPropagation(); pinned=pinned===p?null:p; focus(pinned);
+        });
+      }
+    });
+    document.addEventListener('keydown',function(e){
+      if(e.key==='Escape'&&pinned&&!document.querySelector('.zoom-ov.on')){pinned=null;focus(null);}
+    });
+  })();
+
+  document.addEventListener('keydown',function(e){
+    var tag=(e.target.tagName||'').toLowerCase(), typing=tag==='input'||tag==='textarea'||e.target.isContentEditable;
+    if((e.key==='/'&&!typing)||((e.ctrlKey||e.metaKey)&&(e.key==='k'||e.key==='K'))){e.preventDefault();q.focus();q.select();}
+  });
+})();
+</script>
+</body>
+</html>

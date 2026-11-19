@@ -8,10 +8,15 @@ from .store import LkError, now_iso, read_json, read_jsonl, today, write_json
 
 DEPTHS = ("aware", "use", "deep")
 
-STAGES = ("prior", "research", "read", "quiz_gen", "quiz", "reteach", "lab", "note", "scheduled")
+# How a topic is taught. "doc": read one research doc, then a gate quiz over the whole topic.
+# "bite": a lesson of small pieces (question -> one paragraph -> own-words answer -> small check); the
+# pieces are the gate (lk/lesson.py). State files without "mode" predate bite mode and are "doc".
+MODES = ("bite", "doc")
 
-# Legal moves. Transitions out of "quiz" are made by the gate (sessions.finish -> gate.apply),
-# so `lk topic advance` refuses them without --force.
+STAGES = ("prior", "research", "read", "quiz_gen", "quiz", "lesson", "reteach", "lab", "note", "scheduled")
+
+# Legal moves per mode. Transitions out of "quiz" / "lesson" are made by the gate
+# (sessions.finish -> gate.apply), so `lk topic advance` refuses them without --force.
 TRANSITIONS: dict[str, set[str]] = {
     "prior": {"research"},
     "research": {"read"},
@@ -23,7 +28,18 @@ TRANSITIONS: dict[str, set[str]] = {
     "note": {"scheduled", "reteach"},
     "scheduled": {"research", "reteach"},
 }
-GATE_ONLY = {("quiz", "reteach"), ("quiz", "lab"), ("quiz", "note"), ("quiz", "scheduled")}
+BITE_TRANSITIONS: dict[str, set[str]] = {
+    "prior": {"research"},
+    "research": {"lesson"},
+    "lesson": {"reteach", "lab", "note", "scheduled"},
+    "reteach": {"lesson"},
+    "lab": {"note"},
+    "note": {"scheduled", "reteach"},
+    "scheduled": {"research", "reteach"},
+}
+GATE_ONLY = {(g, to) for g in ("quiz", "lesson") for to in ("reteach", "lab", "note", "scheduled")}
+# Stages that belong to one mode's flow: switching mode there would strand the topic.
+MODE_STAGES = {"doc": {"read", "quiz_gen", "quiz"}, "bite": {"lesson"}}
 
 CONCEPT_STATUSES = ("new", "learning", "mastered", "lapsed")
 TARGET_STATUSES = ("new", "learning", "lapsed")
@@ -39,6 +55,32 @@ NEXT_HINT = {
     "note": "Write or dictate note.md in your own words, get it reviewed (/note).",
     "scheduled": "In spaced review (/recall). Use --extend to grow the topic.",
 }
+BITE_HINT = {
+    "research": "Collect sources into the bank, author the bite-sized lesson (concepts + pieces), review it, "
+                "`lk lesson import`, then advance to lesson.",
+    "lesson": "Take the lesson in the browser, one piece at a time: `lk serve --topic <slug>`.",
+    "reteach": "Author fresh pieces for the missed concepts (`lk lesson import`), then advance to lesson.",
+}
+
+
+def mode_of(st: dict) -> str:
+    return st.get("mode") or "doc"
+
+
+def transitions_for(st: dict) -> dict[str, set[str]]:
+    return BITE_TRANSITIONS if mode_of(st) == "bite" else TRANSITIONS
+
+
+def hint_for(st: dict) -> str:
+    stage = st["stage"]
+    return (BITE_HINT.get(stage) if mode_of(st) == "bite" else None) or NEXT_HINT[stage]
+
+
+def default_mode() -> str:
+    m = (paths.config().get("learn") or {}).get("default_mode", "bite")
+    if m not in MODES:
+        raise LkError(f"config learn.default_mode must be one of {MODES}, not {m!r}")
+    return m
 
 
 # ---------------------------------------------------------------- files
@@ -89,9 +131,12 @@ def target_concepts(slug: str) -> list[dict]:
 
 # ---------------------------------------------------------------- lifecycle
 
-def create(slug: str, title: str, depth: str = "use", fresh: bool = False) -> dict:
+def create(slug: str, title: str, depth: str = "use", fresh: bool = False, mode: str | None = None) -> dict:
     if depth not in DEPTHS:
         raise LkError(f"depth must be one of {DEPTHS}")
+    mode = mode or default_mode()
+    if mode not in MODES:
+        raise LkError(f"mode must be one of {MODES}")
     if exists(slug):
         raise LkError(f"topic '{slug}' already exists; resume it, or use extend to grow it")
     d = tdir(slug)
@@ -101,6 +146,7 @@ def create(slug: str, title: str, depth: str = "use", fresh: bool = False) -> di
         "slug": slug,
         "title": title,
         "depth": depth,
+        "mode": mode,
         "fresh": fresh,
         "stage": "prior",
         "version": 1,
@@ -140,6 +186,13 @@ def _guard(slug: str, st: dict, to: str) -> None:
         cov = coverage(slug)
         if cov["issues"]:
             raise LkError("quiz coverage is not ready:\n  - " + "\n  - ".join(cov["issues"]))
+    if to == "lesson":
+        if not target_concepts(slug):
+            raise LkError("no target concepts for this version: `lk concepts merge` first")
+        from .lesson import coverage as lesson_coverage  # local import: lesson imports topics
+        cov = lesson_coverage(slug)
+        if cov["issues"]:
+            raise LkError("the lesson is not ready (`lk lesson coverage <slug>`):\n  - " + "\n  - ".join(cov["issues"]))
     if to == "quiz_gen" and st["stage"] == "reteach":
         if not _file_ok(d / "reteach" / f"round-{st['round']}.md"):
             raise LkError(f"reteach/round-{st['round']}.md is missing")
@@ -159,8 +212,9 @@ def advance(slug: str, to: str, force: bool = False, note: str = "", _from_gate:
     cur = st["stage"]
     if to not in STAGES:
         raise LkError(f"unknown stage '{to}'")
-    if to not in TRANSITIONS[cur] and not force:
-        raise LkError(f"cannot go {cur} -> {to}; allowed: {sorted(TRANSITIONS[cur])}")
+    allowed = transitions_for(st).get(cur, set())
+    if to not in allowed and not force:
+        raise LkError(f"cannot go {cur} -> {to} in {mode_of(st)} mode; allowed: {sorted(allowed)}")
     if (cur, to) in GATE_ONLY and not (_from_gate or force):
         raise LkError(f"{cur} -> {to} is decided by the quiz gate, not by hand (use --force to override)")
     if not force:
@@ -189,6 +243,24 @@ def extend(slug: str) -> dict:
     st["round"] += 1
     st["stage"] = "research"
     st["history"].append({"stage": "research", "at": now_iso(), "note": f"extend -> v{st['version']}"})
+    save_state(slug, st)
+    return st
+
+
+def set_mode(slug: str, mode: str) -> dict:
+    """Switch how the topic is taught from its next round on. Refused mid-flow (read/quiz_gen/quiz for doc,
+    lesson for bite): finish or reteach first. Concepts, sources, the quiz bank and SRS cards are shared."""
+    if mode not in MODES:
+        raise LkError(f"mode must be one of {MODES}")
+    st = load_state(slug)
+    cur = mode_of(st)
+    if cur == mode:
+        return st
+    if st["stage"] in MODE_STAGES[cur]:
+        raise LkError(f"topic is at '{st['stage']}', part of the {cur} flow: finish that round first "
+                      "(switching is allowed at prior, research, reteach, lab, note and scheduled)")
+    st["mode"] = mode
+    st["history"].append({"stage": st["stage"], "at": now_iso(), "note": f"mode {cur} -> {mode}"})
     save_state(slug, st)
     return st
 
@@ -272,7 +344,7 @@ def status(slug: str) -> dict:
     counts = {s: 0 for s in CONCEPT_STATUSES}
     for c in cs:
         counts[c.get("status", "new")] = counts.get(c.get("status", "new"), 0) + 1
-    hint = NEXT_HINT[st["stage"]].replace("<slug>", slug)
+    hint = hint_for(st).replace("<slug>", slug)
     if st["stage"] == "scheduled" and counts["lapsed"]:
         hint = f"{counts['lapsed']} concept(s) lapsed in recall: relearn with /learn {slug}."
     last = st["rounds_log"][-1] if st["rounds_log"] else None
@@ -280,6 +352,7 @@ def status(slug: str) -> dict:
         "slug": slug,
         "title": st["title"],
         "depth": st["depth"],
+        "mode": mode_of(st),
         "stage": st["stage"],
         "version": st["version"],
         "round": st["round"],

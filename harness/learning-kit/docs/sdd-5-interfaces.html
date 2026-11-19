@@ -1,0 +1,1020 @@
+<!doctype html>
+<html lang="en" data-haise="doc" data-haise-version="3.1.0">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>learning-kit interfaces</title>
+<script>
+/* haise: apply the saved theme before first paint (no flash) */
+(function(){try{var t=localStorage.getItem('haise.theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
+<style id="haise-shell-css">
+/* ===== haise-doc shell v3.1.0 — do not edit per document ===== */
+:root{
+  --bg:#f7f7f5; --panel:#ffffff; --panel-2:#f0efeb; --ink:#1d1d1b; --muted:#6b6a66; --line:#e2e0da;
+  --accent:#3b5bdb; --accent-soft:#e9edff; --ok:#2b8a3e; --ok-soft:#e7f5ea;
+  --bad:#c92a2a; --bad-soft:#ffebeb; --warn:#d9480f; --warn-soft:#fff0e6;
+  --info:#7048e8; --info-soft:#f0ebff;
+  --code:#f3f2ee; --hit:#ffe58a; --hit-cur:#ffb84d;
+  --c1:#3b5bdb; --c2:#d9480f; --c3:#2b8a3e; --c4:#7048e8; --c5:#0c8599;
+  --p1:#3b5bdb; --p1-soft:#e9edff; --p2:#0c8599; --p2-soft:#e3f6f8; --p3:#7048e8; --p3-soft:#f0ebff;
+  --p4:#d9480f; --p4-soft:#fff0e6; --p5:#2b8a3e; --p5-soft:#e7f5ea; --p6:#c2255c; --p6-soft:#fdebf1;
+  --sans:system-ui,-apple-system,"Segoe UI","Hiragino Sans","Noto Sans JP",Roboto,"Noto Sans",sans-serif;
+  --mono:ui-monospace,"Cascadia Code","JetBrains Mono",Consolas,Menlo,monospace;
+  --radius:10px; --topbar-h:52px; --nav-w:280px;
+  --fig-label:"Figure"; --tbl-label:"Table";
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#141413; --panel:#1d1d1b; --panel-2:#262624; --ink:#ecebe6; --muted:#a3a29c; --line:#34342f;
+    --accent:#91a7ff; --accent-soft:#1f2547; --ok:#69db7c; --ok-soft:#1b2e20;
+    --bad:#ff8787; --bad-soft:#3a1c1c; --warn:#ffa94d; --warn-soft:#3a2412;
+    --info:#b197fc; --info-soft:#271f45;
+    --code:#232321; --hit:#6b5a12; --hit-cur:#a8671a;
+    --c1:#91a7ff; --c2:#ffa94d; --c3:#69db7c; --c4:#b197fc; --c5:#66d9e8;
+    --p1:#91a7ff; --p1-soft:#1f2547; --p2:#66d9e8; --p2-soft:#10303a; --p3:#b197fc; --p3-soft:#271f45;
+    --p4:#ffa94d; --p4-soft:#3a2412; --p5:#69db7c; --p5-soft:#1b2e20; --p6:#f783ac; --p6-soft:#3a1825;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#141413; --panel:#1d1d1b; --panel-2:#262624; --ink:#ecebe6; --muted:#a3a29c; --line:#34342f;
+  --accent:#91a7ff; --accent-soft:#1f2547; --ok:#69db7c; --ok-soft:#1b2e20;
+  --bad:#ff8787; --bad-soft:#3a1c1c; --warn:#ffa94d; --warn-soft:#3a2412;
+  --info:#b197fc; --info-soft:#271f45;
+  --code:#232321; --hit:#6b5a12; --hit-cur:#a8671a;
+  --c1:#91a7ff; --c2:#ffa94d; --c3:#69db7c; --c4:#b197fc; --c5:#66d9e8;
+  --p1:#91a7ff; --p1-soft:#1f2547; --p2:#66d9e8; --p2-soft:#10303a; --p3:#b197fc; --p3-soft:#271f45;
+  --p4:#ffa94d; --p4-soft:#3a2412; --p5:#69db7c; --p5-soft:#1b2e20; --p6:#f783ac; --p6-soft:#3a1825;
+}
+:root:lang(vi){ --fig-label:"Hình"; --tbl-label:"Bảng"; }
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.65 var(--sans)}
+a{color:var(--accent)}
+[id]{scroll-margin-top:calc(var(--topbar-h) + 14px)}
+/* phase / series colour sets: add .p1 … .p6 to a step, chip, card or callout */
+.p1{--pc:var(--p1);--ps:var(--p1-soft)} .p2{--pc:var(--p2);--ps:var(--p2-soft)} .p3{--pc:var(--p3);--ps:var(--p3-soft)}
+.p4{--pc:var(--p4);--ps:var(--p4-soft)} .p5{--pc:var(--p5);--ps:var(--p5-soft)} .p6{--pc:var(--p6);--ps:var(--p6-soft)}
+
+/* --- progress + top bar --- */
+.progress{position:fixed;top:0;left:0;height:3px;width:0;background:var(--accent);z-index:60}
+.topbar{position:sticky;top:0;z-index:50;height:var(--topbar-h);display:flex;align-items:center;gap:8px;
+  padding:0 12px;background:var(--panel);border-bottom:1px solid var(--line)}
+.topbar .doc-title{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1 1 auto}
+.iconbtn{flex:none;display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:8px;
+  border:1px solid var(--line);background:var(--panel-2);color:var(--ink);cursor:pointer;font-size:15px;line-height:1}
+.iconbtn:hover{border-color:var(--muted)}
+.iconbtn svg{width:17px;height:17px;margin:0}
+.search{flex:0 1 400px;display:flex;align-items:center;gap:6px;min-width:0}
+.search .box{position:relative;flex:1;min-width:0}
+.search input{width:100%;height:34px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);
+  padding:0 10px 0 32px;font:inherit;font-size:.88rem}
+.search input:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.search .box svg{position:absolute;left:9px;top:9px;width:16px;height:16px;margin:0;color:var(--muted)}
+.search .count{font-size:.78rem;color:var(--muted);min-width:60px;text-align:center;white-space:nowrap}
+.search .iconbtn{width:28px;height:28px;font-size:12px}
+
+/* --- sidebar (table of contents) --- */
+.sidebar{position:fixed;top:var(--topbar-h);bottom:0;left:0;width:var(--nav-w);overflow-y:auto;z-index:40;
+  background:var(--bg);border-right:1px solid var(--line);padding:22px 12px 48px;transition:transform .2s ease}
+.sidebar h2{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 8px 10px}
+.toc ol{list-style:none;margin:0;padding:0}
+.toc ol ol{padding-left:10px;margin:2px 0 8px 14px;border-left:1px solid var(--line)}
+.toc a{display:flex;gap:6px;align-items:baseline;padding:4px 8px;border-radius:6px;color:var(--muted);
+  text-decoration:none;font-size:.87rem;line-height:1.45}
+.toc > ol > li > a{font-weight:500}
+.toc ol ol a{font-size:.82rem}
+.toc a:hover{background:var(--panel-2);color:var(--ink)}
+.toc a.active{background:var(--panel-2);color:var(--ink);font-weight:600}
+.toc .num{opacity:.75;font-variant-numeric:tabular-nums;flex:none}
+.toc .badge{margin-left:auto;flex:none;font-size:.7rem;font-weight:700;padding:0 6px;border-radius:999px;
+  background:var(--hit);color:var(--ink)}
+.toc .badge:empty{display:none}
+.backdrop{display:none}
+.page{margin-left:var(--nav-w);transition:margin .2s ease}
+body.nav-collapsed .sidebar{transform:translateX(-100%)}
+body.nav-collapsed .page{margin-left:0}
+@media (max-width:960px){
+  .page{margin-left:0}
+  .sidebar{transform:translateX(-100%);background:var(--panel);box-shadow:4px 0 24px rgba(0,0,0,.18)}
+  body.nav-open .sidebar{transform:none}
+  body.nav-open .backdrop{display:block;position:fixed;inset:var(--topbar-h) 0 0 0;background:rgba(0,0,0,.35);z-index:35}
+  .topbar .doc-title{display:none}
+  .search{flex:1 1 auto}
+}
+
+/* --- document body --- */
+.wrap{max-width:860px;margin:0 auto;padding:32px 24px 96px}
+.doc-head{margin:0 0 8px}
+.doc-head .eyebrow{margin:0 0 6px;font-size:.76rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.doc-head h1{font-size:1.9rem;line-height:1.25;margin:0 0 6px}
+.doc-head .sub{color:var(--muted);margin:0 0 14px}
+.meta{display:flex;flex-wrap:wrap;gap:6px;margin:0;padding:0;list-style:none}
+.meta li{background:var(--panel-2);border-radius:999px;padding:2px 11px;font-size:.8rem;color:var(--ink);min-width:0}
+.meta li b{color:var(--muted);font-weight:600;margin-right:5px}
+section{margin:40px 0 0}
+section > h2{font-size:1.4rem;line-height:1.3;margin:0 0 14px;padding-top:20px;border-top:1px solid var(--line)}
+h3{font-size:1.15rem;line-height:1.35;margin:32px 0 8px}
+h4{font-size:1rem;margin:20px 0 6px}
+h2 .num,h3 .num{color:var(--muted);font-weight:600;margin-right:.45em;font-variant-numeric:tabular-nums}
+p{margin:0 0 14px}
+ul,ol{margin:0 0 14px;padding-left:24px}
+li{margin:4px 0}
+li > ul,li > ol{margin-bottom:4px}
+code,.mono{font-family:var(--mono);font-size:.86em;background:var(--code);padding:1px 5px;border-radius:5px}
+pre{background:var(--code);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;overflow-x:auto;
+  font-size:.84rem;line-height:1.5;margin:0 0 14px}
+pre code{background:none;padding:0;font-size:inherit}
+p code,li code,td code,.card code{overflow-wrap:anywhere}
+blockquote{margin:0 0 16px;padding:2px 16px;border-left:3px solid var(--line);color:var(--muted)}
+.tbl{overflow-x:auto;margin:0 0 18px}
+table{width:100%;border-collapse:separate;border-spacing:0;font-size:.92rem;background:var(--panel);
+  border:1px solid var(--line);border-radius:var(--radius)}
+th,td{padding:8px 12px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}
+tr:last-child > td,tr:last-child > th{border-bottom:0}
+th{background:var(--panel-2);font-weight:600}
+tr:first-child > :first-child{border-top-left-radius:calc(var(--radius) - 1px)}
+tr:first-child > :last-child{border-top-right-radius:calc(var(--radius) - 1px)}
+tr:last-child > :first-child{border-bottom-left-radius:calc(var(--radius) - 1px)}
+tr:last-child > :last-child{border-bottom-right-radius:calc(var(--radius) - 1px)}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+tr.hl td{background:var(--warn-soft)}
+.small{font-size:.86rem;color:var(--muted)}
+.good{color:var(--ok);font-weight:600} .badv{color:var(--bad);font-weight:600}
+hr{border:none;border-top:1px solid var(--line);margin:28px 0}
+
+/* translated keyword + original */
+strong.kw{font-weight:700}
+.orig{color:var(--muted);font-size:.94em;white-space:nowrap}
+
+/* lead answer / callouts / tags / chips */
+.verdict{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;margin:0 0 18px;
+  box-shadow:0 1px 2px rgb(0 0 0 / .04)}
+.verdict .label{display:block;font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);margin-bottom:6px}
+.verdict p{margin:0 0 8px;font-size:1.05rem} .verdict > :last-child{margin-bottom:0}
+.callout{--cc:var(--pc,var(--accent));margin:0 0 18px;padding:12px 16px;border-radius:var(--radius);background:var(--panel);
+  border:1px solid var(--line);border-left:4px solid var(--cc)}
+.callout.ok,.callout.tip{--cc:var(--ok)} .callout.bad,.callout.myth{--cc:var(--bad)} .callout.warn{--cc:var(--warn)}
+.callout.info,.callout.interview{--cc:var(--info)} .callout.example{--cc:var(--p2)} .callout.tldr{--cc:var(--muted)}
+.callout > :first-child{margin-top:0} .callout > :last-child{margin-bottom:0}
+.kind{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--cc,var(--pc,var(--accent)));margin-right:6px}
+.callout .ct{font-weight:600;margin:0 0 6px}
+.tag{display:inline-block;font-size:.7rem;font-weight:700;padding:0 7px;border-radius:999px;border:1px solid currentColor;
+  margin-left:4px;vertical-align:1px;white-space:nowrap;line-height:1.6}
+.tag.sure{color:var(--ok)} .tag.infer{color:var(--warn)} .tag.open{color:var(--bad)}
+.sev{display:inline-block;font-size:.72rem;font-weight:700;padding:0 7px;border-radius:4px;white-space:nowrap}
+.sev.high{background:var(--bad-soft);color:var(--bad)} .sev.med{background:var(--warn-soft);color:var(--warn)} .sev.low{background:var(--panel-2);color:var(--muted)}
+.chip{display:inline-block;font-size:.75rem;font-weight:600;line-height:1.5;padding:1px 9px;border-radius:999px;margin-left:6px;
+  vertical-align:1px;white-space:nowrap;background:var(--ps,var(--panel-2));color:var(--pc,var(--muted))}
+.ex{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;margin:6px 0 8px;font-size:.88rem}
+.ex > .k{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.ex code{white-space:pre-wrap;word-break:break-word}
+
+/* findings list */
+ol.findings{counter-reset:f;list-style:none;padding:0;margin:0 0 18px}
+ol.findings > li{counter-increment:f;position:relative;padding:10px 4px 10px 48px;margin:0;border-bottom:1px solid var(--line)}
+ol.findings > li:last-child{border-bottom:none}
+ol.findings > li::before{content:counter(f);position:absolute;left:4px;top:9px;width:30px;height:30px;border-radius:50%;
+  background:var(--accent-soft);color:var(--accent);border:2px solid var(--accent);font-weight:700;font-size:.85rem;
+  display:flex;align-items:center;justify-content:center}
+
+/* cards, grids, stat tiles, step cards */
+.grid2,.grid3{display:grid;gap:14px;margin:0 0 18px}
+.grid2{grid-template-columns:1fr 1fr} .grid3{grid-template-columns:repeat(3,1fr)}
+.grid2>*,.grid3>*{min-width:0}
+.card{border:1px solid var(--line);border-top:3px solid var(--pc,var(--line));border-radius:var(--radius);padding:12px 14px;background:var(--panel)}
+.card h4{margin:0 0 6px}
+.card > :last-child{margin-bottom:0}
+.card.ok{--pc:var(--ok)} .card.bad{--pc:var(--bad)} .card.warn{--pc:var(--warn)} .card.info{--pc:var(--info)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:0 0 18px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px}
+.stat .v{display:block;font-size:1.6rem;font-weight:700;line-height:1.2;font-variant-numeric:tabular-nums}
+.stat .k{display:block;font-size:.82rem;color:var(--muted)}
+.stat.ok .v{color:var(--ok)} .stat.bad .v{color:var(--bad)} .stat.warn .v{color:var(--warn)}
+ol.steps{list-style:none;padding:0;margin:0 0 18px;counter-reset:s;position:relative}
+ol.steps::before{content:"";position:absolute;left:17px;top:10px;bottom:10px;width:2px;background:var(--line)}
+ol.steps > li{counter-increment:s;position:relative;margin:0 0 12px 52px;padding:10px 14px;background:var(--panel);
+  border:1px solid var(--line);border-top:3px solid var(--pc,var(--accent));border-radius:var(--radius);font-size:.96rem}
+ol.steps > li::before{content:counter(s);position:absolute;left:-52px;top:-3px;width:36px;height:36px;border-radius:50%;
+  background:var(--ps,var(--accent-soft));color:var(--pc,var(--accent));border:2px solid var(--pc,var(--accent));
+  font-weight:700;font-size:.92rem;display:flex;align-items:center;justify-content:center;z-index:1}
+ol.steps > li.ok{--pc:var(--ok);--ps:var(--ok-soft)} ol.steps > li.bad{--pc:var(--bad);--ps:var(--bad-soft)}
+ol.steps > li.warn{--pc:var(--warn);--ps:var(--warn-soft)}
+ol.steps > li > :last-child{margin-bottom:0}
+
+/* phase focus: hover (or tap to pin) anything with data-phase="…" to light up that phase in every step card and diagram */
+[data-phase]{transition:opacity .15s,box-shadow .15s}
+body.focus-on main [data-phase]:not(.on){opacity:.22}
+main :not(svg *)[data-phase]{cursor:pointer}
+ol.steps > li.on,.card.on{box-shadow:0 0 0 2px var(--pc,var(--accent))}
+.phase-key{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 16px;font-size:.82rem;color:var(--muted)}
+.phase-key .chip{margin-left:0}
+
+/* collapsible deep dives */
+details.more{border:1px solid var(--line);border-radius:var(--radius);margin:0 0 18px;background:var(--panel)}
+details.more > summary{cursor:pointer;padding:10px 14px;font-weight:600;list-style:none}
+details.more > summary::-webkit-details-marker{display:none}
+details.more > summary::before{content:"▸";display:inline-block;width:1.1em;color:var(--muted);transition:transform .15s}
+details.more[open] > summary::before{transform:rotate(90deg)}
+details.more > .body{padding:2px 16px 14px}
+details.more > .body > :last-child{margin-bottom:0}
+
+/* figures (diagrams, charts) */
+figure.fig{margin:4px 0 24px;padding:14px 14px 10px;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel)}
+figure.fig svg{max-width:100%;height:auto;display:block;margin:4px auto}
+figure.fig svg text{font-family:var(--sans)}
+figure.fig .grid2,figure.fig .grid3{margin-bottom:8px}
+main{counter-reset:fig tbl}
+figure.fig > figcaption{font-size:.86rem;color:var(--muted);margin-top:8px}
+figure.fig > figcaption::before{counter-increment:fig;content:var(--fig-label) " " counter(fig) " — ";font-weight:700;color:var(--ink)}
+.tbl > .cap{font-size:.86rem;color:var(--muted);margin:0 0 6px}
+.tbl > .cap::before{counter-increment:tbl;content:var(--tbl-label) " " counter(tbl) " — ";font-weight:700;color:var(--ink)}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:.82rem;color:var(--muted);margin:4px 0 0}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+figure.fig img{max-width:100%;height:auto;display:block}
+
+/* zoom viewer: click a figure image or diagram to open it full screen */
+.zoomable{cursor:zoom-in;transition:outline-color .15s}
+.zoomable:hover,.zoomable:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:6px}
+.zoom-ov{position:fixed;inset:0;z-index:100;display:none;overflow:hidden;touch-action:none;cursor:grab;
+  background:color-mix(in srgb,var(--bg) 94%,transparent);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.zoom-ov.on{display:block}
+.zoom-ov.drag{cursor:grabbing}
+.zoom-ov .zoom-item{position:absolute;left:0;top:0;max-width:none!important;max-height:none!important;margin:0!important;
+  border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);box-shadow:0 10px 40px rgb(0 0 0 / .3);
+  user-select:none;-webkit-user-drag:none;cursor:inherit}
+.zoom-bar{position:absolute;top:12px;right:12px;z-index:1;display:flex;align-items:center;gap:6px;padding:4px;
+  border:1px solid var(--line);border-radius:var(--radius);background:var(--panel)}
+.zoom-bar .iconbtn{min-width:34px;height:34px;font-size:.95rem}
+.zoom-pct{min-width:52px;text-align:center;font-size:.82rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.zoom-cap{position:absolute;left:50%;bottom:12px;z-index:1;transform:translateX(-50%);width:max-content;max-width:min(920px,calc(100vw - 32px));
+  padding:8px 14px;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);color:var(--muted);font-size:.85rem;
+  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.zoom-cap:empty{display:none}
+.zoom-cap b{color:var(--ink)}
+
+/* citations */
+a.cite{display:inline-block;font:600 .66rem/1 var(--mono);vertical-align:2px;padding:3px 5px;margin-left:3px;border-radius:5px;
+  background:var(--panel-2);color:var(--muted);text-decoration:none;white-space:nowrap}
+a.cite + a.cite{margin-left:2px}
+a.cite:hover{color:var(--accent)}
+a.cite.broken{background:var(--bad-soft);color:var(--bad)}
+a.cite:target{outline:2px solid var(--accent)}
+ol.sources{list-style:none;padding:0;margin:0 0 14px}
+ol.sources > li{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px 16px;margin:0 0 10px}
+ol.sources > li:target{outline:2px solid var(--accent)}
+.src-head{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline}
+.src-id{font:700 .8rem var(--mono);color:var(--accent);font-variant-numeric:tabular-nums}
+.src-title{font-weight:600}
+.src-type{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:1px 7px;border-radius:999px;
+  background:var(--panel-2);color:var(--muted)}
+.src-loc{font-size:.84rem;margin:6px 0;color:var(--muted);overflow-wrap:anywhere}
+blockquote.src-quote{margin:8px 0;padding:6px 12px;border-left:3px solid var(--line);background:var(--bg);color:var(--ink);font-size:.88rem;border-radius:0 6px 6px 0}
+blockquote.src-quote .tr{display:block;color:var(--muted);margin-top:4px}
+.src-note{font-size:.84rem;color:var(--muted)}
+.backrefs{font-size:.8rem;color:var(--muted);margin-top:4px}
+.backrefs a{margin-right:6px}
+
+/* search hits */
+mark.hit{background:var(--hit);color:inherit;border-radius:2px;padding:0 1px}
+mark.hit.cur{background:var(--hit-cur);outline:2px solid var(--warn)}
+
+footer.doc-foot{color:var(--muted);font-size:.8rem;margin-top:56px;padding-top:14px;border-top:1px solid var(--line)}
+@media (max-width:700px){
+  body{font-size:16px}
+  .wrap{padding:24px 16px 80px}
+  .grid2,.grid3{grid-template-columns:1fr}
+  .doc-head h1{font-size:1.55rem}
+  ol.steps > li{margin-left:46px} ol.steps > li::before{left:-46px}
+}
+@media print{
+  .topbar,.sidebar,.backdrop,.progress,.zoom-ov{display:none!important}
+  .page{margin:0!important}
+  figure.fig,ol.steps > li,.callout{break-inside:avoid-page}
+  details.more{border:none} details.more > .body{display:block}
+  mark.hit{background:none}
+}
+</style>
+</head>
+<body>
+<div class="progress" id="haise-progress"></div>
+
+<header class="topbar no-search">
+  <button class="iconbtn" id="haise-nav-btn" type="button" aria-controls="haise-sidebar">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+  </button>
+  <div class="doc-title">learning-kit interfaces</div>
+  <div class="search" role="search">
+    <div class="box">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <input id="haise-q" type="search" autocomplete="off" spellcheck="false">
+    </div>
+    <span class="count" id="haise-count" aria-live="polite"></span>
+    <button class="iconbtn" id="haise-prev" type="button">▲</button>
+    <button class="iconbtn" id="haise-next" type="button">▼</button>
+  </div>
+  <button class="iconbtn" id="haise-reload" type="button">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg>
+  </button>
+  <button class="iconbtn" id="haise-theme" type="button"></button>
+</header>
+
+<aside class="sidebar no-search" id="haise-sidebar">
+  <h2 id="haise-toc-label"></h2>
+  <nav class="toc" id="haise-toc"></nav>
+</aside>
+<div class="backdrop" id="haise-backdrop"></div>
+
+<div class="page">
+<main id="content" class="wrap">
+<!-- ===================== DOCUMENT CONTENT START ===================== -->
+<header class="doc-head">
+  <p class="eyebrow">Software design document · 5 of 5 · Interfaces</p>
+  <h1>learning-kit interfaces</h1>
+  <p class="sub">The reference for every way into the core: the CLI commands and their stdout contract with the skills, the HTTP API, the MCP tools and resources, the grader subprocess, the error model and the configuration keys.</p>
+  <ul class="meta">
+    <li><b>Updated</b>2026-11-11</li>
+    <li><b>Scope</b><code>agentic-workflows/learning-kit</code> · branch <code>feat/learning-kit</code> @ <code>5663e54</code></li>
+    <li><b>Doc set</b><a href="sdd-1-architecture.html">1 Architecture</a> · <a href="sdd-2-use-cases.html">2 Use cases</a> · <a href="sdd-3-sequences.html">3 Sequences</a> · <a href="sdd-4-data-model.html">4 Data model</a> · <a href="sdd-5-interfaces.html">5 Interfaces</a></li>
+  </ul>
+</header>
+
+<!-- The outline is chosen per document (references/writing-guide.md §1).
+     One top-level <section id="..."><h2>…</h2>…</section> per part, in reading order.
+     If the doc cites anything, the last section is <section id="sources"> with <ol class="sources">. -->
+<section id="point">
+  <h2>The interfaces at a glance</h2>
+  <div class="verdict">
+    <span class="label">In short</span>
+    <p>learning-kit exposes <strong>four interfaces</strong>. The <strong>CLI</strong> (<code>lk</code>) is the full surface and the only way to author: skills call it and parse its JSON stdout. The <strong>HTTP API</strong> (<code>lk web</code> / <code>lk serve</code>) serves the browser app. The <strong>MCP server</strong> (<code>lk mcp</code>) lets an agent read data and run no-stakes quizzes. Outbound, the core calls one subprocess, the <strong>grader</strong> (<code>claude -p</code>). HTTP and MCP are thin adapters over <code>service.py</code>, so validation and answer hiding are identical on both. <a class="cite" href="#src-1">S1</a><a class="cite" href="#src-2">S2</a></p>
+  </div>
+  <div class="tbl">
+    <p class="cap">Interface summary</p>
+    <table>
+      <tr><th>Interface</th><th>Consumer</th><th>Transport</th><th>Can write</th><th>Can author content</th></tr>
+      <tr><td>CLI <code>lk</code></td><td>Skills, the learner</td><td>argv → JSON on stdout, exit code</td><td class="good">✓ everything</td><td class="good">✓ sources, concepts, quiz, plans</td></tr>
+      <tr><td>HTTP API</td><td>Browser app (<code>web/app.js</code>)</td><td>JSON over HTTP on 127.0.0.1</td><td class="good">✓ sessions and answers only</td><td class="badv">✗</td></tr>
+      <tr><td>MCP</td><td>Claude Code or any MCP client</td><td>MCP over stdio</td><td class="good">✓ practice / recall sessions only</td><td class="badv">✗</td></tr>
+      <tr><td>Grader (outbound)</td><td><code>grader.py</code></td><td>subprocess, prompt on stdin, JSON on stdout</td><td>—</td><td>—</td></tr>
+    </table>
+  </div>
+</section>
+
+<section id="cli">
+  <h2>CLI: <code>lk</code></h2>
+  <p>Entry points are equivalent: <code>python lk.py</code>, <code>python -m lk</code>, or <code>lk</code> after <code>pip install -e .</code>. Skills call <code>&lt;absolute python&gt; &lt;kit&gt;/lk.py</code> so they need neither PATH nor an activated venv. Slug arguments are lowercased before use. <a class="cite" href="#src-3">S3</a><a class="cite" href="#src-4">S4</a></p>
+  <div class="tbl">
+    <p class="cap">Command reference (<code>lk --help</code> for flags) <a class="cite" href="#src-3">S3</a></p>
+    <table>
+      <tr><th>Group</th><th>Command</th><th>Does</th></tr>
+      <tr><td rowspan="2">Setup</td><td><code>install [--home DIR] [--skills-dir DIR]</code></td><td>Write the home pointer, create the data home, render skills</td></tr>
+      <tr><td><code>config [show|path]</code></td><td>Merged config, or <code>{home, config, kit}</code> paths (skills resolve DATA from this)</td></tr>
+      <tr><td rowspan="5">Topic</td><td><code>topic new SLUG [--title] [--depth aware|use|deep] [--fresh]</code></td><td>Create at stage <code>prior</code></td></tr>
+      <tr><td><code>topic list [--json]</code> · <code>topic status SLUG</code></td><td>Stage, depth, version, round, concept counts, next hint</td></tr>
+      <tr><td><code>topic advance SLUG STAGE [--force] [--note]</code></td><td>Guarded stage move; gate-only moves need <code>--force</code></td></tr>
+      <tr><td><code>topic extend SLUG</code></td><td><code>scheduled</code> → <code>research</code>, version + 1</td></tr>
+      <tr><td><code>concepts merge SLUG FILE</code> · <code>list SLUG [--targets] [--json]</code> · <code>set SLUG ID --status S</code></td><td>Add/update concepts (status untouched) · list · set status by hand</td></tr>
+      <tr><td rowspan="2">Sources</td><td><code>source fetch URL --topic T[,T] [--title] [--kind] [--quality 1-3] [--notes] [--refresh]</code></td><td>Fetch (outside the lock), snapshot, de-duplicate</td></tr>
+      <tr><td><code>source add --url --title --file --topic …</code> · <code>list [--topic]</code> · <code>search Q [--limit]</code> · <code>path ID</code></td><td>Save a WebFetch result · list · keyword search · snapshot file path</td></tr>
+      <tr><td rowspan="2">Quiz</td><td><code>quiz validate FILE [--topic SLUG] [--variant]</code></td><td>Schema check; exit 1 with <code>{ok:false, errors}</code></td></tr>
+      <tr><td><code>quiz import SLUG FILE [--reviewed-by]</code> · <code>coverage SLUG</code> · <code>list SLUG [--json]</code></td><td>Assign ids, append to bank, return coverage · fresh/used listing</td></tr>
+      <tr><td rowspan="4">Sessions</td><td><code>session gate|practice|review|placement|checkpoint …</code> · <code>session show ID [--full]</code></td><td>Create without serving · brief or full results</td></tr>
+      <tr><td><code>serve --topic SLUG [--practice --n N] [--force]</code> · <code>--review [--variants F] [--limit N]</code> · <code>--placement PATH</code> · <code>--checkpoint PATH --milestone M</code> · <code>--session ID</code> · <code>[--port] [--no-open]</code></td><td>Create (or resume) a session and serve it until closed</td></tr>
+      <tr><td><code>grade ID</code> · <code>grade ID --pending</code> · <code>grade ID --apply FILE</code></td><td>Retry grading · print what needs LLM grading · apply manual grades</td></tr>
+      <tr><td><code>gate SLUG</code></td><td>Gate rounds log + the last verdict (<code>weak_concepts</code>, <code>missed_concepts</code>)</td></tr>
+      <tr><td rowspan="2">Recall</td><td><code>srs due [--limit] [--json] [--no-mistakes]</code> · <code>srs enroll SLUG</code> · <code>srs stats</code></td><td>Due queue with bank items · enroll by hand · scheduler stats</td></tr>
+      <tr><td><code>stats</code></td><td>Topics by stage, paths, SRS stats, mistake counts</td></tr>
+      <tr><td rowspan="5">Paths</td><td><code>path new SLUG [--title]</code> · <code>list</code> · <code>show SLUG [--json]</code> · <code>raw SLUG</code></td><td>Create · list · derived view · raw <code>path.json</code> for re-plan drafts</td></tr>
+      <tr><td><code>path validate FILE</code> · <code>path import SLUG FILE [--reason] [--force]</code></td><td>Check a draft (exit 1 on errors) · store it as the next version</td></tr>
+      <tr><td><code>path next SLUG</code></td><td>The one next action as JSON</td></tr>
+      <tr><td><code>path reviewed SLUG NODE [--note]</code> · <code>override SLUG NODE tested_out|skipped|clear [--note] [--force]</code></td><td>Record a plan review · record a learner decision</td></tr>
+      <tr><td><code>path placement-import SLUG FILE</code> · <code>placement-skip SLUG [--reason]</code> · <code>for-topic TOPIC</code></td><td>Placement bank · skip it · node context for <code>/learn</code></td></tr>
+      <tr><td rowspan="2">Docs</td><td><code>read SLUG [--file F.md] [--out] [--check] [--no-open]</code></td><td>Render a topic doc as HTML; <code>--check</code> validates visual blocks</td></tr>
+      <tr><td><code>note record SLUG FILE</code></td><td>Score a note review, write <code>note-review.*</code>, advance on pass</td></tr>
+      <tr><td rowspan="2">Servers</td><td><code>web [--port] [--no-open]</code></td><td>Long-lived library app</td></tr>
+      <tr><td><code>mcp</code></td><td>MCP server on stdio (needs the <code>mcp</code> extra)</td></tr>
+    </table>
+  </div>
+
+  <h3 id="cli-contract">The stdout contract with the skills</h3>
+  <p>Skills run <code>lk</code> through the Bash tool and read its output. Most commands print one JSON document. The serving commands print <code>KEY=value</code> lines that the skills grep for, because they run in the background and block. <a class="cite" href="#src-5">S5</a><a class="cite" href="#src-6">S6</a></p>
+  <div class="tbl">
+    <p class="cap">Machine-read output lines</p>
+    <table>
+      <tr><th>Line</th><th>Printed by</th><th>When</th><th>Read by</th></tr>
+      <tr><td><code>QUIZ_URL=&lt;url&gt;#/session/&lt;id&gt;</code></td><td><code>lk serve</code></td><td>as soon as the session is served</td><td><code>/learn</code>, <code>/quiz</code>, <code>/recall</code>, <code>/path</code>: give it to the learner</td></tr>
+      <tr><td><code>SESSION=&lt;id&gt;</code></td><td><code>lk serve</code></td><td>right after <code>QUIZ_URL</code></td><td>the skill, for <code>lk grade</code> fallbacks</td></tr>
+      <tr><td><code>SESSION_RESULT=&lt;json&gt;</code></td><td><code>lk serve</code></td><td>after the learner closes the session or after the idle timeout (120 min)</td><td>the skill's ≤ 6-line report (score, gate, srs, placement, checkpoint)</td></tr>
+      <tr><td><code>APP_URL=&lt;url&gt;</code></td><td><code>lk web</code></td><td>on start, or when one is already running for this home</td><td>the learner</td></tr>
+      <tr><td><code>Open &lt;url&gt; in your browser.</code></td><td><code>lk serve</code>, <code>lk web</code></td><td>no GUI browser could be opened (headless Linux, SSH, WSL without a bridge)</td><td>skills pass the URL on</td></tr>
+    </table>
+  </div>
+  <p class="small"><code>SESSION_RESULT</code> carries <code>service.session_brief</code>: <code>id, mode, topic, title, status, answered, items, created, finished, closed, error, summary, gate, srs</code>, plus <code>path, milestone, placement, checkpoint</code> when set. <a class="cite" href="#src-7">S7</a></p>
+</section>
+
+<section id="http">
+  <h2>HTTP API</h2>
+  <p>The server binds <code>127.0.0.1</code> (port 8765, else the next 9 ports, else any free port). Every route is one line that calls <code>service.py</code>. Responses are JSON with <code>Cache-Control: no-store</code>, <code>X-Content-Type-Options: nosniff</code>, <code>Referrer-Policy: no-referrer</code> and <code>X-Frame-Options: DENY</code>. Request bodies are capped at 2 MB and must be a JSON object. <a class="cite" href="#src-1">S1</a><a class="cite" href="#src-8">S8</a></p>
+  <figure class="fig">
+  <svg viewBox="0 0 900 320" role="img" aria-label="HTTP request handling pipeline">
+    <defs><marker id="arr-http" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker>
+    <marker id="arr-httpb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--bad)"/></marker></defs>
+    <g font-size="13" fill="var(--ink)">
+      <rect x="20" y="110" width="120" height="50" rx="10" fill="var(--panel)" stroke="var(--line)"/><text x="80" y="140" text-anchor="middle" font-weight="600">Request</text>
+      <rect x="170" y="110" width="140" height="50" rx="10" fill="var(--p2-soft)" stroke="var(--p2)"/><text x="240" y="132" text-anchor="middle" font-weight="600">Host local?</text><text x="240" y="150" text-anchor="middle" font-size="12" fill="var(--muted)">127.0.0.1 · localhost · [::1]</text>
+      <rect x="340" y="110" width="140" height="50" rx="10" fill="var(--p2-soft)" stroke="var(--p2)"/><text x="410" y="132" text-anchor="middle" font-weight="600">POST: Origin?</text><text x="410" y="150" text-anchor="middle" font-size="12" fill="var(--muted)">absent or same host</text>
+      <rect x="510" y="110" width="120" height="50" rx="10" fill="var(--panel)" stroke="var(--line)"/><text x="570" y="132" text-anchor="middle" font-weight="600">Raw path</text><text x="570" y="150" text-anchor="middle" font-size="12" fill="var(--muted)">match, then decode</text>
+      <rect x="680" y="30" width="200" height="50" rx="10" fill="var(--p3-soft)" stroke="var(--p3)"/><text x="780" y="52" text-anchor="middle" font-weight="600">GET /read/&lt;slug&gt;</text><text x="780" y="70" text-anchor="middle" font-size="12" fill="var(--muted)">reader HTML page</text>
+      <rect x="680" y="110" width="200" height="50" rx="10" fill="var(--p1-soft)" stroke="var(--p1)"/><text x="780" y="132" text-anchor="middle" font-weight="600">/api/* → ROUTES</text><text x="780" y="150" text-anchor="middle" font-size="12" fill="var(--muted)">service fn → 200 JSON</text>
+      <rect x="680" y="190" width="200" height="50" rx="10" fill="var(--p5-soft)" stroke="var(--p5)"/><text x="780" y="212" text-anchor="middle" font-weight="600">other GET</text><text x="780" y="230" text-anchor="middle" font-size="12" fill="var(--muted)">static file inside web/</text>
+      <rect x="170" y="230" width="140" height="44" rx="10" fill="var(--bad-soft)" stroke="var(--bad)"/><text x="240" y="257" text-anchor="middle" font-weight="600">403 bad host</text>
+      <rect x="340" y="230" width="140" height="44" rx="10" fill="var(--bad-soft)" stroke="var(--bad)"/><text x="410" y="257" text-anchor="middle" font-weight="600">403 bad origin</text>
+      <rect x="490" y="250" width="170" height="60" rx="10" fill="var(--bad-soft)" stroke="var(--bad)"/><text x="575" y="272" text-anchor="middle" font-weight="600">400 · 404 · 500</text><text x="575" y="292" text-anchor="middle" font-size="12" fill="var(--muted)">{"error": "…"}</text>
+      <g stroke="var(--muted)" stroke-width="1.6" fill="none">
+        <line x1="140" y1="135" x2="168" y2="135" marker-end="url(#arr-http)"/>
+        <line x1="310" y1="135" x2="338" y2="135" marker-end="url(#arr-http)"/>
+        <line x1="480" y1="135" x2="508" y2="135" marker-end="url(#arr-http)"/>
+        <line x1="630" y1="125" x2="678" y2="60" marker-end="url(#arr-http)"/>
+        <line x1="630" y1="135" x2="678" y2="135" marker-end="url(#arr-http)"/>
+        <line x1="630" y1="145" x2="678" y2="210" marker-end="url(#arr-http)"/>
+      </g>
+      <g stroke="var(--bad)" stroke-width="1.6" fill="none">
+        <line x1="240" y1="160" x2="240" y2="228" marker-end="url(#arr-httpb)"/>
+        <line x1="410" y1="160" x2="410" y2="228" marker-end="url(#arr-httpb)"/>
+        <line x1="700" y1="160" x2="640" y2="248" stroke-dasharray="5 4" marker-end="url(#arr-httpb)"/>
+      </g>
+      <g font-size="12">
+        <text x="248" y="200" fill="var(--bad)">no</text><text x="418" y="200" fill="var(--bad)">foreign</text>
+        <text x="152" y="128" fill="var(--muted)">yes</text><text x="490" y="128" fill="var(--muted)">ok</text>
+        <text x="670" y="272" fill="var(--bad)">LkError, missing field,</text>
+        <text x="670" y="288" fill="var(--bad)">bad JSON → 400</text>
+      </g>
+    </g>
+  </svg>
+  <figcaption>Routes match on the raw path, and each segment is decoded afterwards, so an encoded <code>%2F</code> can't split a segment. Static files and docs are path-contained: anything resolving outside <code>web/</code> or the topic folder is a 404. Unknown <code>/api</code> routes are 404; unexpected exceptions are 500 with the error text (single-user local app). <a class="cite" href="#src-8">S8</a></figcaption>
+  </figure>
+  <div class="tbl">
+    <p class="cap">Routes <a class="cite" href="#src-1">S1</a><a class="cite" href="#src-2">S2</a></p>
+    <table>
+      <tr><th>Method</th><th>Path</th><th>Input</th><th>Returns</th><th>Service call</th></tr>
+      <tr><td>GET</td><td><code>/api/health</code></td><td>—</td><td><code>{ok, app, version, home}</code></td><td><code>health</code></td></tr>
+      <tr><td>GET</td><td><code>/api/overview</code></td><td>—</td><td>paths, topics, recall (counts), open and recent sessions, mistake counts</td><td><code>overview</code></td></tr>
+      <tr><td>GET</td><td><code>/api/paths</code> · <code>/api/paths/&lt;slug&gt;</code></td><td>—</td><td>path list · derived view + <code>next</code></td><td><code>list_paths</code> · <code>get_path</code></td></tr>
+      <tr><td>GET</td><td><code>/api/topics</code> · <code>/api/topics/&lt;slug&gt;</code></td><td>—</td><td>topic list · status + concepts, docs, quiz counts, paths, 10 sessions, <code>can_gate</code></td><td><code>list_topics</code> · <code>get_topic</code></td></tr>
+      <tr><td>GET</td><td><code>/api/topics/&lt;slug&gt;/doc</code></td><td><code>?file=research.md</code> (a <code>.md</code> inside the topic)</td><td><code>{topic, file, markdown}</code></td><td><code>read_doc</code></td></tr>
+      <tr><td>GET</td><td><code>/read/&lt;slug&gt;</code></td><td><code>?file=…</code></td><td>rendered HTML page (404 page on error)</td><td><code>render_doc</code></td></tr>
+      <tr><td>GET</td><td><code>/api/sessions</code></td><td><code>?topic=&amp;mode=&amp;limit=</code> (default 50, max 500)</td><td>session briefs, newest first</td><td><code>list_sessions</code></td></tr>
+      <tr><td>POST</td><td><code>/api/sessions</code></td><td><code>{kind, topic | path, milestone, n, limit}</code>; kind ∈ gate, practice, review, placement, checkpoint</td><td>session brief (gate, placement and checkpoint resume an open session of the same key)</td><td><code>start_session</code></td></tr>
+      <tr><td>GET</td><td><code>/api/sessions/&lt;id&gt;</code></td><td>—</td><td>questions as presented + saved answers + status</td><td><code>session_view</code></td></tr>
+      <tr><td>POST</td><td><code>/api/sessions/&lt;id&gt;/answer</code></td><td><code>{uid, response, confidence 1–3, time_ms}</code></td><td><code>{ok, answered, items}</code></td><td><code>answer</code></td></tr>
+      <tr><td>POST</td><td><code>/api/sessions/&lt;id&gt;/finish</code></td><td>—</td><td><code>{status: "grading"}</code>; grading runs in a thread (one per session)</td><td><code>AppServer.start_grading</code> → <code>finish</code></td></tr>
+      <tr><td>GET</td><td><code>/api/sessions/&lt;id&gt;/result</code></td><td>—</td><td><code>{id, status}</code> until <code>applied</code> / <code>grade_failed</code>, then the results view</td><td><code>result</code></td></tr>
+      <tr><td>POST</td><td><code>/api/sessions/&lt;id&gt;/done</code></td><td>—</td><td><code>{ok}</code>; sets <code>closed</code>; ends the <code>lk serve</code> that watches it</td><td><code>AppServer.close</code></td></tr>
+      <tr><td>GET</td><td><code>/api/recall</code></td><td><code>?limit=</code> (default 30)</td><td><code>{due, by_topic, stats, cards[]}</code> (no mistake extras)</td><td><code>recall_due</code></td></tr>
+      <tr><td>GET</td><td><code>/api/mistakes</code></td><td><code>?topic=&amp;limit=</code> (default 50)</td><td>mistakes, newest first</td><td><code>mistakes</code></td></tr>
+      <tr><td>GET</td><td><code>/api/sources</code></td><td><code>?q=&amp;limit=</code> (default 10)</td><td><code>{note: "Untrusted…", hits[]}</code></td><td><code>search_sources</code></td></tr>
+    </table>
+  </div>
+
+  <h3 id="formats">Answer formats</h3>
+  <div class="tbl">
+    <p class="cap"><code>response</code> shape per question type (same on HTTP and MCP) <a class="cite" href="#src-9">S9</a></p>
+    <table>
+      <tr><th>Type</th><th>Response</th><th>Graded by</th></tr>
+      <tr><td><code>mcq</code></td><td><code>{"choice": &lt;option key&gt;}</code></td><td>script: 1 / 0</td></tr>
+      <tr><td><code>multi</code></td><td><code>{"choices": [&lt;keys&gt;]}</code></td><td>script: max(0, (right − wrong) / #correct)</td></tr>
+      <tr><td><code>order</code></td><td><code>{"order": [&lt;step texts, first to last&gt;]}</code></td><td>script: 1 − inversions / max inversions</td></tr>
+      <tr><td><code>cloze</code></td><td><code>{"blanks": ["…", "…"]}</code></td><td>script (NFKC, case-folded, punctuation-trimmed); LLM if <code>llm_fallback</code> and not exact</td></tr>
+      <tr><td><code>explain</code> · <code>predict</code></td><td><code>{"text": "&lt;verbatim&gt;"}</code></td><td>grader: mean of rubric-point credit; correct at ≥ 0.7</td></tr>
+      <tr><td>any</td><td><code>{"dont_know": true}</code></td><td>score 0, no model call; confidence counted as 1</td></tr>
+    </table>
+  </div>
+  <p class="small">Option keys are the original option indexes, sent shuffled as <code>{key, text}</code>; the shuffle is seeded per session and item, so it is the same on every reload. <a class="cite" href="#src-10">S10</a></p>
+</section>
+
+<section id="mcp">
+  <h2>MCP server</h2>
+  <p><code>lk mcp</code> uses the official <code>mcp</code> SDK (v2, <code>MCPServer</code>, stdio). It needs Python ≥ 3.10 and <code>pip install -e ".[mcp]"</code>; register it with <code>claude mcp add learning-kit -- python &lt;kit&gt;/lk.py mcp</code>. Without the SDK it exits with the install command. <a class="cite" href="#src-2">S2</a><a class="cite" href="#src-11">S11</a></p>
+  <div class="tbl">
+    <p class="cap">Tools and resources <a class="cite" href="#src-2">S2</a></p>
+    <table>
+      <tr><th>Kind</th><th>Name</th><th>Arguments</th><th>Notes</th></tr>
+      <tr><td rowspan="10">Tool · read-only</td><td><code>overview</code></td><td>—</td><td>same as <code>/api/overview</code></td></tr>
+      <tr><td><code>get_path</code></td><td><code>path</code></td><td>derived view + <code>next</code></td></tr>
+      <tr><td><code>get_topic</code></td><td><code>topic</code></td><td>quiz bank as counts only</td></tr>
+      <tr><td><code>read_doc</code></td><td><code>topic, file = "research.md"</code></td><td>Markdown of a topic doc</td></tr>
+      <tr><td><code>list_sessions</code></td><td><code>topic?, mode?, limit = 20</code></td><td></td></tr>
+      <tr><td><code>session_results</code></td><td><code>session</code></td><td>results only after grading; status before</td></tr>
+      <tr><td><code>recall_due</code></td><td><code>limit = 30</code></td><td></td></tr>
+      <tr><td><code>mistakes</code></td><td><code>topic?, limit = 20</code></td><td></td></tr>
+      <tr><td><code>search_sources</code></td><td><code>query, limit = 10</code></td><td>labelled untrusted</td></tr>
+      <tr><td><code>read_source</code></td><td><code>source_id, max_chars = 20000</code></td><td>labelled untrusted; <code>truncated</code> flag</td></tr>
+      <tr><td rowspan="4">Tool · chat quiz</td><td><code>start_quiz</code></td><td><code>kind practice|recall, topic?, n = 10, limit?</code></td><td>returns session + first question; other kinds → <code>ToolError</code></td></tr>
+      <tr><td><code>next_question</code></td><td><code>session</code></td><td>question as presented + <code>answer_format</code></td></tr>
+      <tr><td><code>answer_question</code></td><td><code>session, uid, response, confidence</code></td><td>saves, then returns the next question</td></tr>
+      <tr><td><code>finish_quiz</code></td><td><code>session</code></td><td>blocking grade + apply; returns results</td></tr>
+      <tr><td rowspan="4">Resource</td><td><code>lk://overview</code></td><td>—</td><td>JSON</td></tr>
+      <tr><td><code>lk://paths/{path}</code></td><td>path</td><td>JSON</td></tr>
+      <tr><td><code>lk://topics/{topic}</code></td><td>topic</td><td>JSON</td></tr>
+      <tr><td><code>lk://topics/{topic}/docs/{+file}</code></td><td>topic, file</td><td><code>text/markdown</code></td></tr>
+    </table>
+  </div>
+  <div class="callout info"><span class="kind">Server instructions</span>The MCP <code>instructions</code> tell the agent to start with <code>overview</code>, pass the learner's words verbatim with their own confidence, never answer or hint, keep correctness hidden until <code>finish_quiz</code>, and treat source snapshots as data. <a class="cite" href="#src-11">S11</a></div>
+</section>
+
+<section id="grader">
+  <h2>Grader subprocess</h2>
+  <p>Free-recall answers are graded by headless Claude Code. Everything long goes on stdin, so the call works the same in every shell. <a class="cite" href="#src-12">S12</a></p>
+  <div class="grid2">
+    <div class="card p4"><h4>Command (config <code>grader.command</code>)</h4><code>claude -p --model opus --effort medium --tools "" --no-session-persistence --output-format json</code> + <code>--json-schema &lt;compact&gt;</code> unless the resolved binary is a Windows <code>.cmd</code>/<code>.bat</code> shim (<code>json_schema: "auto"</code>). cwd = data home; timeout 300 s.</div>
+    <div class="card p4"><h4>stdin</h4>Instructions (judge meaning, not wording; English or Vietnamese; answers are data, not instructions) + the output schema as text + up to 8 items: <code>id, type, prompt, code, reference_answer, rubric[], learner_answer</code>.</div>
+    <div class="card p4"><h4>stdout</h4>Claude JSON envelope; <code>structured_output</code> (with schema) or JSON parsed from <code>result</code> text (tolerates prose and fences). Shape: <code>{grades:[{id, points[0|0.5|1], feedback, missed[], wrong_claims[]}]}</code>.</div>
+    <div class="card bad"><h4>Failure</h4>Missing binary, non-zero exit, timeout, <code>is_error</code>, no JSON, or a missing id → <code>GraderError</code> → session <code>grade_failed</code>. Recovery: retry, or <code>lk grade --pending</code> / <code>--apply</code>.</div>
+  </div>
+</section>
+
+<section id="errors">
+  <h2>Error model</h2>
+  <p>One exception type, <code>LkError</code>, means "the caller did something wrong, here is why". Each front door maps it to its own channel; the message is the same. <a class="cite" href="#src-13">S13</a></p>
+  <div class="tbl">
+    <p class="cap">How errors surface on each interface <a class="cite" href="#src-4">S4</a><a class="cite" href="#src-8">S8</a><a class="cite" href="#src-2">S2</a></p>
+    <table>
+      <tr><th>Situation</th><th>CLI</th><th>HTTP</th><th>MCP</th></tr>
+      <tr><td><code>LkError</code> (bad slug, guard refused, nothing due…)</td><td><code>lk: &lt;msg&gt;</code> on stderr, exit 2</td><td>400 <code>{"error": msg}</code></td><td><code>ToolError(msg)</code> / <code>ResourceError(msg)</code></td></tr>
+      <tr><td>Validation failed (<code>quiz validate</code>, <code>path validate</code>)</td><td>JSON <code>{ok:false, errors}</code>, exit 1</td><td>—</td><td>—</td></tr>
+      <tr><td>Missing JSON field / bad JSON body</td><td>—</td><td>400 <code>missing field 'uid'</code></td><td>SDK argument validation</td></tr>
+      <tr><td>Non-local Host / foreign Origin on POST</td><td>—</td><td>403 <code>bad host</code> / <code>bad origin</code></td><td>—</td></tr>
+      <tr><td>Unknown route or file</td><td>argparse usage error</td><td>404</td><td>unknown tool</td></tr>
+      <tr><td>Lock not acquired within 60 s</td><td colspan="3"><code>LkError</code>: "the data home is busy" / "timed out waiting for .lk.lock" (mapped as above)</td></tr>
+      <tr><td>Unexpected exception</td><td>traceback</td><td>500 <code>internal error: …</code>; a grading thread stores it as <code>grade_failed</code></td><td>SDK internal error</td></tr>
+    </table>
+  </div>
+</section>
+
+<section id="config">
+  <h2>Configuration and environment</h2>
+  <p>Defaults live in <code>paths.DEFAULT_CONFIG</code>; <code>&lt;home&gt;/config.json</code> holds only overrides, deep-merged. <a class="cite" href="#src-14">S14</a></p>
+  <div class="tbl">
+    <p class="cap">Config keys and defaults <a class="cite" href="#src-14">S14</a></p>
+    <table>
+      <tr><th>Key</th><th>Default</th><th>Used by</th></tr>
+      <tr><td><code>grader.command / timeout_sec / batch_size / json_schema</code></td><td><code>claude -p …</code> / 300 / 8 / <code>"auto"</code></td><td><code>grader.py</code></td></tr>
+      <tr><td><code>gate.pass_score / free_recall_pass / max_rounds_per_day / min_items_per_concept</code></td><td>0.8 / 0.7 / 3 / 2</td><td>gate, coverage, note bar, placement, checkpoint</td></tr>
+      <tr><td><code>srs.desired_retention / max_interval_days / daily_limit / mistake_extras</code></td><td>0.9 / 365 / 30 / 3</td><td><code>srs.py</code>, <code>fsrs.py</code></td></tr>
+      <tr><td><code>server.host / port / idle_timeout_min</code></td><td><code>127.0.0.1</code> / 8765 / 120</td><td><code>server.py</code></td></tr>
+      <tr><td><code>speech_lang</code></td><td><code>en-US</code></td><td>browser dictation</td></tr>
+      <tr><td><code>agents.&lt;role&gt;.model / effort</code></td><td>see <a href="sdd-1-architecture.html#skills">architecture §skills</a></td><td>skills only</td></tr>
+      <tr><td><code>path.max_nodes / full_window / placement_max_items / placement_items_per_node / test_out_confidence / fast_track_score / checkpoint_items_per_node</code></td><td>15 / 3 / 24 / 3 / 2.5 / 0.5 / 3</td><td><code>learnpath.py</code></td></tr>
+      <tr><td><code>depth.aware|use|deep.sources / facets / items_per_concept</code></td><td>[3,5] 2 [1,2] · [6,10] 3 [2,3] · [10,15] 5 [3,4]</td><td>skills; gate item cap</td></tr>
+    </table>
+  </div>
+  <div class="tbl">
+    <p class="cap">Environment and pointer files <a class="cite" href="#src-14">S14</a><a class="cite" href="#src-13">S13</a></p>
+    <table>
+      <tr><th>Name</th><th>Effect</th></tr>
+      <tr><td><code>LK_HOME</code></td><td>Data home for this process (sandboxes the CLI and, through <code>lk config path</code>, the skills)</td></tr>
+      <tr><td><code>LK_TODAY</code></td><td>Overrides "today" (ISO date) for the scheduler, gate cap and ids: used by tests to time-travel</td></tr>
+      <tr><td><code>~/.learning-kit.json</code></td><td><code>{"home": …}</code> written by <code>lk install --home</code></td></tr>
+      <tr><td><code>&lt;home&gt;/server.json</code></td><td><code>{url, pid, home, started}</code> of a running <code>lk web</code>; <code>lk serve</code> trusts it only after <code>/api/health</code> confirms the same home</td></tr>
+    </table>
+  </div>
+</section>
+
+<section id="sources">
+  <h2>Sources</h2>
+  <ol class="sources">
+    <li id="src-1"><div class="src-head"><span class="src-id">S1</span><span class="src-type">Code</span><span class="src-title">server.py routes and headers</span></div>
+      <div class="src-loc"><code>learning-kit/lk/server.py:12-22, 58-80, 139-148</code> · <code>5663e54</code></div>
+      <blockquote class="src-quote">("POST", rf"/api/sessions", lambda s, m, q, b: service.start_session(
+    b.get("kind"), topic=b.get("topic"), path=b.get("path"), milestone=b.get("milestone"),
+    n=b.get("n", 10), limit=b.get("limit"))),</blockquote></li>
+    <li id="src-2"><div class="src-head"><span class="src-id">S2</span><span class="src-type">Code</span><span class="src-title">mcp_server.build</span></div>
+      <div class="src-loc"><code>learning-kit/lk/mcp_server.py:43-186</code> · <code>5663e54</code></div>
+      <blockquote class="src-quote">@mcp.resource("lk://topics/{topic}/docs/{+file}", name="doc", mime_type="text/markdown",</blockquote></li>
+    <li id="src-3"><div class="src-head"><span class="src-id">S3</span><span class="src-type">Code</span><span class="src-title">cli.build_parser</span></div>
+      <div class="src-loc"><code>learning-kit/lk/cli.py:337-483</code> · <code>5663e54</code></div>
+      <blockquote class="src-quote">p = argparse.ArgumentParser(prog="lk", description="learning-kit: research -&gt; quiz -&gt; note -&gt; spaced recall")</blockquote></li>
+    <li id="src-4"><div class="src-head"><span class="src-id">S4</span><span class="src-type">Code</span><span class="src-title">cli.main</span></div>
+      <div class="src-loc"><code>learning-kit/lk/cli.py:494-516</code> · <code>5663e54</code></div>
+      <blockquote class="src-quote">except LkError as e:
+    print(f"lk: {e}", file=sys.stderr)
+    return 2</blockquote></li>
+    <li id="src-5"><div class="src-head"><span class="src-id">S5</span><span class="src-type">Code</span><span class="src-title">server.serve / web output lines</span></div>
+      <div class="src-loc"><code>learning-kit/lk/server.py:332-374</code> · <code>5663e54</code></div>
+      <blockquote class="src-quote">print(f"QUIZ_URL={url}", flush=True)
+print(f"SESSION={sid}", flush=True)</blockquote></li>
+    <li id="src-6"><div class="src-head"><span class="src-id">S6</span><span class="src-type">Code</span><span class="src-title">/quiz skill</span></div>
+      <div class="src-loc"><code>learning-kit/skills/quiz/SKILL.md:13-26</code> · <code>5663e54</code></div>
+      <blockquote class="src-quote">3. Run it with Bash `run_in_background: true`. Read `QUIZ_URL=` from the output and give it to them.
+4. When it exits, read `SESSION_RESULT=` and report in ≤6 lines</blockquote></li>
+    <li id="src-7"><div class="src-head"><span class="src-id">S7</span><span class="src-type">Code</span><span class="src-title">service.session_brief</span></div>
+      <div class="src-loc"><code>learning-kit/lk/service.py:184-189</code> · <code>5663e54</code></div>
+      <blockquote class="src-quote">return {"id": s["id"], "mode": s["mode"], "topic": s["topic"], "title": s.get("title", ""),
+        "status": s["status"], "answered": len(s["answers"]), "items": len(s["items"]), ...</blockquote></li>
+    <li id="src-8"><div class="src-head"><span class="src-id">S8</span><span class="src-type">Code</span><span class="src-title">Handler: body, static, guards, dispatch</span></div>
+      <div class="src-loc"><code>learning-kit/lk/server.py:156-218, 296-303</code> · <code>5663e54</code></div>
+      <blockquote class="src-quote">raw = url.path  # match on raw segments, decode each one: %2F can't split a segment</blockquote></li>
+    <li id="src-9"><div class="src-head"><span class="src-id">S9</span><span class="src-type">Code</span><span class="src-title">service.ANSWER_FORMAT; quiz.grade_auto</span></div>
+      <div class="src-loc"><code>learning-kit/lk/service.py:291-298</code>; <code>learning-kit/lk/quiz.py:259-295</code> · <code>5663e54</code></div>
+      <blockquote class="src-quote">"order": '{"order": [&lt;step texts, first to last&gt;]}',</blockquote></li>
+    <li id="src-10"><div class="src-head"><span class="src-id">S10</span><span class="src-type">Code</span><span class="src-title">sessions.client_view; quiz.present</span></div>
+      <div class="src-loc"><code>learning-kit/lk/sessions.py:380-388</code>; <code>learning-kit/lk/quiz.py:185-202</code> · <code>5663e54</code></div>
+      <blockquote class="src-quote">rng = random.Random(s["seed"] + n)</blockquote></li>
+    <li id="src-11"><div class="src-head"><span class="src-id">S11</span><span class="src-type">Code</span><span class="src-title">mcp_server INSTRUCTIONS and SDK check</span></div>
+      <div class="src-loc"><code>learning-kit/lk/mcp_server.py:25-52</code> · <code>5663e54</code></div>
+      <blockquote class="src-quote">Never answer for the learner, never hint, and don't reveal correctness until `finish_quiz`.</blockquote></li>
+    <li id="src-12"><div class="src-head"><span class="src-id">S12</span><span class="src-type">Code</span><span class="src-title">grader.py</span></div>
+      <div class="src-loc"><code>learning-kit/lk/grader.py:18-173</code> · <code>5663e54</code></div>
+      <blockquote class="src-quote">"""Everything goes on stdin: instructions, the output schema (for CLIs without --json-schema support or when it can't be passed safely) and the items. Nothing multi-line goes in argv."""</blockquote></li>
+    <li id="src-13"><div class="src-head"><span class="src-id">S13</span><span class="src-type">Code</span><span class="src-title">store.LkError, today; lock timeouts</span></div>
+      <div class="src-loc"><code>learning-kit/lk/store.py:20-21, 101-106</code>; <code>learning-kit/lk/lock.py:65-75</code> · <code>5663e54</code></div>
+      <blockquote class="src-quote">class LkError(Exception):
+    """User-facing error: printed without a traceback by the CLI."""</blockquote></li>
+    <li id="src-14"><div class="src-head"><span class="src-id">S14</span><span class="src-type">Code</span><span class="src-title">paths.DEFAULT_CONFIG / home</span></div>
+      <div class="src-loc"><code>learning-kit/lk/paths.py:15-98</code> · <code>5663e54</code></div>
+      <blockquote class="src-quote">def config() -&gt; dict:
+    return _deep_merge(DEFAULT_CONFIG, read_json(home() / "config.json", {}) or {})</blockquote></li>
+  </ol>
+</section>
+
+<footer class="doc-foot">Legend: <span class="tag sure">VERIFIED</span> seen directly in the cited source · <span class="tag infer">INFERRED</span> reasoned from evidence, not confirmed end-to-end · <span class="tag open">OPEN</span> unresolved, needs an answer. Press <code>/</code> to search; the ⟳ button reloads the latest version of this file.</footer>
+<!-- ===================== DOCUMENT CONTENT END ===================== -->
+</main>
+</div>
+
+<script id="haise-shell-js">
+/* ===== haise-doc shell v3.1.0 — do not edit per document ===== */
+(function(){
+  var root=document.documentElement, body=document.body;
+  var LANG=(root.lang||'en').slice(0,2).toLowerCase();
+  var I18N={
+    en:{toc:'Contents',search:'Search this document…  ( / )',none:'No matches',nav:'Show / hide contents',
+        prev:'Previous match (Shift+Enter)',next:'Next match (Enter)',citedIn:'Cited in',
+        reload:'Reload latest version (keeps your place)',
+        zoom:{hint:'Click to enlarge',zin:'Zoom in (+)',zout:'Zoom out (−)',fit:'Fit to screen (0)',one:'Actual size (1)',close:'Close (Esc)'},
+        theme:{auto:'Theme: auto',light:'Theme: light',dark:'Theme: dark'}},
+    vi:{toc:'Mục lục',search:'Tìm trong tài liệu…  ( / )',none:'Không có kết quả',nav:'Ẩn / hiện mục lục',
+        prev:'Kết quả trước (Shift+Enter)',next:'Kết quả sau (Enter)',citedIn:'Được dẫn ở',
+        reload:'Tải lại bản mới nhất (giữ vị trí đang đọc)',
+        zoom:{hint:'Nhấn để phóng to',zin:'Phóng to (+)',zout:'Thu nhỏ (−)',fit:'Vừa màn hình (0)',one:'Kích thước thật (1)',close:'Đóng (Esc)'},
+        theme:{auto:'Giao diện: tự động',light:'Giao diện: sáng',dark:'Giao diện: tối'}}
+  };
+  var T=I18N[LANG]||I18N.en;
+  var store={get:function(k){try{return localStorage.getItem(k);}catch(e){return null;}},
+             set:function(k,v){try{localStorage.setItem(k,v);}catch(e){}}};
+  var $=function(id){return document.getElementById(id);};
+  var main=$('content');
+
+  /* ---------- theme ---------- */
+  var themeBtn=$('haise-theme'), ICON={auto:'◐',light:'☀',dark:'☾'};
+  function applyTheme(t){
+    if(t==='light'||t==='dark') root.setAttribute('data-theme',t); else root.removeAttribute('data-theme');
+    themeBtn.textContent=ICON[t]; themeBtn.title=T.theme[t]; themeBtn.setAttribute('aria-label',T.theme[t]);
+  }
+  var theme=store.get('haise.theme'); if(theme!=='light'&&theme!=='dark') theme='auto';
+  applyTheme(theme);
+  themeBtn.addEventListener('click',function(){
+    theme=theme==='auto'?'light':theme==='light'?'dark':'auto';
+    store.set('haise.theme',theme); applyTheme(theme);
+  });
+
+  /* ---------- numbering + table of contents ---------- */
+  $('haise-toc-label').textContent=T.toc;
+  var toc=$('haise-toc'), ol=document.createElement('ol'), tocLinks=[], sections=[];
+  [].forEach.call(main.querySelectorAll('section'),function(sec,i){
+    var h2=sec.querySelector(':scope > h2'); if(!h2) return;
+    if(!sec.id) sec.id='s'+(i+1);
+    var n=String(sections.length+1);
+    sections.push(sec);
+    var num=document.createElement('span'); num.className='num'; num.textContent=n+'.'; h2.insertBefore(num,h2.firstChild);
+    var li=document.createElement('li'), a=mkLink('#'+sec.id,n+'.',h2);
+    a.dataset.sec=sec.id; li.appendChild(a); tocLinks.push({el:sec,a:a});
+    var subs=sec.querySelectorAll('h3');
+    if(subs.length){
+      var sub=document.createElement('ol');
+      [].forEach.call(subs,function(h3,j){
+        if(!h3.id) h3.id=sec.id+'-'+(j+1);
+        var m=n+'.'+(j+1);
+        var s=document.createElement('span'); s.className='num'; s.textContent=m; h3.insertBefore(s,h3.firstChild);
+        var sli=document.createElement('li'), sa=mkLink('#'+h3.id,m,h3);
+        sli.appendChild(sa); sub.appendChild(sli); tocLinks.push({el:h3,a:sa});
+      });
+      li.appendChild(sub);
+    }
+    ol.appendChild(li);
+  });
+  toc.appendChild(ol);
+  function mkLink(href,n,h){
+    var a=document.createElement('a'); a.href=href;
+    var s=document.createElement('span'); s.className='num'; s.textContent=n;
+    var t=document.createElement('span'); t.className='t';
+    var clone=h.cloneNode(true); var c=clone.querySelector('.num'); if(c) c.remove();
+    [].forEach.call(clone.querySelectorAll('a.cite,.tag'),function(x){x.remove();});
+    t.textContent=clone.textContent.trim();
+    var b=document.createElement('span'); b.className='badge';
+    a.appendChild(s); a.appendChild(t); a.appendChild(b);
+    a.addEventListener('click',function(){ if(isMobile()) body.classList.remove('nav-open'); });
+    return a;
+  }
+
+  /* ---------- sidebar toggle ---------- */
+  var navBtn=$('haise-nav-btn'); navBtn.title=T.nav; navBtn.setAttribute('aria-label',T.nav);
+  var mq=window.matchMedia('(max-width:960px)');
+  function isMobile(){return mq.matches;}
+  if(store.get('haise.nav')==='collapsed') body.classList.add('nav-collapsed');
+  navBtn.addEventListener('click',function(){
+    if(isMobile()){ body.classList.toggle('nav-open'); }
+    else{ body.classList.toggle('nav-collapsed'); store.set('haise.nav',body.classList.contains('nav-collapsed')?'collapsed':'open'); }
+  });
+  $('haise-backdrop').addEventListener('click',function(){body.classList.remove('nav-open');});
+
+  /* ---------- scroll spy + progress ---------- */
+  var ticking=false, prog=$('haise-progress');
+  function onScroll(){
+    ticking=false;
+    var y=window.scrollY, H=document.documentElement.scrollHeight-window.innerHeight;
+    prog.style.width=(H>0?Math.min(100,y/H*100):0)+'%';
+    var off=parseInt(getComputedStyle(root).getPropertyValue('--topbar-h'))+30, cur=null;
+    for(var i=0;i<tocLinks.length;i++){ if(tocLinks[i].el.getBoundingClientRect().top-off<=0) cur=tocLinks[i]; }
+    if(!cur&&tocLinks.length) cur=tocLinks[0];
+    tocLinks.forEach(function(t){t.a.classList.toggle('active',t===cur);});
+    if(cur&&!isMobile()){
+      var r=cur.a.getBoundingClientRect(), sb=$('haise-sidebar').getBoundingClientRect();
+      if(r.top<sb.top+20||r.bottom>sb.bottom-20) cur.a.scrollIntoView({block:'nearest'});
+    }
+  }
+  window.addEventListener('scroll',function(){ if(!ticking){ticking=true;requestAnimationFrame(onScroll);} },{passive:true});
+  onScroll();
+
+  /* ---------- citations: tooltips + back-references ---------- */
+  var back={};
+  [].forEach.call(main.querySelectorAll('a.cite'),function(a,i){
+    var id=(a.getAttribute('href')||'').replace(/^#/,''), src=document.getElementById(id);
+    if(!a.id) a.id='cite-'+(i+1);
+    if(!src){a.classList.add('broken');return;}
+    var t=src.querySelector('.src-title'); if(t) a.title=t.textContent.trim();
+    (back[id]=back[id]||[]).push(a);
+  });
+  Object.keys(back).forEach(function(id){
+    var src=document.getElementById(id), box=src.querySelector('.backrefs');
+    if(!box){box=document.createElement('div');box.className='backrefs';src.appendChild(box);}
+    box.textContent=T.citedIn+': ';
+    back[id].forEach(function(a){
+      var sec=a.closest('section'), n=sec?sec.querySelector(':scope > h2 .num'):null;
+      var l=document.createElement('a'); l.href='#'+a.id; l.textContent='↩ §'+(n?n.textContent.replace('.',''):'?');
+      var h=sec?sec.querySelector(':scope > h2'):null; if(h) l.title=h.textContent.trim();
+      box.appendChild(l);
+    });
+  });
+
+  /* ---------- search (case- and accent-insensitive) ---------- */
+  var q=$('haise-q'), countEl=$('haise-count'), hits=[], cur=-1, opened=[], timer=null;
+  q.placeholder=T.search; q.setAttribute('aria-label',T.search);
+  $('haise-prev').title=T.prev; $('haise-prev').setAttribute('aria-label',T.prev);
+  $('haise-next').title=T.next; $('haise-next').setAttribute('aria-label',T.next);
+  function foldChar(c){
+    if(c==='đ'||c==='Đ') return 'd';
+    return c.normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
+  }
+  function fold(s){
+    var out='', map=[];
+    for(var i=0;i<s.length;i++){ var f=foldChar(s[i]); for(var j=0;j<f.length;j++){out+=f[j];map.push(i);} }
+    return {s:out,map:map};
+  }
+  function clear(){
+    var parents=[];
+    hits.forEach(function(m){ var p=m.parentNode; if(!p) return; p.replaceChild(document.createTextNode(m.textContent),m); if(parents.indexOf(p)<0) parents.push(p); });
+    parents.forEach(function(p){p.normalize();});
+    opened.forEach(function(d){d.open=false;}); opened=[];
+    hits=[]; cur=-1;
+    tocLinks.forEach(function(t){t.a.querySelector('.badge').textContent='';});
+  }
+  function run(noJump){
+    clear();
+    var raw=q.value.trim(); if(raw.length<2){countEl.textContent='';return;}
+    var needle=fold(raw).s, nodes=[];
+    var w=document.createTreeWalker(main,NodeFilter.SHOW_TEXT,{acceptNode:function(n){
+      if(!n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+      var p=n.parentNode;
+      if(p.closest('script,style,svg,.no-search,textarea')) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;}});
+    while(w.nextNode()) nodes.push(w.currentNode);
+    for(var k=0;k<nodes.length&&hits.length<3000;k++){
+      var node=nodes[k], text=node.nodeValue, f=fold(text), idx=f.s.indexOf(needle);
+      if(idx<0) continue;
+      var frag=document.createDocumentFragment(), last=0;
+      while(idx>=0){
+        var a=f.map[idx], b=f.map[idx+needle.length-1]+1;
+        if(a>=last){
+          frag.appendChild(document.createTextNode(text.slice(last,a)));
+          var m=document.createElement('mark'); m.className='hit'; m.textContent=text.slice(a,b);
+          frag.appendChild(m); hits.push(m); last=b;
+        }
+        idx=f.s.indexOf(needle,idx+needle.length);
+      }
+      frag.appendChild(document.createTextNode(text.slice(last)));
+      node.parentNode.replaceChild(frag,node);
+    }
+    hits.forEach(function(m){
+      var d=m.parentNode.closest('details');
+      while(d){ if(!d.open){d.open=true;opened.push(d);} d=d.parentNode.closest('details'); }
+    });
+    tocLinks.forEach(function(t){
+      var scope=t.el.tagName==='SECTION'?t.el:null; if(!scope) return;
+      var n=scope.querySelectorAll('mark.hit').length;
+      t.a.querySelector('.badge').textContent=n?String(n):'';
+    });
+    if(!hits.length) countEl.textContent=T.none;
+    else if(noJump===true) countEl.textContent='– / '+hits.length;
+    else go(0);
+  }
+  function go(i){
+    if(!hits.length) return;
+    if(cur>=0&&hits[cur]) hits[cur].classList.remove('cur');
+    cur=(i+hits.length)%hits.length;
+    hits[cur].classList.add('cur');
+    hits[cur].scrollIntoView({block:'center',behavior:'smooth'});
+    countEl.textContent=(cur+1)+' / '+hits.length;
+  }
+  q.addEventListener('input',function(){clearTimeout(timer);timer=setTimeout(run,180);});
+  q.addEventListener('keydown',function(e){
+    if(e.key==='Enter'){e.preventDefault(); if(timer){clearTimeout(timer);timer=null;} if(!hits.length) run(); else go(cur+(e.shiftKey?-1:1));}
+    else if(e.key==='Escape'){q.value='';clear();countEl.textContent='';q.blur();}
+  });
+  $('haise-prev').addEventListener('click',function(){go(cur-1);});
+  $('haise-next').addEventListener('click',function(){go(cur+1);});
+
+  /* ---------- reload: re-read the file from disk, keep the reader's place ---------- */
+  var RK='haise.reload:'+location.pathname, reloadBtn=$('haise-reload');
+  reloadBtn.title=T.reload; reloadBtn.setAttribute('aria-label',T.reload);
+  function ss(k,v){try{if(v===undefined){var r=sessionStorage.getItem(k);sessionStorage.removeItem(k);return r;}sessionStorage.setItem(k,v);}catch(e){return null;}}
+  function reload(){
+    var anchor=null, top=0;
+    for(var i=tocLinks.length-1;i>=0;i--){ var r=tocLinks[i].el.getBoundingClientRect(); if(r.top<=window.innerHeight/3){anchor=tocLinks[i].el.id;top=r.top;break;} }
+    var open=[].map.call(main.querySelectorAll('details'),function(d){return d.open&&opened.indexOf(d)<0;});
+    ss(RK,JSON.stringify({y:window.scrollY,anchor:anchor,top:top,q:q.value,open:open}));
+    location.reload();
+  }
+  reloadBtn.addEventListener('click',reload);
+  (function restore(){
+    var s=ss(RK); if(!s) return;
+    try{s=JSON.parse(s);}catch(e){return;}
+    if('scrollRestoration' in history) history.scrollRestoration='manual';
+    var ds=main.querySelectorAll('details');
+    (s.open||[]).forEach(function(o,i){ if(o&&ds[i]) ds[i].open=true; });
+    if(s.q){q.value=s.q; run(true);}
+    var el=s.anchor&&document.getElementById(s.anchor);
+    var y=el?el.getBoundingClientRect().top+window.scrollY-s.top:s.y;
+    root.style.scrollBehavior='auto'; window.scrollTo(0,y); root.style.scrollBehavior='';
+    onScroll();
+  })();
+  /* ---------- zoom: click a figure image or diagram to view it large (vector stays sharp) ---------- */
+  (function zoom(){
+    var items=[].slice.call(main.querySelectorAll('figure.fig img, figure.fig svg')).filter(function(el){
+      return !el.closest('[data-nozoom]') && !(el.tagName.toLowerCase()==='svg' && el.parentElement.closest('svg'));
+    });
+    if(!items.length) return;
+    var Z=T.zoom, ov=document.createElement('div');
+    ov.className='zoom-ov'; ov.setAttribute('role','dialog'); ov.setAttribute('aria-modal','true');
+    ov.innerHTML='<div class="zoom-bar"><span class="zoom-pct"></span>'+
+      '<button class="iconbtn" type="button" data-z="out">−</button><button class="iconbtn" type="button" data-z="fit">⤢</button>'+
+      '<button class="iconbtn" type="button" data-z="one">1:1</button><button class="iconbtn" type="button" data-z="in">+</button>'+
+      '<button class="iconbtn" type="button" data-z="close">✕</button></div><div class="zoom-cap"></div>';
+    body.appendChild(ov);
+    var bar=ov.querySelector('.zoom-bar'), cap=ov.querySelector('.zoom-cap'), pct=ov.querySelector('.zoom-pct');
+    var TT={out:Z.zout,fit:Z.fit,one:Z.one,'in':Z.zin,close:Z.close};
+    [].forEach.call(bar.querySelectorAll('button'),function(b){b.title=TT[b.dataset.z];b.setAttribute('aria-label',TT[b.dataset.z]);});
+    var node=null,isSvg=false,w=1,h=1,s=1,fit=1,x=0,y=0,idx=-1,lastFocus=null,pts={},moved=false;
+    function dims(el){
+      if(el.tagName.toLowerCase()==='svg'){var vb=el.viewBox&&el.viewBox.baseVal; if(vb&&vb.width) return [vb.width,vb.height];}
+      else if(el.naturalWidth) return [el.naturalWidth,el.naturalHeight];
+      var r=el.getBoundingClientRect(); return [r.width||1,r.height||1];
+    }
+    function vw(){return ov.clientWidth;} function vh(){return ov.clientHeight;}
+    function lim(){var b=Math.max(fit,1); return [fit*0.5, b*(isSvg?10:4)];}
+    function render(){
+      node.style.width=(w*s)+'px'; node.style.height=(h*s)+'px';
+      node.style.transform='translate('+Math.round(x)+'px,'+Math.round(y)+'px)';
+      pct.textContent=Math.round(s*100)+'%';
+    }
+    function setScale(ns,cx,cy){
+      var l=lim(); ns=Math.min(l[1],Math.max(l[0],ns));
+      if(cx===undefined){cx=vw()/2;cy=vh()/2;}
+      x=cx-(cx-x)*ns/s; y=cy-(cy-y)*ns/s; s=ns; render();
+    }
+    function toFit(){
+      var top=60, bottom=(cap.textContent?cap.offsetHeight+24:16), room=vh()-top-bottom;
+      fit=Math.min((vw()-32)/w,room/h);
+      s=fit; x=(vw()-w*s)/2; y=top+(room-h*s)/2; render();
+    }
+    function open(i){
+      idx=(i+items.length)%items.length;
+      var src=items[idx]; isSvg=src.tagName.toLowerCase()==='svg';
+      if(node) node.remove();
+      node=src.cloneNode(true); node.removeAttribute('id'); node.removeAttribute('tabindex');
+      node.classList.remove('zoomable'); node.removeAttribute('style'); node.classList.add('zoom-item');
+      if(isSvg){node.removeAttribute('width');node.removeAttribute('height');node.setAttribute('preserveAspectRatio','xMidYMid meet');}
+      var d=dims(src); w=d[0]; h=d[1];
+      ov.insertBefore(node,bar);
+      var fig=src.closest('figure'), fc=fig&&fig.querySelector(':scope > figcaption');
+      var label=src.getAttribute('alt')||src.getAttribute('aria-label')||'';
+      cap.innerHTML='';
+      if(items.length>1){var n=document.createElement('b');n.textContent=(idx+1)+' / '+items.length+'  ';cap.appendChild(n);}
+      cap.appendChild(document.createTextNode([label,fc?fc.textContent.trim():''].filter(Boolean).join(' — ')));
+      if(!ov.classList.contains('on')){lastFocus=document.activeElement; ov.classList.add('on'); body.style.overflow='hidden';}
+      toFit(); bar.querySelector('[data-z="close"]').focus();
+    }
+    function close(){
+      ov.classList.remove('on'); body.style.overflow=''; pts={};
+      if(node){node.remove();node=null;} if(lastFocus&&lastFocus.focus) lastFocus.focus();
+    }
+    function act(z){
+      if(z==='close') close(); else if(z==='fit') toFit(); else if(z==='one') setScale(1);
+      else if(z==='in') setScale(s*1.4); else if(z==='out') setScale(s/1.4);
+    }
+    items.forEach(function(el,i){
+      el.classList.add('zoomable'); el.setAttribute('tabindex','0');
+      if(el.tagName.toLowerCase()==='img') el.title=Z.hint;
+      el.addEventListener('click',function(e){ if(e.target.closest&&e.target.closest('a')) return; open(i); });
+      el.addEventListener('keydown',function(e){ if(e.key==='Enter'||e.key===' '){e.preventDefault();open(i);} });
+    });
+    bar.addEventListener('click',function(e){var b=e.target.closest('button'); if(b) act(b.dataset.z);});
+    ov.addEventListener('wheel',function(e){
+      e.preventDefault(); setScale(s*Math.exp(-e.deltaY*(e.ctrlKey?0.01:0.0015)),e.clientX,e.clientY);
+    },{passive:false});
+    ov.addEventListener('pointerdown',function(e){
+      if(e.target.closest('.zoom-bar')) return;
+      try{ov.setPointerCapture(e.pointerId);}catch(_){}
+      pts[e.pointerId]={x:e.clientX,y:e.clientY,t:e.target}; if(Object.keys(pts).length===1) moved=false;
+      ov.classList.add('drag');
+    });
+    ov.addEventListener('pointermove',function(e){
+      var p=pts[e.pointerId]; if(!p) return;
+      var ids=Object.keys(pts);
+      if(ids.length===1){
+        var dx=e.clientX-p.x, dy=e.clientY-p.y; if(Math.abs(dx)+Math.abs(dy)>2) moved=true;
+        x+=dx; y+=dy; p.x=e.clientX; p.y=e.clientY; render();
+      }else if(ids.length===2){
+        var o=pts[ids[0]===String(e.pointerId)?ids[1]:ids[0]];
+        var d0=Math.hypot(p.x-o.x,p.y-o.y); p.x=e.clientX; p.y=e.clientY;
+        var d1=Math.hypot(p.x-o.x,p.y-o.y); moved=true;
+        if(d0>0) setScale(s*d1/d0,(p.x+o.x)/2,(p.y+o.y)/2);
+      }
+    });
+    function up(e){
+      var p=pts[e.pointerId]; delete pts[e.pointerId];
+      if(!Object.keys(pts).length){ ov.classList.remove('drag'); if(e.type==='pointerup'&&!moved&&p&&p.t===ov) close(); }
+    }
+    ov.addEventListener('pointerup',up); ov.addEventListener('pointercancel',up);
+    ov.addEventListener('dblclick',function(e){
+      if(!node||!node.contains(e.target)) return;
+      if(s>fit*1.05) toFit(); else setScale(isSvg?fit*2.5:Math.max(1,fit*2),e.clientX,e.clientY);
+    });
+    document.addEventListener('keydown',function(e){
+      if(!ov.classList.contains('on')) return;
+      var k=e.key, map={'Escape':'close','+':'in','=':'in','-':'out','_':'out','0':'fit','1':'one'};
+      if(map[k]) act(map[k]);
+      else if(k==='ArrowRight') open(idx+1);
+      else if(k==='ArrowLeft') open(idx-1);
+      else if(k==='Tab'){ /* keep focus inside the viewer */
+        var bs=bar.querySelectorAll('button'), f=bs[0], l=bs[bs.length-1];
+        if(e.shiftKey&&document.activeElement===f){l.focus();} else if(!e.shiftKey&&document.activeElement===l){f.focus();} else return;
+      } else return;
+      e.preventDefault(); e.stopImmediatePropagation();
+    },true);
+    window.addEventListener('resize',function(){ if(ov.classList.contains('on')) toFit(); });
+  })();
+
+  /* ---------- phase focus: hover anything with data-phase to light up the same phase everywhere; tap/click pins it ---------- */
+  (function phases(){
+    var els=[].slice.call(main.querySelectorAll('[data-phase]'));
+    if(!els.length) return;
+    var pinned=null;
+    function focus(p){
+      body.classList.toggle('focus-on',!!p);
+      els.forEach(function(el){el.classList.toggle('on',!!p&&el.getAttribute('data-phase')===p);});
+    }
+    els.forEach(function(el){
+      var p=el.getAttribute('data-phase');
+      el.addEventListener('mouseenter',function(){focus(p);});
+      el.addEventListener('mouseleave',function(){focus(pinned);});
+      if(!el.closest('svg')){ /* clicks inside diagrams stay with the zoom viewer */
+        el.addEventListener('click',function(e){
+          if(e.target.closest('a,button,summary,input,code')) return;
+          e.stopPropagation(); pinned=pinned===p?null:p; focus(pinned);
+        });
+      }
+    });
+    document.addEventListener('keydown',function(e){
+      if(e.key==='Escape'&&pinned&&!document.querySelector('.zoom-ov.on')){pinned=null;focus(null);}
+    });
+  })();
+
+  document.addEventListener('keydown',function(e){
+    var tag=(e.target.tagName||'').toLowerCase(), typing=tag==='input'||tag==='textarea'||e.target.isContentEditable;
+    if((e.key==='/'&&!typing)||((e.ctrlKey||e.metaKey)&&(e.key==='k'||e.key==='K'))){e.preventDefault();q.focus();q.select();}
+  });
+})();
+</script>
+</body>
+</html>

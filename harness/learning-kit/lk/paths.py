@@ -43,10 +43,22 @@ DEFAULT_CONFIG: dict = {
     },
     "server": {"host": "127.0.0.1", "port": 8765, "idle_timeout_min": 120},
     "speech_lang": "en-US",
+    # How a new topic is taught (per topic, in state.json "mode"; `lk topic mode` switches it):
+    #   "bite": bite-sized lesson. One piece at a time: question -> one paragraph -> answer it in your own
+    #           words -> a small check. The pieces are the gate (lk/lesson.py).
+    #   "doc":  one research doc to read, then a gate quiz over the whole topic.
+    "learn": {"default_mode": "bite"},
+    "lesson": {
+        "max_body_words": 150,      # a piece is ONE paragraph; prose words, code and citations not counted
+        "max_checks_per_piece": 3,  # the small quiz after each piece
+        "break_every": 4,           # the lesson suggests a short break after this many pieces
+    },
     # Which model/effort each subagent role uses (read by the skills, not by Python).
     "agents": {
         "collect":   {"model": "sonnet", "effort": "medium"},
         "aggregate": {"model": "opus", "effort": "medium"},
+        "lesson_author": {"model": "opus", "effort": "medium"},
+        "lesson_review": {"model": "opus", "effort": "medium"},
         "quiz_author": {"model": "opus", "effort": "medium"},
         "quiz_review": {"model": "opus", "effort": "medium"},
         "reteach":   {"model": "opus", "effort": "medium"},
@@ -66,9 +78,10 @@ DEFAULT_CONFIG: dict = {
         "checkpoint_items_per_node": 3,
     },
     "depth": {
-        "aware": {"sources": [3, 5], "facets": 2, "items_per_concept": [1, 2]},
-        "use":   {"sources": [6, 10], "facets": 3, "items_per_concept": [2, 3]},
-        "deep":  {"sources": [10, 15], "facets": 5, "items_per_concept": [3, 4]},
+        # pieces_per_concept: bite mode only (each piece = 1 own-words answer + 1-3 checks)
+        "aware": {"sources": [3, 5], "facets": 2, "items_per_concept": [1, 2], "pieces_per_concept": [1, 1]},
+        "use":   {"sources": [6, 10], "facets": 3, "items_per_concept": [2, 3], "pieces_per_concept": [1, 3]},
+        "deep":  {"sources": [10, 15], "facets": 5, "items_per_concept": [3, 4], "pieces_per_concept": [2, 4]},
     },
 }
 

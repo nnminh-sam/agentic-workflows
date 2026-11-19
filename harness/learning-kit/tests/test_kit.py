@@ -54,7 +54,7 @@ class Base(unittest.TestCase):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def make_topic(self, slug="mvcc", depth="use"):
-        topics.create(slug, "MVCC", depth)
+        topics.create(slug, "MVCC", depth, mode="doc")  # the research doc + gate quiz flow
         d = topics.tdir(slug)
         (d / "prior.md").write_text("I think readers never block writers because of snapshots.", encoding="utf-8")
         topics.advance(slug, "research")
