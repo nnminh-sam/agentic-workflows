@@ -1,4 +1,4 @@
-"""github-cli rules GH001-GH009."""
+"""github-cli rules GH001-GH010."""
 from __future__ import annotations
 
 import os
@@ -57,6 +57,11 @@ def check_gh(inv: Invocation, c: Contract, commit_contract: Contract,
     v = Verdict()
     argv = inv.argv
     path = gh_path(inv)
+    # GH010 browser mode: no gh at all
+    r = c.rule("GH010")
+    if r.enabled and r.params.get("pr_via") == "browser":
+        v.add("GH010", r.severity, "pr_via is 'browser' in this project: the agent does not run gh. "
+                                   "Open pull requests from the compare link (/my-git:pr prints it)")
 
     # GH002 command policy
     r = c.rule("GH002")

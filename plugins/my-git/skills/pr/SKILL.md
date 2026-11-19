@@ -11,6 +11,16 @@ Arguments: $ARGUMENTS
 
 `<root>` below is `${CLAUDE_PLUGIN_ROOT}` (the my-git plugin folder). On Windows use `python` if `python3` is not on PATH.
 
+## PR mode (`pr_via`)
+
+Read it first: `python3 "<root>/scripts/setup_profile.py" show` (row `pr_via`; unset means `gh`).
+
+- `gh` (default): steps 2, 8 and 9 use `gh` as written.
+- `browser`: **never run `gh`**, not even `gh pr list` or `gh auth status`; rule GH010 denies every gh command, and
+  GH001 denies `curl`/`Invoke-RestMethod` to `api.github.com`. Skip the open-PR check in step 2 (the compare page
+  shows an open PR itself). In step 7 add `--compare-url "<repo>"` so the check also prints the prefilled link.
+  Steps 8 to 10 change as noted there: you hand the user the link, and the user submits the PR.
+
 ## Branching model
 
 Branch names come from the `branching` contract (`settings.production_branch` / `settings.staging_branch`; defaults below). If a project override changes them, use the project's names.
@@ -43,6 +53,7 @@ Branch names come from the `branching` contract (`settings.production_branch` / 
    - Uncommitted changes aren't in the PR either. Mention them.
    - There must be something to merge: `git -C "<repo>" log --oneline origin/<base>..origin/<head>`. If it's empty, stop.
    - If a PR already exists (`gh pr list --head <head> --base <base> --state open`), show its URL and stop.
+     Browser mode: skip this check.
 3. **Gather the changes:**
    - commits: `git -C "<repo>" log --format='%h %s%n%b' origin/<base>..origin/<head>`
    - file summary: `git -C "<repo>" diff --stat origin/<base>...origin/<head>`
@@ -89,6 +100,8 @@ Branch names come from the `branching` contract (`settings.production_branch` / 
 7. **Validate before creating:**
    `python3 "<root>/scripts/check_pr.py" --title "<title>" --body-file <bodyfile> --base <base> --head <head>`
    Fix the title or body until it prints `ok`.
+   Browser mode: append `--compare-url "<repo>"`. It prints `compare-url: <link>` after `ok`. If it also says the body
+   is too long for the link, the link carries only the title and the user pastes the body from `<bodyfile>`.
 8. **Confirm with AskUserQuestion.** Show:
    - head → base
    - the title
@@ -96,8 +109,11 @@ Branch names come from the `branching` contract (`settings.production_branch` / 
    - whether it is a draft
    - the exact command
    Offer "Create PR" and "Cancel". Create it only on an explicit "Create PR".
+   Browser mode: show the link instead of the command, and offer "Open link" and "Cancel".
 9. **Create the PR**, non-interactively:
    `gh pr create --base <base> --head <head> --title "<title>" --body-file <bodyfile> [--draft]`
    - Never use `--fill`, `--web` or `--template`. The guard can't check those bodies.
    - If git-guard blocks the command, report the rule ID and message. Fix the PR content, never the guard.
-10. **Report:** the PR URL, head → base, and the local test and lint outcome. Don't merge it: merging goes through GitHub, where review and the branch rules apply.
+   - Browser mode: don't create anything. On "Open link", open it with `python3 -m webbrowser "<link>"` and print the
+     link too. The user checks the prefilled form and presses "Create pull request".
+10. **Report:** the PR URL (browser mode: the compare link, and that the user submits it), head → base, and the local test and lint outcome. Don't merge it: merging goes through GitHub, where review and the branch rules apply.

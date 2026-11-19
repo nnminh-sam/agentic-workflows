@@ -36,6 +36,13 @@
       "description": "How git authenticates to GitHub. 'ssh' (default): SSH remotes with a pinned key (ssh_key). 'gh': HTTPS remotes authenticated by the gh credential helper (gh auth setup-git), so pushes go out as the active gh account; no SSH key needed.",
       "example": "gh"
     },
+    "pr_via": {
+      "type": "string",
+      "env": "GIT_GUARD_PR_VIA",
+      "choices": ["gh", "browser"],
+      "description": "How pull requests are opened. 'gh' (default): /my-git:pr runs gh pr create. 'browser': the agent never runs gh (rule GH010) and /my-git:pr hands you a prefilled GitHub compare link to submit yourself.",
+      "example": "browser"
+    },
     "ssh_key": {
       "type": "string",
       "env": "GIT_GUARD_SSH_KEY",
