@@ -1,0 +1,1736 @@
+<!doctype html>
+<html lang="en" data-haise="doc" data-haise-version="3.1.0">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mygit: Go CLI plan &amp; architecture</title>
+<script>
+/* haise: apply the saved theme before first paint (no flash) */
+(function(){try{var t=localStorage.getItem('haise.theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
+<style id="haise-shell-css">
+/* ===== haise-doc shell v3.1.0 — do not edit per document ===== */
+:root{
+  --bg:#f7f7f5; --panel:#ffffff; --panel-2:#f0efeb; --ink:#1d1d1b; --muted:#6b6a66; --line:#e2e0da;
+  --accent:#3b5bdb; --accent-soft:#e9edff; --ok:#2b8a3e; --ok-soft:#e7f5ea;
+  --bad:#c92a2a; --bad-soft:#ffebeb; --warn:#d9480f; --warn-soft:#fff0e6;
+  --info:#7048e8; --info-soft:#f0ebff;
+  --code:#f3f2ee; --hit:#ffe58a; --hit-cur:#ffb84d;
+  --c1:#3b5bdb; --c2:#d9480f; --c3:#2b8a3e; --c4:#7048e8; --c5:#0c8599;
+  --p1:#3b5bdb; --p1-soft:#e9edff; --p2:#0c8599; --p2-soft:#e3f6f8; --p3:#7048e8; --p3-soft:#f0ebff;
+  --p4:#d9480f; --p4-soft:#fff0e6; --p5:#2b8a3e; --p5-soft:#e7f5ea; --p6:#c2255c; --p6-soft:#fdebf1;
+  --sans:system-ui,-apple-system,"Segoe UI","Hiragino Sans","Noto Sans JP",Roboto,"Noto Sans",sans-serif;
+  --mono:ui-monospace,"Cascadia Code","JetBrains Mono",Consolas,Menlo,monospace;
+  --radius:10px; --topbar-h:52px; --nav-w:280px;
+  --fig-label:"Figure"; --tbl-label:"Table";
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#141413; --panel:#1d1d1b; --panel-2:#262624; --ink:#ecebe6; --muted:#a3a29c; --line:#34342f;
+    --accent:#91a7ff; --accent-soft:#1f2547; --ok:#69db7c; --ok-soft:#1b2e20;
+    --bad:#ff8787; --bad-soft:#3a1c1c; --warn:#ffa94d; --warn-soft:#3a2412;
+    --info:#b197fc; --info-soft:#271f45;
+    --code:#232321; --hit:#6b5a12; --hit-cur:#a8671a;
+    --c1:#91a7ff; --c2:#ffa94d; --c3:#69db7c; --c4:#b197fc; --c5:#66d9e8;
+    --p1:#91a7ff; --p1-soft:#1f2547; --p2:#66d9e8; --p2-soft:#10303a; --p3:#b197fc; --p3-soft:#271f45;
+    --p4:#ffa94d; --p4-soft:#3a2412; --p5:#69db7c; --p5-soft:#1b2e20; --p6:#f783ac; --p6-soft:#3a1825;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#141413; --panel:#1d1d1b; --panel-2:#262624; --ink:#ecebe6; --muted:#a3a29c; --line:#34342f;
+  --accent:#91a7ff; --accent-soft:#1f2547; --ok:#69db7c; --ok-soft:#1b2e20;
+  --bad:#ff8787; --bad-soft:#3a1c1c; --warn:#ffa94d; --warn-soft:#3a2412;
+  --info:#b197fc; --info-soft:#271f45;
+  --code:#232321; --hit:#6b5a12; --hit-cur:#a8671a;
+  --c1:#91a7ff; --c2:#ffa94d; --c3:#69db7c; --c4:#b197fc; --c5:#66d9e8;
+  --p1:#91a7ff; --p1-soft:#1f2547; --p2:#66d9e8; --p2-soft:#10303a; --p3:#b197fc; --p3-soft:#271f45;
+  --p4:#ffa94d; --p4-soft:#3a2412; --p5:#69db7c; --p5-soft:#1b2e20; --p6:#f783ac; --p6-soft:#3a1825;
+}
+:root:lang(vi){ --fig-label:"Hình"; --tbl-label:"Bảng"; }
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.65 var(--sans)}
+a{color:var(--accent)}
+[id]{scroll-margin-top:calc(var(--topbar-h) + 14px)}
+/* phase / series colour sets: add .p1 … .p6 to a step, chip, card or callout */
+.p1{--pc:var(--p1);--ps:var(--p1-soft)} .p2{--pc:var(--p2);--ps:var(--p2-soft)} .p3{--pc:var(--p3);--ps:var(--p3-soft)}
+.p4{--pc:var(--p4);--ps:var(--p4-soft)} .p5{--pc:var(--p5);--ps:var(--p5-soft)} .p6{--pc:var(--p6);--ps:var(--p6-soft)}
+
+/* --- progress + top bar --- */
+.progress{position:fixed;top:0;left:0;height:3px;width:0;background:var(--accent);z-index:60}
+.topbar{position:sticky;top:0;z-index:50;height:var(--topbar-h);display:flex;align-items:center;gap:8px;
+  padding:0 12px;background:var(--panel);border-bottom:1px solid var(--line)}
+.topbar .doc-title{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1 1 auto}
+.iconbtn{flex:none;display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:8px;
+  border:1px solid var(--line);background:var(--panel-2);color:var(--ink);cursor:pointer;font-size:15px;line-height:1}
+.iconbtn:hover{border-color:var(--muted)}
+.iconbtn svg{width:17px;height:17px;margin:0}
+.search{flex:0 1 400px;display:flex;align-items:center;gap:6px;min-width:0}
+.search .box{position:relative;flex:1;min-width:0}
+.search input{width:100%;height:34px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);
+  padding:0 10px 0 32px;font:inherit;font-size:.88rem}
+.search input:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.search .box svg{position:absolute;left:9px;top:9px;width:16px;height:16px;margin:0;color:var(--muted)}
+.search .count{font-size:.78rem;color:var(--muted);min-width:60px;text-align:center;white-space:nowrap}
+.search .iconbtn{width:28px;height:28px;font-size:12px}
+
+/* --- sidebar (table of contents) --- */
+.sidebar{position:fixed;top:var(--topbar-h);bottom:0;left:0;width:var(--nav-w);overflow-y:auto;z-index:40;
+  background:var(--bg);border-right:1px solid var(--line);padding:22px 12px 48px;transition:transform .2s ease}
+.sidebar h2{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 8px 10px}
+.toc ol{list-style:none;margin:0;padding:0}
+.toc ol ol{padding-left:10px;margin:2px 0 8px 14px;border-left:1px solid var(--line)}
+.toc a{display:flex;gap:6px;align-items:baseline;padding:4px 8px;border-radius:6px;color:var(--muted);
+  text-decoration:none;font-size:.87rem;line-height:1.45}
+.toc > ol > li > a{font-weight:500}
+.toc ol ol a{font-size:.82rem}
+.toc a:hover{background:var(--panel-2);color:var(--ink)}
+.toc a.active{background:var(--panel-2);color:var(--ink);font-weight:600}
+.toc .num{opacity:.75;font-variant-numeric:tabular-nums;flex:none}
+.toc .badge{margin-left:auto;flex:none;font-size:.7rem;font-weight:700;padding:0 6px;border-radius:999px;
+  background:var(--hit);color:var(--ink)}
+.toc .badge:empty{display:none}
+.backdrop{display:none}
+.page{margin-left:var(--nav-w);transition:margin .2s ease}
+body.nav-collapsed .sidebar{transform:translateX(-100%)}
+body.nav-collapsed .page{margin-left:0}
+@media (max-width:960px){
+  .page{margin-left:0}
+  .sidebar{transform:translateX(-100%);background:var(--panel);box-shadow:4px 0 24px rgba(0,0,0,.18)}
+  body.nav-open .sidebar{transform:none}
+  body.nav-open .backdrop{display:block;position:fixed;inset:var(--topbar-h) 0 0 0;background:rgba(0,0,0,.35);z-index:35}
+  .topbar .doc-title{display:none}
+  .search{flex:1 1 auto}
+}
+
+/* --- document body --- */
+.wrap{max-width:860px;margin:0 auto;padding:32px 24px 96px}
+.doc-head{margin:0 0 8px}
+.doc-head .eyebrow{margin:0 0 6px;font-size:.76rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.doc-head h1{font-size:1.9rem;line-height:1.25;margin:0 0 6px}
+.doc-head .sub{color:var(--muted);margin:0 0 14px}
+.meta{display:flex;flex-wrap:wrap;gap:6px;margin:0;padding:0;list-style:none}
+.meta li{background:var(--panel-2);border-radius:999px;padding:2px 11px;font-size:.8rem;color:var(--ink);min-width:0}
+.meta li b{color:var(--muted);font-weight:600;margin-right:5px}
+section{margin:40px 0 0}
+section > h2{font-size:1.4rem;line-height:1.3;margin:0 0 14px;padding-top:20px;border-top:1px solid var(--line)}
+h3{font-size:1.15rem;line-height:1.35;margin:32px 0 8px}
+h4{font-size:1rem;margin:20px 0 6px}
+h2 .num,h3 .num{color:var(--muted);font-weight:600;margin-right:.45em;font-variant-numeric:tabular-nums}
+p{margin:0 0 14px}
+ul,ol{margin:0 0 14px;padding-left:24px}
+li{margin:4px 0}
+li > ul,li > ol{margin-bottom:4px}
+code,.mono{font-family:var(--mono);font-size:.86em;background:var(--code);padding:1px 5px;border-radius:5px}
+pre{background:var(--code);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;overflow-x:auto;
+  font-size:.84rem;line-height:1.5;margin:0 0 14px}
+pre code{background:none;padding:0;font-size:inherit}
+p code,li code,td code,.card code{overflow-wrap:anywhere}
+blockquote{margin:0 0 16px;padding:2px 16px;border-left:3px solid var(--line);color:var(--muted)}
+.tbl{overflow-x:auto;margin:0 0 18px}
+table{width:100%;border-collapse:separate;border-spacing:0;font-size:.92rem;background:var(--panel);
+  border:1px solid var(--line);border-radius:var(--radius)}
+th,td{padding:8px 12px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}
+tr:last-child > td,tr:last-child > th{border-bottom:0}
+th{background:var(--panel-2);font-weight:600}
+tr:first-child > :first-child{border-top-left-radius:calc(var(--radius) - 1px)}
+tr:first-child > :last-child{border-top-right-radius:calc(var(--radius) - 1px)}
+tr:last-child > :first-child{border-bottom-left-radius:calc(var(--radius) - 1px)}
+tr:last-child > :last-child{border-bottom-right-radius:calc(var(--radius) - 1px)}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+tr.hl td{background:var(--warn-soft)}
+.small{font-size:.86rem;color:var(--muted)}
+.good{color:var(--ok);font-weight:600} .badv{color:var(--bad);font-weight:600}
+hr{border:none;border-top:1px solid var(--line);margin:28px 0}
+
+/* translated keyword + original */
+strong.kw{font-weight:700}
+.orig{color:var(--muted);font-size:.94em;white-space:nowrap}
+
+/* lead answer / callouts / tags / chips */
+.verdict{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;margin:0 0 18px;
+  box-shadow:0 1px 2px rgb(0 0 0 / .04)}
+.verdict .label{display:block;font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);margin-bottom:6px}
+.verdict p{margin:0 0 8px;font-size:1.05rem} .verdict > :last-child{margin-bottom:0}
+.callout{--cc:var(--pc,var(--accent));margin:0 0 18px;padding:12px 16px;border-radius:var(--radius);background:var(--panel);
+  border:1px solid var(--line);border-left:4px solid var(--cc)}
+.callout.ok,.callout.tip{--cc:var(--ok)} .callout.bad,.callout.myth{--cc:var(--bad)} .callout.warn{--cc:var(--warn)}
+.callout.info,.callout.interview{--cc:var(--info)} .callout.example{--cc:var(--p2)} .callout.tldr{--cc:var(--muted)}
+.callout > :first-child{margin-top:0} .callout > :last-child{margin-bottom:0}
+.kind{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--cc,var(--pc,var(--accent)));margin-right:6px}
+.callout .ct{font-weight:600;margin:0 0 6px}
+.tag{display:inline-block;font-size:.7rem;font-weight:700;padding:0 7px;border-radius:999px;border:1px solid currentColor;
+  margin-left:4px;vertical-align:1px;white-space:nowrap;line-height:1.6}
+.tag.sure{color:var(--ok)} .tag.infer{color:var(--warn)} .tag.open{color:var(--bad)}
+.sev{display:inline-block;font-size:.72rem;font-weight:700;padding:0 7px;border-radius:4px;white-space:nowrap}
+.sev.high{background:var(--bad-soft);color:var(--bad)} .sev.med{background:var(--warn-soft);color:var(--warn)} .sev.low{background:var(--panel-2);color:var(--muted)}
+.chip{display:inline-block;font-size:.75rem;font-weight:600;line-height:1.5;padding:1px 9px;border-radius:999px;margin-left:6px;
+  vertical-align:1px;white-space:nowrap;background:var(--ps,var(--panel-2));color:var(--pc,var(--muted))}
+.ex{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;margin:6px 0 8px;font-size:.88rem}
+.ex > .k{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.ex code{white-space:pre-wrap;word-break:break-word}
+
+/* findings list */
+ol.findings{counter-reset:f;list-style:none;padding:0;margin:0 0 18px}
+ol.findings > li{counter-increment:f;position:relative;padding:10px 4px 10px 48px;margin:0;border-bottom:1px solid var(--line)}
+ol.findings > li:last-child{border-bottom:none}
+ol.findings > li::before{content:counter(f);position:absolute;left:4px;top:9px;width:30px;height:30px;border-radius:50%;
+  background:var(--accent-soft);color:var(--accent);border:2px solid var(--accent);font-weight:700;font-size:.85rem;
+  display:flex;align-items:center;justify-content:center}
+
+/* cards, grids, stat tiles, step cards */
+.grid2,.grid3{display:grid;gap:14px;margin:0 0 18px}
+.grid2{grid-template-columns:1fr 1fr} .grid3{grid-template-columns:repeat(3,1fr)}
+.grid2>*,.grid3>*{min-width:0}
+.card{border:1px solid var(--line);border-top:3px solid var(--pc,var(--line));border-radius:var(--radius);padding:12px 14px;background:var(--panel)}
+.card h4{margin:0 0 6px}
+.card > :last-child{margin-bottom:0}
+.card.ok{--pc:var(--ok)} .card.bad{--pc:var(--bad)} .card.warn{--pc:var(--warn)} .card.info{--pc:var(--info)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:0 0 18px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px}
+.stat .v{display:block;font-size:1.6rem;font-weight:700;line-height:1.2;font-variant-numeric:tabular-nums}
+.stat .k{display:block;font-size:.82rem;color:var(--muted)}
+.stat.ok .v{color:var(--ok)} .stat.bad .v{color:var(--bad)} .stat.warn .v{color:var(--warn)}
+ol.steps{list-style:none;padding:0;margin:0 0 18px;counter-reset:s;position:relative}
+ol.steps::before{content:"";position:absolute;left:17px;top:10px;bottom:10px;width:2px;background:var(--line)}
+ol.steps > li{counter-increment:s;position:relative;margin:0 0 12px 52px;padding:10px 14px;background:var(--panel);
+  border:1px solid var(--line);border-top:3px solid var(--pc,var(--accent));border-radius:var(--radius);font-size:.96rem}
+ol.steps > li::before{content:counter(s);position:absolute;left:-52px;top:-3px;width:36px;height:36px;border-radius:50%;
+  background:var(--ps,var(--accent-soft));color:var(--pc,var(--accent));border:2px solid var(--pc,var(--accent));
+  font-weight:700;font-size:.92rem;display:flex;align-items:center;justify-content:center;z-index:1}
+ol.steps > li.ok{--pc:var(--ok);--ps:var(--ok-soft)} ol.steps > li.bad{--pc:var(--bad);--ps:var(--bad-soft)}
+ol.steps > li.warn{--pc:var(--warn);--ps:var(--warn-soft)}
+ol.steps > li > :last-child{margin-bottom:0}
+
+/* phase focus: hover (or tap to pin) anything with data-phase="…" to light up that phase in every step card and diagram */
+[data-phase]{transition:opacity .15s,box-shadow .15s}
+body.focus-on main [data-phase]:not(.on){opacity:.22}
+main :not(svg *)[data-phase]{cursor:pointer}
+ol.steps > li.on,.card.on{box-shadow:0 0 0 2px var(--pc,var(--accent))}
+.phase-key{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 16px;font-size:.82rem;color:var(--muted)}
+.phase-key .chip{margin-left:0}
+
+/* collapsible deep dives */
+details.more{border:1px solid var(--line);border-radius:var(--radius);margin:0 0 18px;background:var(--panel)}
+details.more > summary{cursor:pointer;padding:10px 14px;font-weight:600;list-style:none}
+details.more > summary::-webkit-details-marker{display:none}
+details.more > summary::before{content:"▸";display:inline-block;width:1.1em;color:var(--muted);transition:transform .15s}
+details.more[open] > summary::before{transform:rotate(90deg)}
+details.more > .body{padding:2px 16px 14px}
+details.more > .body > :last-child{margin-bottom:0}
+
+/* figures (diagrams, charts) */
+figure.fig{margin:4px 0 24px;padding:14px 14px 10px;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel)}
+figure.fig svg{max-width:100%;height:auto;display:block;margin:4px auto}
+figure.fig svg text{font-family:var(--sans)}
+figure.fig .grid2,figure.fig .grid3{margin-bottom:8px}
+main{counter-reset:fig tbl}
+figure.fig > figcaption{font-size:.86rem;color:var(--muted);margin-top:8px}
+figure.fig > figcaption::before{counter-increment:fig;content:var(--fig-label) " " counter(fig) " — ";font-weight:700;color:var(--ink)}
+.tbl > .cap{font-size:.86rem;color:var(--muted);margin:0 0 6px}
+.tbl > .cap::before{counter-increment:tbl;content:var(--tbl-label) " " counter(tbl) " — ";font-weight:700;color:var(--ink)}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:.82rem;color:var(--muted);margin:4px 0 0}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+figure.fig img{max-width:100%;height:auto;display:block}
+
+/* zoom viewer: click a figure image or diagram to open it full screen */
+.zoomable{cursor:zoom-in;transition:outline-color .15s}
+.zoomable:hover,.zoomable:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:6px}
+.zoom-ov{position:fixed;inset:0;z-index:100;display:none;overflow:hidden;touch-action:none;cursor:grab;
+  background:color-mix(in srgb,var(--bg) 94%,transparent);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.zoom-ov.on{display:block}
+.zoom-ov.drag{cursor:grabbing}
+.zoom-ov .zoom-item{position:absolute;left:0;top:0;max-width:none!important;max-height:none!important;margin:0!important;
+  border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);box-shadow:0 10px 40px rgb(0 0 0 / .3);
+  user-select:none;-webkit-user-drag:none;cursor:inherit}
+.zoom-bar{position:absolute;top:12px;right:12px;z-index:1;display:flex;align-items:center;gap:6px;padding:4px;
+  border:1px solid var(--line);border-radius:var(--radius);background:var(--panel)}
+.zoom-bar .iconbtn{min-width:34px;height:34px;font-size:.95rem}
+.zoom-pct{min-width:52px;text-align:center;font-size:.82rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.zoom-cap{position:absolute;left:50%;bottom:12px;z-index:1;transform:translateX(-50%);width:max-content;max-width:min(920px,calc(100vw - 32px));
+  padding:8px 14px;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);color:var(--muted);font-size:.85rem;
+  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.zoom-cap:empty{display:none}
+.zoom-cap b{color:var(--ink)}
+
+/* citations */
+a.cite{display:inline-block;font:600 .66rem/1 var(--mono);vertical-align:2px;padding:3px 5px;margin-left:3px;border-radius:5px;
+  background:var(--panel-2);color:var(--muted);text-decoration:none;white-space:nowrap}
+a.cite + a.cite{margin-left:2px}
+a.cite:hover{color:var(--accent)}
+a.cite.broken{background:var(--bad-soft);color:var(--bad)}
+a.cite:target{outline:2px solid var(--accent)}
+ol.sources{list-style:none;padding:0;margin:0 0 14px}
+ol.sources > li{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px 16px;margin:0 0 10px}
+ol.sources > li:target{outline:2px solid var(--accent)}
+.src-head{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline}
+.src-id{font:700 .8rem var(--mono);color:var(--accent);font-variant-numeric:tabular-nums}
+.src-title{font-weight:600}
+.src-type{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:1px 7px;border-radius:999px;
+  background:var(--panel-2);color:var(--muted)}
+.src-loc{font-size:.84rem;margin:6px 0;color:var(--muted);overflow-wrap:anywhere}
+blockquote.src-quote{margin:8px 0;padding:6px 12px;border-left:3px solid var(--line);background:var(--bg);color:var(--ink);font-size:.88rem;border-radius:0 6px 6px 0}
+blockquote.src-quote .tr{display:block;color:var(--muted);margin-top:4px}
+.src-note{font-size:.84rem;color:var(--muted)}
+.backrefs{font-size:.8rem;color:var(--muted);margin-top:4px}
+.backrefs a{margin-right:6px}
+
+/* search hits */
+mark.hit{background:var(--hit);color:inherit;border-radius:2px;padding:0 1px}
+mark.hit.cur{background:var(--hit-cur);outline:2px solid var(--warn)}
+
+footer.doc-foot{color:var(--muted);font-size:.8rem;margin-top:56px;padding-top:14px;border-top:1px solid var(--line)}
+@media (max-width:700px){
+  body{font-size:16px}
+  .wrap{padding:24px 16px 80px}
+  .grid2,.grid3{grid-template-columns:1fr}
+  .doc-head h1{font-size:1.55rem}
+  ol.steps > li{margin-left:46px} ol.steps > li::before{left:-46px}
+}
+@media print{
+  .topbar,.sidebar,.backdrop,.progress,.zoom-ov{display:none!important}
+  .page{margin:0!important}
+  figure.fig,ol.steps > li,.callout{break-inside:avoid-page}
+  details.more{border:none} details.more > .body{display:block}
+  mark.hit{background:none}
+}
+</style>
+</head>
+<body>
+<div class="progress" id="haise-progress"></div>
+
+<header class="topbar no-search">
+  <button class="iconbtn" id="haise-nav-btn" type="button" aria-controls="haise-sidebar">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+  </button>
+  <div class="doc-title">mygit: Go CLI plan &amp; architecture</div>
+  <div class="search" role="search">
+    <div class="box">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <input id="haise-q" type="search" autocomplete="off" spellcheck="false">
+    </div>
+    <span class="count" id="haise-count" aria-live="polite"></span>
+    <button class="iconbtn" id="haise-prev" type="button">▲</button>
+    <button class="iconbtn" id="haise-next" type="button">▼</button>
+  </div>
+  <button class="iconbtn" id="haise-reload" type="button">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg>
+  </button>
+  <button class="iconbtn" id="haise-theme" type="button"></button>
+</header>
+
+<aside class="sidebar no-search" id="haise-sidebar">
+  <h2 id="haise-toc-label"></h2>
+  <nav class="toc" id="haise-toc"></nav>
+</aside>
+<div class="backdrop" id="haise-backdrop"></div>
+
+<div class="page">
+<main id="content" class="wrap">
+<!-- ===================== DOCUMENT CONTENT START ===================== -->
+<header class="doc-head">
+  <p class="eyebrow">Plan &amp; architecture · plugins/my-git/cli</p>
+  <h1>mygit: Go CLI plan &amp; architecture</h1>
+  <p class="sub">What to build to turn the my-git Claude plugin into a standalone Go CLI: features, architecture, config files, git/gh/agent integration and day-to-day usage.</p>
+  <ul class="meta">
+    <li><b>Updated</b>2026-11-14</li>
+    <li><b>Scope</b>agentic-workflows · develop/feat/my-git @ 2a3b817</li>
+    <li><b>Status</b>Proposal, not built yet</li>
+  </ul>
+</header>
+
+<!-- The outline is chosen per document (references/writing-guide.md §1).
+     One top-level <section id="..."><h2>…</h2>…</section> per part, in reading order.
+     If the doc cites anything, the last section is <section id="sources"> with <ol class="sources">. -->
+<section id="answer">
+  <h2>The plan in one screen</h2>
+  <div class="verdict">
+    <span class="label">Recommendation</span>
+    <p>Build <code>mygit</code> as one Go binary in <code>plugins/my-git/cli</code>. Move all rule logic into it, and turn everything else into thin callers of the binary: Claude Code hooks, Codex and Antigravity adapters, git hooks and skills. Today the rules live in the Python <code>gitguard</code> package, and a second copy is hard-coded into the git-hook shell templates. <a class="cite" href="#src-1">S1</a><a class="cite" href="#src-2">S2</a></p>
+  </div>
+  <ol class="findings">
+    <li><strong>One engine, many entry points.</strong> The same Go rule engine (rule ids <code>ID*</code>, <code>CM*</code>, <code>BR*</code>, <code>GH*</code> kept as they are) answers the agent hooks, git hooks, <code>mygit lint</code> and <code>mygit commit / pr</code>. <a class="cite" href="#src-3">S3</a></li>
+    <li><strong>Named profiles instead of one flat profile.</strong> A global config holds several profiles, such as <code>personal</code> and <code>work</code>. Each project picks one, either explicitly or through match rules. <code>mygit profile use</code> writes the matching <code>git config</code> and switches the <code>gh</code> account. <span class="tag infer">INFERRED</span> design proposal: today's profile is a single set of variables. <a class="cite" href="#src-4">S4</a></li>
+    <li><strong>Four JSON layers, later wins:</strong> built-in defaults → global <code>~/.config/mygit/config.json</code> → project <code>.mygit.json</code> (committed) → project-local <code>.mygit.local.json</code> (git-ignored). Environment variables and flags sit on top.</li>
+    <li><strong>git and gh are called as subprocesses.</strong> mygit adds no git library and no GitHub API client, so your existing credentials, SSH config and <code>gh auth</code> keep working unchanged.</li>
+    <li><strong>Agents talk to mygit through a small adapter protocol</strong>: <code>mygit guard --agent claude|codex|agy|json</code>. Claude Code's format is known from the current hook. <a class="cite" href="#src-5">S5</a> The Codex and Antigravity hook formats still need checking. <span class="tag open">OPEN</span></li>
+    <li><strong>Plan first, always.</strong> Every command that changes something does a dry run by default: it prints a numbered plan, the exact commands and the rule checks, and changes nothing. In <strong>auto</strong> mode (the default) mygit runs the plan once it's approved, either by you or by the agent after showing it to you. In <strong>manual</strong> mode it prints the commands for your shell, and you run them yourself.</li>
+    <li><strong>Windows shells are first-class.</strong> Manual-mode output is rendered separately for PowerShell (the default on Windows), <code>cmd</code> and Git Bash. The Windows code is written in the implementation phases, but there is no Windows test setup yet. <span class="tag open">OPEN</span></li>
+    <li><strong>Signed commits by profile.</strong> Each profile chooses ssh, gpg, x509 or none. <code>mygit sign</code> sets the key up, uploads it to GitHub through <code>gh</code> and verifies signatures. A new rule, <code>ID006</code>, blocks unsigned commits when the profile asks for signing.</li>
+    <li><strong>See the repo.</strong> <code>mygit graph</code> draws the commit graph with <code>origin/*</code> branches, ahead/behind counts, signatures and PRs. <code>mygit flow</code> draws the branching workflow (work branches → <code>develop/base</code> → <code>main</code>) with live state.</li>
+    <li><strong>Rules have scopes, like profiles.</strong> Named <em>rule sets</em> are defined globally or per project and selected the same way as profiles. Single-rule overrides apply at the global, project or local level on top of the chosen set.</li>
+    <li><strong>Git workflow templates.</strong> The branching model is a template: branches, naming, start points, which branch a PR may go into, merge style, protection and release steps. mygit ships one built-in <code>default</code> (today's <code>main</code> + <code>develop/base</code> model). You can add custom templates globally, per project or locally, and they are selected the same way as profiles and rule sets. The active template drives the BR rules, <code>branch</code> / <code>pr</code> commands, the GitHub ruleset and the flow view.</li>
+  </ol>
+  <div class="stats">
+    <div class="stat"><span class="v">4 → 1</span><span class="k">rule copies today (Python engine, sh hooks, skills, PR template) → one Go engine</span></div>
+    <div class="stat"><span class="v">35</span><span class="k">existing rules carried over (ID 5 · CM 16 · GH 9 · BR 5)</span></div>
+    <div class="stat"><span class="v">7</span><span class="k">build phases, each shippable on its own</span></div>
+  </div>
+</section>
+
+<section id="gap">
+  <h2>What exists today and what is missing</h2>
+  <p>my-git already does most of the <em>policy</em> work, as a Claude Code plugin written in Python. <a class="cite" href="#src-6">S6</a> What it lacks is a standalone tool: named profiles, a real config hierarchy, and support for agents other than Claude, all of which your target list asks for. <a class="cite" href="#src-7">S7</a></p>
+  <div class="tbl">
+    <p class="cap">Your goal features compared with the current plugin (branch <code>develop/feat/my-git</code> @ <code>2a3b817</code>)</p>
+    <table>
+      <tr><th>Goal feature</th><th>Today</th><th>Gap the CLI closes</th></tr>
+      <tr><td>CLI app for managing Git profiles</td><td class="badv">✗ One flat profile, resolved from env → project file → user file. Edited with <code>setup_profile.py init/unset/show</code>. <a class="cite" href="#src-4">S4</a><a class="cite" href="#src-8">S8</a></td><td>Named profiles; <code>mygit profile add/use/list/show</code>; auto-select by remote owner or path</td></tr>
+      <tr><td>Multi-scope JSON config (global + per project)</td><td class="badv">~ Profile has 2 scopes. Rules are customised by <em>ejecting</em> a whole contract file into <code>.claude/git-guard/contracts/</code>. <a class="cite" href="#src-9">S9</a></td><td>One schema at every scope; deep-merge; override a single rule by id; <code>mygit config show --origin</code></td></tr>
+      <tr><td>Commit / PR style config, template, validation</td><td class="good">✓ Conventional Commits, PR body sections, branching model in 4 JSON contracts. <a class="cite" href="#src-3">S3</a></td><td>Templates become config (<code>commit.template</code>, <code>pr.template</code>); <code>mygit commit</code> and <code>mygit pr</code> build messages from them</td></tr>
+      <tr><td>Hooks</td><td class="badv">~ Claude PreToolUse hook (Python). Git hooks are rendered <code>sh</code> files with the rules copied in as regexes. <a class="cite" href="#src-5">S5</a><a class="cite" href="#src-2">S2</a></td><td>Git hooks become 1-line shims to <code>mygit hook &lt;name&gt;</code>, so the rules never drift</td></tr>
+      <tr><td>gh CLI integration</td><td class="good">✓ <code>setup_repo.py github</code> (create repo, ruleset, default branch); <code>/my-git:pr</code> calls <code>gh pr create</code>. <a class="cite" href="#src-10">S10</a><a class="cite" href="#src-11">S11</a></td><td>First-class <code>mygit repo …</code> and <code>mygit pr …</code> commands; <code>gh</code> account switching per profile</td></tr>
+      <tr><td>Commit signing</td><td class="badv">~ One <code>signing_key</code> profile variable. Signing is done by the <code>commit</code> skill, not enforced. <a class="cite" href="#src-19">S19</a></td><td>Signing per profile (ssh/gpg/x509), <code>mygit sign setup|verify</code>, rule <code>ID006</code>, ruleset "require signed commits"</td></tr>
+      <tr><td>Dry-run first; auto vs manual mode</td><td class="badv">~ <code>--dry-run</code> exists only on the install and setup scripts, and you have to ask for it. <a class="cite" href="#src-20">S20</a></td><td>Dry-run is the default for every mutating command; plan → apply; manual mode prints the commands</td></tr>
+      <tr><td>Windows shells</td><td class="badv">~ The guard can parse PowerShell; the hooks call <code>python3</code>. <a class="cite" href="#src-18">S18</a></td><td>Command renderers for PowerShell (default), <code>cmd</code>, Git Bash; <code>mygit.exe</code></td></tr>
+      <tr><td>Git graph and workflow view</td><td class="badv">✗ None (<code>rules.html</code> shows rules only)</td><td><code>mygit graph</code> (with <code>origin</code>), <code>mygit flow</code>, both also as offline HTML</td></tr>
+      <tr><td>Rules scoped like profiles</td><td class="badv">~ Eject a whole contract into the project. <a class="cite" href="#src-9">S9</a></td><td>Named rule sets at the global and project levels, selected like profiles, plus overrides per rule id at each level</td></tr>
+      <tr><td>Git workflow template (default + custom, scoped)</td><td class="badv">~ One fixed model. The branch names can be changed in <code>branching.json</code> settings, but the shape (production + staging + <code>develop/&lt;type&gt;/&lt;name&gt;</code>) is coded into the rules. <a class="cite" href="#src-15">S15</a></td><td>A template file describes any model. Built-in <code>default</code>, custom templates at the global, project or local level, <code>mygit workflow …</code></td></tr>
+      <tr><td>Integration with Claude Code, Codex, Antigravity</td><td class="badv">~ Claude Code only (plugin hooks + 4 skills). <a class="cite" href="#src-6">S6</a></td><td><code>mygit agent install &lt;agent&gt;</code> writes hooks and skills per agent; one <code>guard</code> protocol</td></tr>
+    </table>
+  </div>
+  <div class="callout warn"><span class="kind">Drift risk today</span>The <code>commit-msg</code> git hook hard-codes the header regex, the 72-character limit and the list of AI names. The Python contract defines the same rules separately. If you edit one, the other goes stale until you re-render the hooks with <code>setup_repo.py apply --force</code>. <a class="cite" href="#src-2">S2</a><a class="cite" href="#src-12">S12</a></div>
+</section>
+
+<section id="architecture">
+  <h2>How the CLI is put together</h2>
+  <p>Everything that decides anything lives in one binary. The outer layer only translates: it turns an agent's hook payload, a git hook's arguments, or your command line into a call to the core. The core turns that into <code>git</code> and <code>gh</code> subprocesses.</p>
+  <figure class="fig">
+  <svg viewBox="0 0 900 520" role="img" aria-label="mygit architecture: callers, entry points, core modules, and external tools">
+    <defs>
+      <marker id="arr-arch" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker>
+    </defs>
+    <g font-size="13" fill="var(--ink)">
+      <!-- callers -->
+      <text x="20" y="14" font-size="12" fill="var(--muted)">CALLERS</text>
+      <rect x="20" y="22" width="190" height="46" rx="10" fill="var(--p3-soft)" stroke="var(--p3)"/><text x="115" y="50" text-anchor="middle" font-weight="600">Claude Code</text>
+      <rect x="240" y="22" width="190" height="46" rx="10" fill="var(--p3-soft)" stroke="var(--p3)"/><text x="335" y="50" text-anchor="middle" font-weight="600">Codex CLI</text>
+      <rect x="460" y="22" width="190" height="46" rx="10" fill="var(--p3-soft)" stroke="var(--p3)"/><text x="555" y="50" text-anchor="middle" font-weight="600">Antigravity CLI</text>
+      <rect x="690" y="22" width="190" height="46" rx="10" fill="var(--p5-soft)" stroke="var(--p5)"/><text x="785" y="50" text-anchor="middle" font-weight="600">You (terminal)</text>
+
+      <!-- entry points -->
+      <text x="20" y="104" font-size="12" fill="var(--muted)">ENTRY POINTS (thin, no rules inside)</text>
+      <rect x="20" y="112" width="410" height="66" rx="10" fill="var(--p1-soft)" stroke="var(--p1)"/>
+      <text x="225" y="138" text-anchor="middle" font-weight="600">Agent adapters + skills</text>
+      <text x="225" y="160" text-anchor="middle" font-size="12" fill="var(--muted)">mygit guard --agent claude|codex|agy|json</text>
+      <rect x="460" y="112" width="190" height="66" rx="10" fill="var(--p1-soft)" stroke="var(--p1)"/>
+      <text x="555" y="138" text-anchor="middle" font-weight="600">git hooks</text>
+      <text x="555" y="160" text-anchor="middle" font-size="12" fill="var(--muted)">exec mygit hook …</text>
+      <rect x="690" y="112" width="190" height="66" rx="10" fill="var(--p1-soft)" stroke="var(--p1)"/>
+      <text x="785" y="138" text-anchor="middle" font-weight="600">Commands</text>
+      <text x="785" y="160" text-anchor="middle" font-size="12" fill="var(--muted)">commit · pr · profile …</text>
+
+      <line x1="115" y1="68" x2="115" y2="110" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#arr-arch)"/>
+      <line x1="335" y1="68" x2="335" y2="110" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#arr-arch)"/>
+      <line x1="555" y1="68" x2="330" y2="110" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#arr-arch)"/>
+      <line x1="785" y1="68" x2="785" y2="110" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#arr-arch)"/>
+
+      <!-- core -->
+      <rect x="20" y="214" width="860" height="160" rx="12" fill="var(--panel-2)" stroke="var(--p2)" stroke-width="1.6"/>
+      <text x="40" y="238" font-weight="700" fill="var(--p2)">mygit core (one Go binary, no runtime deps)</text>
+      <line x1="225" y1="178" x2="225" y2="212" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#arr-arch)"/>
+      <line x1="555" y1="178" x2="555" y2="212" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#arr-arch)"/>
+      <line x1="785" y1="178" x2="785" y2="212" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#arr-arch)"/>
+
+      <rect x="36" y="254" width="155" height="104" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+      <text x="113" y="278" text-anchor="middle" font-weight="600">config</text>
+      <text x="113" y="300" text-anchor="middle" font-size="12" fill="var(--muted)">load 4 layers</text>
+      <text x="113" y="318" text-anchor="middle" font-size="12" fill="var(--muted)">merge · validate</text>
+      <text x="113" y="336" text-anchor="middle" font-size="12" fill="var(--muted)">track origin</text>
+
+      <rect x="205" y="254" width="155" height="104" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+      <text x="283" y="278" text-anchor="middle" font-weight="600">profile</text>
+      <text x="283" y="300" text-anchor="middle" font-size="12" fill="var(--muted)">select by match</text>
+      <text x="283" y="318" text-anchor="middle" font-size="12" fill="var(--muted)">apply to git/gh</text>
+      <text x="283" y="336" text-anchor="middle" font-size="12" fill="var(--muted)">doctor</text>
+
+      <rect x="374" y="254" width="155" height="104" rx="8" fill="var(--p2-soft)" stroke="var(--p2)"/>
+      <text x="452" y="278" text-anchor="middle" font-weight="600">rules engine</text>
+      <text x="452" y="300" text-anchor="middle" font-size="12" fill="var(--muted)">ID · CM · BR · GH</text>
+      <text x="452" y="318" text-anchor="middle" font-size="12" fill="var(--muted)">deny/ask/warn/off</text>
+      <text x="452" y="336" text-anchor="middle" font-size="12" fill="var(--muted)">→ Verdict</text>
+
+      <rect x="543" y="254" width="155" height="104" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+      <text x="621" y="278" text-anchor="middle" font-weight="600">shell parser</text>
+      <text x="621" y="300" text-anchor="middle" font-size="12" fill="var(--muted)">bash · PowerShell</text>
+      <text x="621" y="318" text-anchor="middle" font-size="12" fill="var(--muted)">find git/gh calls</text>
+      <text x="621" y="336" text-anchor="middle" font-size="12" fill="var(--muted)">in &amp;&amp;, bash -c</text>
+
+      <rect x="712" y="254" width="155" height="104" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+      <text x="790" y="278" text-anchor="middle" font-weight="600">templates</text>
+      <text x="790" y="300" text-anchor="middle" font-size="12" fill="var(--muted)">commit message</text>
+      <text x="790" y="318" text-anchor="middle" font-size="12" fill="var(--muted)">PR body · hooks</text>
+      <text x="790" y="336" text-anchor="middle" font-size="12" fill="var(--muted)">agent files</text>
+
+      <!-- externals -->
+      <text x="20" y="408" font-size="12" fill="var(--muted)">OUTSIDE mygit (called, never re-implemented)</text>
+      <rect x="20" y="416" width="190" height="52" rx="10" fill="var(--panel)" stroke="var(--line)"/>
+      <text x="115" y="440" text-anchor="middle" font-weight="600">JSON config files</text>
+      <text x="115" y="458" text-anchor="middle" font-size="12" fill="var(--muted)">global · project · local</text>
+      <rect x="240" y="416" width="190" height="52" rx="10" fill="var(--p4-soft)" stroke="var(--p4)"/>
+      <text x="335" y="440" text-anchor="middle" font-weight="600">git</text>
+      <text x="335" y="458" text-anchor="middle" font-size="12" fill="var(--muted)">os/exec</text>
+      <rect x="460" y="416" width="190" height="52" rx="10" fill="var(--p4-soft)" stroke="var(--p4)"/>
+      <text x="555" y="440" text-anchor="middle" font-weight="600">gh</text>
+      <text x="555" y="458" text-anchor="middle" font-size="12" fill="var(--muted)">os/exec, --json output</text>
+      <rect x="690" y="416" width="190" height="52" rx="10" fill="var(--panel)" stroke="var(--line)"/>
+      <text x="785" y="440" text-anchor="middle" font-weight="600">GitHub</text>
+      <text x="785" y="458" text-anchor="middle" font-size="12" fill="var(--muted)">repos · PRs · rulesets</text>
+
+      <line x1="115" y1="374" x2="115" y2="414" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#arr-arch)" marker-start="url(#arr-arch)"/>
+      <line x1="335" y1="374" x2="335" y2="414" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#arr-arch)"/>
+      <line x1="555" y1="374" x2="555" y2="414" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#arr-arch)"/>
+      <line x1="650" y1="442" x2="688" y2="442" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#arr-arch)"/>
+      <path d="M335,468 L335,500 L785,500 L785,470" fill="none" stroke="var(--muted)" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arr-arch)"/>
+      <text x="560" y="494" text-anchor="middle" font-size="12" fill="var(--muted)">push / fetch (your credential)</text>
+    </g>
+  </svg>
+  <figcaption>Blue boxes only translate. All decisions are made in the core (green edge), and the core reaches GitHub only through <code>git</code> and <code>gh</code>. A git hook fires for every caller, whether that's you or an agent, so it is the backstop when an agent has no pre-command hook. <a class="cite" href="#src-1">S1</a></figcaption>
+  </figure>
+
+  <h3 id="arch-packages">Go package layout</h3>
+  <p>The core modules map one-to-one onto Go packages under <code>cli/internal/</code>. The shipped contracts are embedded in the binary with <code>go:embed</code>, so a fresh install works without any files on disk.</p>
+<pre><code>cli/
+  go.mod                         module …/mygit   (Go 1.23+)
+  cmd/mygit/main.go              wires cobra commands
+  internal/
+    cli/          one file per command group (profile, config, commit, pr, repo, hooks, agent, guard, lint, doctor)
+    config/       schema, load layers, deep-merge, origin tracking, validate
+    profile/      select (explicit → match rules → default), apply to git config / gh auth
+    rules/        identity.go commitmsg.go branching.go ghpolicy.go   (ports of scripts/gitguard/*)
+    engine/       Evaluate(cmd, dialect, cwd, cfg) → Verdict       (port of gitguard/engine.py)
+    shell/        bash via mvdan.cc/sh/v3/syntax; PowerShell tokenizer ported from shellparse.py
+    gitx/ ghx/    thin os/exec wrappers: Run, Query, JSON; dry-run + trace
+    plan/         Plan{id, steps[read|write], checks}; build → show → apply; plan id = hash(argv + repo state)
+    shellfmt/     render a plan for posix (bash/zsh), gitbash, powershell, cmd: quoting, env, paths, chaining
+    sign/         ssh / openpgp / x509 setup, allowed_signers file, verify (%G?), key upload via gh
+    graph/        lane layout of the commit DAG; terminal + SVG/HTML renderers; flow (workflow) view
+    workflow/     template schema, built-in "default", extends/merge, select by scope, compile → BR rule params,
+                  branch/PR routing, GitHub ruleset, flow layout, PR templates per transition
+    tmpl/         text/template for commit msg, PR body, hook shims, agent files
+    agent/        adapters: claude, codex, agy, json   (Decode stdin → Request, Encode Verdict → stdout/exit)
+  defaults/       embedded: contracts/*.json, templates/*, schema.json
+  testdata/       golden hook payloads + expected verdicts (ported from tests/*.py)</code></pre>
+  <div class="tbl">
+    <p class="cap">Mapping from the Python code to Go packages <a class="cite" href="#src-1">S1</a></p>
+    <table>
+      <tr><th>Python today</th><th>Go package</th><th>Note</th></tr>
+      <tr><td><code>gitguard/engine.py</code></td><td><code>internal/engine</code></td><td>Same flow: pre-filter → parse → per-program checks → strictest severity wins</td></tr>
+      <tr><td><code>gitguard/shellparse.py</code>, <code>commands.py</code></td><td><code>internal/shell</code></td><td>Bash: use a real parser (<code>mvdan.cc/sh</code>) <span class="tag infer">INFERRED</span> it covers what the 455-line hand parser does; check against the existing tests</td></tr>
+      <tr><td><code>identity.py</code>, <code>commit_message.py</code>, <code>branching.py</code>, <code>gh_policy.py</code></td><td><code>internal/rules</code></td><td>Keep rule ids and params, so existing overrides still apply</td></tr>
+      <tr><td><code>profile.py</code>, <code>paths.py</code>, <code>contracts.py</code></td><td><code>internal/config</code> + <code>internal/profile</code></td><td>Replaced by the layered config below</td></tr>
+      <tr><td><code>setup_profile.py</code>, <code>setup_repo.py</code>, <code>check_*.py</code>, <code>render_rules.py</code></td><td><code>internal/cli</code></td><td>Become subcommands</td></tr>
+      <tr><td><code>pre_tool_use.py</code>, <code>session_start.py</code></td><td><code>internal/agent/claude</code></td><td>Same JSON in and out, so the Claude plugin swaps <code>python3 …</code> for <code>mygit guard --agent claude</code></td></tr>
+    </table>
+  </div>
+</section>
+
+<section id="config">
+  <h2>How the config files work</h2>
+  <p>Every scope uses the same JSON schema. mygit loads the layers in order and deep-merges them, and a later layer wins. Personal values (who you are) live only in the global file and the git-ignored local file. The committed project file holds only team conventions, so the repo never names a person. The current contracts follow the same principle. <a class="cite" href="#src-13">S13</a></p>
+  <figure class="fig">
+  <svg viewBox="0 0 900 380" role="img" aria-label="Config layers from built-in defaults to command-line flags">
+    <defs><marker id="arr-layer" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink)"/></marker></defs>
+    <g font-size="13" fill="var(--ink)">
+      <rect x="40" y="20" width="700" height="46" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+      <text x="56" y="48" font-weight="600">6 · flags</text><text x="250" y="48" font-size="12" fill="var(--muted)">--profile work · --rule CM009=off   (this run only)</text>
+      <rect x="40" y="78" width="700" height="46" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+      <text x="56" y="106" font-weight="600">5 · environment</text><text x="250" y="106" font-size="12" fill="var(--muted)">MYGIT_PROFILE, MYGIT_GITHUB_USER … (CI, one-off shells)</text>
+      <rect x="40" y="136" width="700" height="46" rx="8" fill="var(--warn-soft)" stroke="var(--warn)"/>
+      <text x="56" y="164" font-weight="600">4 · project-local</text><text x="250" y="164" font-size="12" fill="var(--muted)">&lt;repo&gt;/.mygit.local.json   git-ignored · "profile": "work"</text>
+      <rect x="40" y="194" width="700" height="46" rx="8" fill="var(--ok-soft)" stroke="var(--ok)"/>
+      <text x="56" y="222" font-weight="600">3 · project</text><text x="250" y="222" font-size="12" fill="var(--muted)">&lt;repo&gt;/.mygit.json   committed · team conventions, no people</text>
+      <rect x="40" y="252" width="700" height="46" rx="8" fill="var(--warn-soft)" stroke="var(--warn)"/>
+      <text x="56" y="280" font-weight="600">2 · global</text><text x="250" y="280" font-size="12" fill="var(--muted)">~/.config/mygit/config.json   your profiles + personal defaults</text>
+      <rect x="40" y="310" width="700" height="46" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+      <text x="56" y="338" font-weight="600">1 · built-in</text><text x="250" y="338" font-size="12" fill="var(--muted)">embedded in the binary (today's contracts/*.json)</text>
+      <line x1="800" y1="350" x2="800" y2="30" stroke="var(--ink)" stroke-width="2" marker-end="url(#arr-layer)"/>
+      <text x="815" y="190" font-size="12" fill="var(--ink)">wins</text>
+    </g>
+  </svg>
+  <figcaption>Orange = personal (never committed), green = shared with the team. Objects deep-merge, arrays replace, and the <code>rules</code> map merges per rule id. <code>mygit config show --origin</code> prints each final value with the layer it came from, as <code>setup_profile.py show</code> does today. <a class="cite" href="#src-8">S8</a></figcaption>
+  </figure>
+
+  <h3 id="config-global">Global config: your profiles</h3>
+  <p>Path: <code>$XDG_CONFIG_HOME/mygit/config.json</code>, falling back to <code>~/.config/mygit/config.json</code> on macOS and Linux and <code>%APPDATA%\mygit\config.json</code> on Windows. The profile fields are today's profile variables, grouped. <a class="cite" href="#src-14">S14</a></p>
+<pre><code>{
+  "$schema": "https://…/mygit/schema/v1.json",   // also: mygit config schema &gt; schema.json
+  "version": 1,
+  "defaultProfile": "personal",
+  "profiles": {
+    "personal": {
+      "git":    { "name": "Octo Cat", "email": ["1234+octocat@users.noreply.github.com"],
+                  "signing": { "format": "ssh", "key": "~/.ssh/id_sign.pub" } },
+      "github": { "user": "octocat", "orgs": [], "transport": "gh" }
+    },
+    "work": {
+      "git":    { "name": "Octo Cat", "email": ["octo@acme.example"], "signing": { "format": "default" } },
+      "github": { "user": "octo-acme", "orgs": ["acme"], "transport": "ssh", "sshKey": "~/.ssh/id_acme" }
+    }
+  },
+  "match": [                                        // first hit wins, before defaultProfile
+    { "remoteOwner": "acme",     "profile": "work" },
+    { "path": "~/work/**",       "profile": "work" }
+  ],
+  "execution": { "mode": "auto", "shell": "auto" },  // auto = powershell on Windows, $SHELL elsewhere
+  "rules": { "CM009": "off" }                       // personal taste, every repo
+}</code></pre>
+  <p class="muted">Comments here are only for reading. The real file is plain JSON. Supporting JSONC comments is an open question.</p>
+
+  <h3 id="config-project">Project config: team conventions</h3>
+  <p>Path: <code>&lt;repo root&gt;/.mygit.json</code>, committed. It holds today's contract <code>settings</code> and rule overrides in one place, so you no longer need to eject a whole contract. <a class="cite" href="#src-15">S15</a><a class="cite" href="#src-9">S9</a></p>
+<pre><code>{
+  "version": 1,
+  "commit": {
+    "convention": "conventional",
+    "types":  ["feat","fix","docs","refactor","perf","test","build","ci","chore","revert"],
+    "scopes": ["api","cli","ui"],                    // empty = any scope
+    "headerMax": 72,
+    "forbidAiAttribution": true,
+    "template": ".mygit/commit.tmpl"                 // optional, else built-in
+  },
+  "workflow": "default",                           // or a custom template: see "Git workflow templates"
+  "pr": {
+    "base": "auto",                                // from the workflow's transitions
+    "sections": ["Summary","Detailed changes","Explanation","Test results"],
+    "template": ".github/pull_request_template.md",
+    "checks": { "test": "go test ./...", "lint": "golangci-lint run" }
+  },
+  "github": { "owners": ["acme"], "ruleset": { "approvals": 1 } },
+  "ruleset": "team",                               // a named rule set (see "Rules have scopes")
+  "rules": {
+    "CM007": { "params": { "max": 72 } },
+    "GH006": "deny"
+  },
+  "agents": ["claude", "codex"],
+  "execution": { "mode": "auto" }                  // a project may force "manual"
+}</code></pre>
+
+  <h3 id="config-local">Project-local config and merge rules</h3>
+  <p><code>&lt;repo&gt;/.mygit.local.json</code> is git-ignored. <code>mygit init</code> adds it to <code>.gitignore</code>. It usually holds a single line, <code>{"profile": "work"}</code>, and can override anything else for you alone.</p>
+  <div class="tbl">
+    <p class="cap">How a value is resolved</p>
+    <table>
+      <tr><th>Kind</th><th>Rule</th><th>Example</th></tr>
+      <tr><td>Scalar</td><td>Last layer that sets it wins</td><td><code>commit.headerMax</code>: built-in 72 → project 100</td></tr>
+      <tr><td>Object</td><td>Deep-merged key by key</td><td>Project <code>branch.staging</code> keeps global <code>branch.remote</code></td></tr>
+      <tr><td>Array</td><td>Replaced, not appended</td><td>Project <code>commit.types</code> is the full list</td></tr>
+      <tr><td><code>rules</code></td><td>Per rule id. A string is shorthand for severity, an object merges severity and params</td><td><code>"CM009": "off"</code></td></tr>
+      <tr><td><code>profiles</code></td><td>Allowed only in global and local layers. In <code>.mygit.json</code> they are a validation error</td><td>Keeps people out of committed files</td></tr>
+      <tr><td><code>rulesets</code></td><td>Defined in the global or project layer, and in local for personal ones. Selected like a profile</td><td>See the next section</td></tr>
+      <tr><td><code>workflows</code></td><td>Custom templates in the global, project or local layer, selected like a profile</td><td>See "Git workflow templates"</td></tr>
+      <tr><td><code>${var}</code> in rule params</td><td>Resolved from the active profile, same semantics as today</td><td><code>"expected_logins": ["${github.user}"]</code> <a class="cite" href="#src-16">S16</a></td></tr>
+    </table>
+  </div>
+  <div class="callout info"><span class="kind">Invalid config</span>As today, an invalid file must not silently turn the guard off. The agent adapter answers <code>ask</code> for every git or gh command until the file is fixed, and <code>mygit doctor</code> names the file, line and field. <a class="cite" href="#src-5">S5</a></div>
+
+  <h3 id="config-rules">Rules have scopes, like profiles</h3>
+  <p>A <strong>rule set</strong> is a named bundle of rule severities and params, such as <code>strict</code>, <code>team</code> or <code>solo</code>. It is defined and selected the same way as a profile. On top of the selected set, each layer can still override single rules by id.</p>
+  <div class="grid2">
+    <div class="card p2"><h4>Which rule set is active?</h4>First hit wins: <code>--ruleset</code> → <code>MYGIT_RULESET</code> → local <code>"ruleset"</code> → project <code>"ruleset"</code> → global <code>match</code> → global <code>defaultRuleset</code> → built-in <code>default</code> (today's contracts).</div>
+    <div class="card p1"><h4>Then per-rule overrides</h4><code>rules</code> maps merge on top in layer order: global → project → local → env → <code>--rule ID=severity</code>. A set can <code>extends</code> another set.</div>
+  </div>
+<pre><code>// ~/.config/mygit/config.json  (personal rule sets)
+"rulesets": {
+  "solo":   { "extends": "default", "rules": { "BR005": "warn", "GH008": "ask" } },
+  "strict": { "extends": "default", "rules": { "ID006": "deny", "CM009": "deny", "CM010": "deny" } }
+},
+"defaultRuleset": "solo",
+"match": [ { "remoteOwner": "acme", "profile": "work", "ruleset": "strict" } ]
+
+// .mygit.json  (team rule set, committed)
+"rulesets": { "team": { "extends": "strict", "rules": { "CM007": { "params": { "max": 100 } } } } },
+"ruleset": "team"</code></pre>
+<pre><code>$ mygit rules show --origin CM007 ID006 CM009
+CM007  deny  max=100   ruleset team (.mygit.json) ← extends strict ← default
+ID006  deny            ruleset strict (~/.config/mygit/config.json)
+CM009  off             override rules.CM009 (.mygit.local.json)
+$ mygit rules set CM009 warn --local      # dry-run plan, then apply
+$ mygit rules use strict --local          # just for me, in this repo</code></pre>
+  <div class="callout warn"><span class="kind">Guard rail</span>The global file may hold <code>"locked": ["CM016", "BR002", "ID006"]</code>. A lower layer or a rule set may make a locked rule stricter but never weaker, so a cloned project can't silently switch off your own safety rules. <span class="tag open">OPEN</span> whether this should be the default.</div>
+</section>
+
+<section id="modes">
+  <h2>Plan first: dry-run, auto mode and manual mode</h2>
+  <div class="callout tldr"><span class="kind">In short</span>Every command that changes something first builds a plan and stops there. <strong>Auto</strong> (the default) means mygit runs the plan after approval: yours, or the agent's after it has shown the plan to you. <strong>Manual</strong> means mygit prints the plan as commands for your shell, and you run them.</div>
+  <figure class="fig">
+  <svg viewBox="0 0 900 300" role="img" aria-label="Plan flow: build plan, show it, then auto apply or manual print">
+    <defs><marker id="arr-plan" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker></defs>
+    <g font-size="13" fill="var(--ink)">
+      <rect x="20" y="110" width="150" height="70" rx="10" fill="var(--panel)" stroke="var(--line)"/>
+      <text x="95" y="140" text-anchor="middle" font-weight="600">mygit &lt;cmd&gt;</text>
+      <text x="95" y="160" text-anchor="middle" font-size="12" fill="var(--muted)">you or an agent</text>
+      <rect x="210" y="110" width="170" height="70" rx="10" fill="var(--p2-soft)" stroke="var(--p2)"/>
+      <text x="295" y="138" text-anchor="middle" font-weight="600">build plan</text>
+      <text x="295" y="158" text-anchor="middle" font-size="12" fill="var(--muted)">read-only git/gh queries</text>
+      <text x="295" y="174" text-anchor="middle" font-size="12" fill="var(--muted)">+ every rule check</text>
+      <rect x="420" y="110" width="150" height="70" rx="10" fill="var(--p2-soft)" stroke="var(--p2)"/>
+      <text x="495" y="138" text-anchor="middle" font-weight="600">show plan</text>
+      <text x="495" y="158" text-anchor="middle" font-size="12" fill="var(--muted)">id 7f3a2c · steps</text>
+      <text x="495" y="174" text-anchor="middle" font-size="12" fill="var(--muted)">nothing changed yet</text>
+      <line x1="170" y1="145" x2="208" y2="145" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#arr-plan)"/>
+      <line x1="380" y1="145" x2="418" y2="145" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#arr-plan)"/>
+
+      <rect x="640" y="20" width="240" height="110" rx="10" fill="var(--p1-soft)" stroke="var(--p1)"/>
+      <text x="760" y="46" text-anchor="middle" font-weight="700" fill="var(--p1)">auto (default)</text>
+      <text x="760" y="70" text-anchor="middle" font-size="12">confirm [y/N], or --apply 7f3a2c</text>
+      <text x="760" y="90" text-anchor="middle" font-size="12">re-check state, then os/exec</text>
+      <text x="760" y="110" text-anchor="middle" font-size="12" fill="var(--muted)">no shell involved</text>
+      <rect x="640" y="160" width="240" height="120" rx="10" fill="var(--p4-soft)" stroke="var(--p4)"/>
+      <text x="760" y="186" text-anchor="middle" font-weight="700" fill="var(--p4)">manual</text>
+      <text x="760" y="210" text-anchor="middle" font-size="12">render for --shell:</text>
+      <text x="760" y="230" text-anchor="middle" font-size="12">powershell · cmd · gitbash · bash</text>
+      <text x="760" y="250" text-anchor="middle" font-size="12">you run it</text>
+      <text x="760" y="270" text-anchor="middle" font-size="12" fill="var(--muted)">mygit plan verify 7f3a2c</text>
+      <path d="M570,135 C605,135 605,75 638,75" fill="none" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#arr-plan)"/>
+      <path d="M570,155 C605,155 605,220 638,220" fill="none" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#arr-plan)"/>
+    </g>
+  </svg>
+  <figcaption>A plan is the single shared object. Auto executes it and manual prints it. The plan id is a hash of the commands plus the repo state they were planned against (HEAD, index, branch tips, active profile), so <code>--apply</code> refuses to run if anything changed since the dry run. Today, dry-run exists only where you ask for it. <a class="cite" href="#src-20">S20</a></figcaption>
+  </figure>
+
+  <h3 id="modes-plan">What a plan looks like</h3>
+<pre><code>$ mygit commit -a -t feat -s auth -m "add login endpoint"
+plan 7f3a2c   dry-run · mode auto · profile work · ruleset team · shell powershell
+  1  read   git status --porcelain=v2                     3 files changed
+  2  write  git add -A
+  3  write  git -c user.name="Octo Cat" -c user.email=octo@acme.example
+                -c gpg.format=ssh -c user.signingkey=~/.ssh/id_sign.pub commit -S -F &lt;msg&gt;
+  checks  ✓ CM003 ✓ CM007 ✓ ID001 ✓ ID002 ✓ ID006 signed ✓ BR001 on develop/feat/login
+apply? [y/N]</code></pre>
+  <div class="tbl">
+    <p class="cap">How each caller gets from plan to result</p>
+    <table>
+      <tr><th>Caller</th><th>Auto mode</th><th>Manual mode</th></tr>
+      <tr><td>You in a terminal</td><td>Plan, then <code>apply? [y/N]</code>. <code>--yes</code> skips the prompt</td><td>Plan + copy-paste script for your shell</td></tr>
+      <tr><td>Agent</td><td>Runs <code>mygit … --json</code> → shows you the plan → runs <code>mygit … --apply 7f3a2c</code>. The guard turns <code>--apply</code> into <code>ask</code> unless <code>execution.agentApply</code> is <code>"allow"</code></td><td>The agent hands you the script and does not run it</td></tr>
+      <tr><td>git hook</td><td colspan="2">Never plans: hooks only check (<code>mygit hook …</code>)</td></tr>
+    </table>
+  </div>
+  <p>The mode and shell are config like everything else (<code>execution.mode</code>, <code>execution.shell</code>), so they follow the scopes: global default <code>auto</code>, a project may force <code>manual</code>, and <code>--mode</code>/<code>--shell</code> apply to one run.</p>
+
+  <h3 id="modes-shells">Manual mode on Windows: one plan, three shells</h3>
+  <p>In auto mode the shell doesn't matter: Go's <code>os/exec</code> starts <code>git.exe</code> and <code>gh.exe</code> directly with an argument list. The shell matters only for the text manual mode prints. On Windows the default is <strong>PowerShell</strong>. The commit message always goes through a file (<code>-F</code>) that mygit writes during planning, so no shell has to quote a multi-line message.</p>
+  <div class="grid3">
+    <div class="card p1"><h4>PowerShell (default)</h4><code>git -C 'C:\src\api' -c user.name='Octo Cat' commit -S -F "$env:TEMP\mygit-7f3a2c.msg"</code></div>
+    <div class="card p3"><h4>cmd</h4><code>git -C "C:\src\api" -c user.name="Octo Cat" commit -S -F "%TEMP%\mygit-7f3a2c.msg"</code></div>
+    <div class="card p5"><h4>Git Bash</h4><code>git -C '/c/src/api' -c user.name='Octo Cat' commit -S -F "$TEMP/mygit-7f3a2c.msg"</code></div>
+  </div>
+  <div class="tbl">
+    <p class="cap">What <code>internal/shellfmt</code> changes per shell</p>
+    <table>
+      <tr><th>Concern</th><th>PowerShell</th><th>cmd</th><th>Git Bash / bash / zsh</th></tr>
+      <tr><td>Literal string</td><td><code>'…'</code>, quote doubled <code>''</code></td><td><code>"…"</code>; <code>^</code> escapes <code>&amp; | &lt; &gt; ^</code>; <code>%</code> doubled in scripts</td><td><code>'…'</code>, quote as <code>'\''</code></td></tr>
+      <tr><td>Set env for a step</td><td><code>$env:GIT_SSH_COMMAND='…'</code></td><td><code>set "GIT_SSH_COMMAND=…"</code></td><td><code>GIT_SSH_COMMAND='…' git …</code></td></tr>
+      <tr><td>Stop on first failure</td><td>one step per line + <code>if (-not $?) { exit 1 }</code> (works on 5.1 and 7)</td><td><code>|| exit /b 1</code></td><td><code>set -e</code> at the top</td></tr>
+      <tr><td>Line continuation</td><td>backtick <code>`</code></td><td><code>^</code></td><td><code>\</code></td></tr>
+      <tr><td>Paths</td><td><code>C:\…</code></td><td><code>C:\…</code></td><td><code>/c/…</code> (Git Bash), native elsewhere</td></tr>
+      <tr><td>Save as script</td><td><code>--out plan.ps1</code></td><td><code>--out plan.cmd</code></td><td><code>--out plan.sh</code></td></tr>
+    </table>
+  </div>
+  <div class="callout warn"><span class="kind">Windows status</span>The Windows code is written during the implementation phases: <code>%APPDATA%</code> config path, <code>.exe</code> lookup, the three renderers, hook shims (Git for Windows runs hooks with its own <code>sh</code>, so the same shim works) and PowerShell parsing in the guard. The renderers are pure string functions, so their golden tests can run on macOS. Nothing has been run on a real Windows machine, and there is no Windows CI yet. <span class="tag open">OPEN</span> <span class="tag infer">INFERRED</span> PowerShell 5.1 quoting of native arguments is the most likely source of bugs, which is why messages go through <code>-F</code> files.</div>
+</section>
+
+<section id="profiles">
+  <h2>How a profile turns into git and gh settings</h2>
+  <p>A profile is a declaration. <code>mygit profile use</code> applies it, and every later check verifies it. Applying writes <strong>repo-local</strong> <code>git config</code> (never <code>--global</code> unless you pass <code>--global</code>) and switches the active <code>gh</code> account.</p>
+  <div class="tbl">
+    <p class="cap">What each profile field does</p>
+    <table>
+      <tr><th>Profile field</th><th>Applied with</th><th>Checked by</th></tr>
+      <tr><td><code>git.name</code>, <code>git.email</code></td><td><code>git config user.name / user.email</code></td><td>ID001, ID002 on every commit</td></tr>
+      <tr><td><code>git.signing</code></td><td><code>commit.gpgsign=true</code>, <code>gpg.format=ssh</code>, <code>user.signingkey</code></td><td><code>mygit doctor</code></td></tr>
+      <tr><td><code>github.transport = ssh</code> + <code>sshKey</code></td><td><code>core.sshCommand="ssh -i KEY -o IdentitiesOnly=yes"</code></td><td>ID003, ID004</td></tr>
+      <tr><td><code>github.transport = gh</code></td><td><code>gh auth setup-git</code>; remote rewritten to HTTPS</td><td>ID003 (credential helper), ID004</td></tr>
+      <tr><td><code>github.user</code></td><td><code>gh auth switch --user USER</code></td><td>ID005 before every gh call</td></tr>
+      <tr><td><code>github.orgs</code></td><td>-</td><td>ID004, GH006 allowed owners</td></tr>
+    </table>
+  </div>
+  <p><strong>Which profile is active?</strong> It is the first match in this list: <code>--profile</code> flag → <code>MYGIT_PROFILE</code> → <code>.mygit.local.json</code> <code>profile</code> → global <code>match</code> rules (by <code>origin</code> owner, then by path glob) → <code>defaultProfile</code>. If nothing matches, the identity rules fall back to presence checks, as they do today. <a class="cite" href="#src-17">S17</a></p>
+<pre><code>$ mygit profile use work
+plan 1c9e04  dry-run · 5 writes · apply? [y/N] y
+✓ git config user.name       Octo Cat
+✓ git config user.email      octo@acme.example
+✓ git config core.sshCommand ssh -i ~/.ssh/id_acme -o IdentitiesOnly=yes
+✓ gh auth switch --user octo-acme
+✓ wrote .mygit.local.json    {"profile": "work"}
+remote origin git@github.com:acme/api.git → owner acme ✓ allowed</code></pre>
+
+  <h3 id="profiles-signing">Commit signing</h3>
+  <p>Signing belongs to the profile, because the key belongs to the account. mygit pins the signing settings on each commit with <code>-c</code> flags, as the <code>commit</code> skill does today, so a different global git config can't leak in. <a class="cite" href="#src-19">S19</a></p>
+  <div class="tbl">
+    <p class="cap"><code>git.signing.format</code> and what mygit sets up</p>
+    <table>
+      <tr><th>Format</th><th>git config pinned per commit</th><th>Upload to GitHub (<code>mygit sign setup --upload</code>)</th><th>Local verify needs</th></tr>
+      <tr><td><code>ssh</code> (recommended)</td><td><code>gpg.format=ssh</code>, <code>user.signingkey=&lt;.pub&gt;</code>, <code>commit -S</code></td><td><code>gh ssh-key add KEY.pub --type signing</code> <span class="tag infer">INFERRED</span> needs gh scope <code>admin:ssh_signing_key</code></td><td><code>gpg.ssh.allowedSignersFile</code>, which mygit writes to <code>~/.config/mygit/allowed_signers</code>; git ≥ 2.34</td></tr>
+      <tr><td><code>openpgp</code></td><td><code>gpg.format=openpgp</code>, <code>user.signingkey=&lt;key id&gt;</code></td><td><code>gh gpg-key add pub.asc</code></td><td><code>gpg</code> on PATH (Windows: the one bundled with Git or Gpg4win)</td></tr>
+      <tr><td><code>x509</code></td><td><code>gpg.format=x509</code>, <code>gpg.x509.program=…</code></td><td>-</td><td>That program</td></tr>
+      <tr><td><code>default</code></td><td>Leave git's own signing config, add <code>-S</code></td><td>-</td><td>Whatever git is set up with</td></tr>
+      <tr><td><code>none</code></td><td>Unsigned</td><td>-</td><td>-</td></tr>
+    </table>
+  </div>
+  <ul>
+    <li><strong>Rule <code>ID006</code></strong> (new, identity contract): if the active profile has a signing format other than <code>none</code>, a <code>git commit</code> without <code>-S</code>, or with <code>--no-gpg-sign</code> or <code>-c commit.gpgsign=false</code>, is denied. Default severity: <code>deny</code> in <code>strict</code>, <code>warn</code> in <code>default</code>.</li>
+    <li><strong><code>mygit sign verify [range]</code></strong> reads <code>git log --format=%H%x1f%G?%x1f%GS</code> and lists unsigned or bad commits, for example before a PR. <code>mygit pr create</code> runs it on the PR range.</li>
+    <li><strong><code>mygit repo protect --require-signed</code></strong> adds the <code>required_signatures</code> rule to the GitHub ruleset.</li>
+    <li>If signing fails (locked agent, wrong passphrase), mygit stops and shows the error. It never retries without <code>-S</code>, which matches today's skill. <a class="cite" href="#src-19">S19</a></li>
+  </ul>
+</section>
+
+<section id="conventions">
+  <h2>Commit, branch and PR rules: one engine, three ways in</h2>
+  <p>The same rule check runs whether you or an agent type <code>git commit</code>, whether git fires its <code>commit-msg</code> hook, or whether you run <code>mygit commit</code>. Only the entry point differs.</p>
+  <div class="grid3">
+    <div class="card p1"><h4>Before the command</h4><code>mygit guard</code> sees the <em>command line</em> an agent wants to run and checks every rule (identity, message, branch, gh) before anything happens.</div>
+    <div class="card p2"><h4>Inside git</h4><code>.githooks/commit-msg</code> → <code>mygit hook commit-msg "$1"</code>. Catches you too, in any terminal or IDE.</div>
+    <div class="card p4"><h4>On GitHub</h4>A ruleset applied by <code>mygit repo protect</code>: PR required, no force-push, no deletion. <a class="cite" href="#src-12">S12</a></div>
+  </div>
+
+  <h3 id="conv-templates">Templates</h3>
+  <p>Templates are Go <code>text/template</code> files. Built-in ones are embedded. A project can point <code>commit.template</code> or <code>pr.template</code> at its own file. <code>mygit commit</code> fills the template from flags or prompts, then validates the result with the same rules, so a template can never produce a message the rules reject.</p>
+<pre><code># built-in commit template
+{{.Type}}{{if .Scope}}({{.Scope}}){{end}}{{if .Breaking}}!{{end}}: {{.Subject}}
+{{if .Body}}
+{{.Body}}{{end}}
+{{range .Trailers}}
+{{.}}{{end}}</code></pre>
+  <p>The PR body uses the section names from <code>pr.sections</code>. <code>mygit pr create</code> pre-fills <code>Test results</code> with the actual output of <code>pr.checks.test</code> and <code>pr.checks.lint</code>, which the <code>/my-git:pr</code> skill asks the agent to do by hand today. <a class="cite" href="#src-11">S11</a></p>
+
+  <h3 id="conv-hooks">Git hooks become shims</h3>
+  <p><code>mygit hooks install</code> sets <code>core.hooksPath=.githooks</code> and writes three files that only forward to the binary:</p>
+<pre><code>#!/bin/sh
+# .githooks/commit-msg — generated by mygit; logic lives in `mygit hook`
+exec mygit hook commit-msg "$@"</code></pre>
+  <div class="callout ok"><span class="kind">Effect</span>Changing <code>commit.headerMax</code> in <code>.mygit.json</code> takes effect at once, both in the agent guard and in git's own hook. Nothing needs re-rendering. If <code>mygit</code> is not on <code>PATH</code>, the shim prints an install hint and exits <code>0</code>, so a teammate without mygit is never locked out. <span class="tag open">OPEN</span> Should it fail closed instead?</div>
+</section>
+
+<section id="workflows">
+  <h2>Git workflow templates</h2>
+  <div class="callout tldr"><span class="kind">In short</span>A <strong>workflow template</strong> is one JSON document that describes the branching model. mygit ships one built-in template, <code>default</code>, which is today's model. Custom templates live at the same scopes as profiles and rule sets (global, project, local) and can <code>extends</code> another template. Exactly one template is active per repo, and everything branch-related is compiled from it.</div>
+
+  <h3 id="wf-default">The built-in <code>default</code> template</h3>
+  <p>It encodes what <code>contracts/branching.json</code> and the <code>/my-git:pr</code> skill do today. <a class="cite" href="#src-15">S15</a><a class="cite" href="#src-11">S11</a></p>
+<pre><code>{
+  "name": "default",
+  "description": "main (production) + develop/base (staging); work branches develop/&lt;type&gt;/&lt;name&gt;",
+  "remote": "origin",
+  "branches": {
+    "production": { "name": "main",         "protected": true },
+    "staging":    { "name": "develop/base", "protected": true, "githubDefault": true }
+  },
+  "work": {
+    "pattern": "develop/{type}/{name}",
+    "types":   "{commit.types}",                 // reuse the commit types
+    "from":    "staging"
+  },
+  "transitions": [
+    { "id": "merge",   "from": "work",    "to": "staging",    "via": "pr", "mergeMethod": "squash",
+      "prTemplate": "default", "deleteHead": true },
+    { "id": "release", "from": "staging", "to": "production", "via": "pr", "mergeMethod": "merge",
+      "prTemplate": "release", "tag": "v{version}" }
+  ],
+  "protection": { "requirePr": true, "approvals": 0, "forcePush": false, "deletion": false,
+                  "requireSigned": false, "linearHistory": false },
+  "prTemplates": {
+    "default": { "sections": ["Summary","Detailed changes","Explanation","Test results"] },
+    "release": { "sections": ["Summary","Included PRs","Test results"] }
+  }
+}</code></pre>
+
+  <h3 id="wf-scope">Custom templates and scope</h3>
+  <p>Templates are defined and selected with the same rules as profiles and rule sets, so there is only one mental model to learn.</p>
+  <div class="tbl">
+    <p class="cap">Where templates live and how one is chosen</p>
+    <table>
+      <tr><th>Scope</th><th>Where</th><th>Typical use</th></tr>
+      <tr><td>built-in</td><td>embedded <code>default</code></td><td>Works with no config at all</td></tr>
+      <tr><td>global</td><td><code>~/.config/mygit/config.json</code> → <code>"workflows": {…}</code>, or files in <code>~/.config/mygit/workflows/*.json</code></td><td>Your personal model for side projects</td></tr>
+      <tr><td>project</td><td><code>.mygit.json</code> → <code>"workflows"</code>, or <code>.mygit/workflows/*.json</code> (committed)</td><td>The team's model, shared through the repo</td></tr>
+      <tr><td>local</td><td><code>.mygit.local.json</code> → <code>"workflow"</code> / <code>"workflows"</code></td><td>Try a template on your machine first</td></tr>
+    </table>
+  </div>
+  <p><strong>Which template is active?</strong> First hit wins: <code>--workflow</code> → <code>MYGIT_WORKFLOW</code> → local <code>"workflow"</code> → project <code>"workflow"</code> → global <code>match</code> (by owner or path) → global <code>defaultWorkflow</code> → built-in <code>default</code>. When names clash, the more specific scope wins (local &gt; project &gt; global &gt; built-in), and <code>mygit workflow show --origin</code> tells you which file it came from.</p>
+<pre><code>// .mygit/workflows/release-train.json  (project, committed): a custom template
+{
+  "name": "release-train",
+  "extends": "default",                         // inherit everything, change what differs
+  "branches": {
+    "staging": { "name": "develop" },
+    "release": { "name": "release/{version}", "protected": true, "pattern": true }
+  },
+  "work": { "pattern": "{type}/{ticket}-{name}" },
+  "transitions": [
+    { "id": "merge",   "from": "work",    "to": "staging",    "via": "pr", "mergeMethod": "squash" },
+    { "id": "cut",     "from": "staging", "to": "release",    "via": "branch" },
+    { "id": "release", "from": "release", "to": "production", "via": "pr", "mergeMethod": "merge", "tag": "v{version}" },
+    { "id": "backport","from": "release", "to": "staging",    "via": "pr" },
+    { "id": "hotfix",  "from": "production", "to": ["production","staging"], "via": "pr", "work": "hotfix/{name}" }
+  ],
+  "protection": { "approvals": 1, "requireSigned": true }
+}
+
+// .mygit.json
+{ "workflow": "release-train" }</code></pre>
+  <p class="muted">Merge rules for <code>extends</code>: objects deep-merge, and <code>transitions</code> merge by <code>id</code> (same id replaces, new id is added, <code>"remove": true</code> drops one).</p>
+
+  <h3 id="wf-compile">What the active template drives</h3>
+  <figure class="fig">
+  <svg viewBox="0 0 900 330" role="img" aria-label="A workflow template compiled into rules, commands, ruleset, flow view and hooks">
+    <defs><marker id="arr-wf" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker></defs>
+    <g font-size="13" fill="var(--ink)">
+      <rect x="20" y="20" width="120" height="40" rx="8" fill="var(--panel)" stroke="var(--line)"/><text x="80" y="45" text-anchor="middle">built-in</text>
+      <rect x="20" y="72" width="120" height="40" rx="8" fill="var(--warn-soft)" stroke="var(--warn)"/><text x="80" y="97" text-anchor="middle">global</text>
+      <rect x="20" y="124" width="120" height="40" rx="8" fill="var(--ok-soft)" stroke="var(--ok)"/><text x="80" y="149" text-anchor="middle">project</text>
+      <rect x="20" y="176" width="120" height="40" rx="8" fill="var(--warn-soft)" stroke="var(--warn)"/><text x="80" y="201" text-anchor="middle">local</text>
+      <line x1="140" y1="40" x2="208" y2="110" stroke="var(--muted)" stroke-width="1.4" marker-end="url(#arr-wf)"/>
+      <line x1="140" y1="92" x2="208" y2="116" stroke="var(--muted)" stroke-width="1.4" marker-end="url(#arr-wf)"/>
+      <line x1="140" y1="144" x2="208" y2="124" stroke="var(--muted)" stroke-width="1.4" marker-end="url(#arr-wf)"/>
+      <line x1="140" y1="196" x2="208" y2="130" stroke="var(--muted)" stroke-width="1.4" marker-end="url(#arr-wf)"/>
+
+      <rect x="210" y="70" width="190" height="110" rx="10" fill="var(--p2-soft)" stroke="var(--p2)"/>
+      <text x="305" y="98" text-anchor="middle" font-weight="700">select + resolve</text>
+      <text x="305" y="120" text-anchor="middle" font-size="12" fill="var(--muted)">first hit wins</text>
+      <text x="305" y="138" text-anchor="middle" font-size="12" fill="var(--muted)">apply extends</text>
+      <text x="305" y="156" text-anchor="middle" font-size="12" fill="var(--muted)">validate (graph has no gaps)</text>
+
+      <rect x="440" y="95" width="130" height="60" rx="10" fill="var(--p2-soft)" stroke="var(--p2)"/>
+      <text x="505" y="121" text-anchor="middle" font-weight="700">compiled</text>
+      <text x="505" y="140" text-anchor="middle" font-weight="700">workflow</text>
+      <line x1="400" y1="125" x2="438" y2="125" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#arr-wf)"/>
+
+      <rect x="640" y="10" width="245" height="44" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+      <text x="652" y="30" font-weight="600">BR rules</text><text x="652" y="46" font-size="12" fill="var(--muted)">protected, naming, start point, PR target</text>
+      <rect x="640" y="62" width="245" height="44" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+      <text x="652" y="82" font-weight="600">branch / pr commands</text><text x="652" y="98" font-size="12" fill="var(--muted)">branch new, pr create base, pr release</text>
+      <rect x="640" y="114" width="245" height="44" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+      <text x="652" y="134" font-weight="600">GitHub ruleset</text><text x="652" y="150" font-size="12" fill="var(--muted)">repo protect · default branch</text>
+      <rect x="640" y="166" width="245" height="44" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+      <text x="652" y="186" font-weight="600">flow view</text><text x="652" y="202" font-size="12" fill="var(--muted)">columns + arrows = transitions</text>
+      <rect x="640" y="218" width="245" height="44" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+      <text x="652" y="238" font-weight="600">PR templates</text><text x="652" y="254" font-size="12" fill="var(--muted)">per transition (merge / release)</text>
+      <rect x="640" y="270" width="245" height="44" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+      <text x="652" y="290" font-weight="600">git hooks</text><text x="652" y="306" font-size="12" fill="var(--muted)">pre-commit / pre-push read it live</text>
+      <line x1="570" y1="118" x2="638" y2="32" stroke="var(--muted)" stroke-width="1.4" marker-end="url(#arr-wf)"/>
+      <line x1="570" y1="121" x2="638" y2="84" stroke="var(--muted)" stroke-width="1.4" marker-end="url(#arr-wf)"/>
+      <line x1="570" y1="125" x2="638" y2="136" stroke="var(--muted)" stroke-width="1.4" marker-end="url(#arr-wf)"/>
+      <line x1="570" y1="129" x2="638" y2="188" stroke="var(--muted)" stroke-width="1.4" marker-end="url(#arr-wf)"/>
+      <line x1="570" y1="132" x2="638" y2="240" stroke="var(--muted)" stroke-width="1.4" marker-end="url(#arr-wf)"/>
+      <line x1="570" y1="135" x2="638" y2="292" stroke="var(--muted)" stroke-width="1.4" marker-end="url(#arr-wf)"/>
+    </g>
+  </svg>
+  <figcaption>Change one template and all six consumers follow. The BR rules keep their ids, and only their params now come from the compiled template rather than from <code>branching.json</code> settings. <a class="cite" href="#src-15">S15</a></figcaption>
+  </figure>
+<pre><code>$ mygit workflow show
+workflow release-train   (.mygit/workflows/release-train.json ← extends default)
+  production  main                 protected
+  staging     develop              protected · GitHub default
+  release     release/{version}    protected
+  work        {type}/{ticket}-{name}   from staging
+  merge     work       → staging       PR · squash · delete head
+  cut       staging    → release       branch
+  release   release    → production    PR · merge · tag v{version}
+  backport  release    → staging       PR
+  hotfix    production → production, staging   PR · work hotfix/{name}
+  protect   PR required · 1 approval · signed commits · no force-push · no deletion
+$ mygit workflow use release-train --project     # plan: update .mygit.json, ruleset, default branch</code></pre>
+  <div class="callout warn"><span class="kind">Switching on a live repo</span><code>mygit workflow use</code> is a plan like everything else. It lists the branches to create, the GitHub default branch to change, the ruleset to replace, and existing work branches that no longer match the new pattern. It never renames or deletes branches by itself. Those steps appear in the plan as suggested commands for you to approve or run.</div>
+</section>
+
+<section id="gh">
+  <h2>Working with gh</h2>
+  <p>mygit never calls the GitHub REST API directly. It shells out to <code>gh</code>, so login, tokens, enterprise hosts and proxies are all handled by gh. Before any gh call, the core checks that the active gh account is the profile's <code>github.user</code> (ID005). <a class="cite" href="#src-1">S1</a></p>
+  <div class="tbl">
+    <p class="cap">mygit commands and the gh calls behind them</p>
+    <table>
+      <tr><th>mygit</th><th>gh underneath</th><th>Origin</th></tr>
+      <tr><td><code>mygit repo create acme/api --private</code></td><td><code>gh repo create acme/api --private --source . --push</code></td><td><code>setup_repo.py github --create</code> <a class="cite" href="#src-10">S10</a></td></tr>
+      <tr><td><code>mygit repo protect [--approvals N]</code></td><td><code>gh api repos/{r}/rulesets</code> (POST, or PUT if it exists); default branch; delete merged branches</td><td><code>setup_repo.py github</code></td></tr>
+      <tr><td><code>mygit pr create [--draft]</code></td><td><code>gh pr list --head … --json url</code> → <code>gh pr create --base … --body-file …</code></td><td><code>/my-git:pr</code> <a class="cite" href="#src-11">S11</a></td></tr>
+      <tr><td><code>mygit pr release</code></td><td>Same, head <code>develop/base</code> → base <code>main</code></td><td><code>/my-git:pr --release</code></td></tr>
+      <tr><td><code>mygit pr check &lt;num&gt;</code></td><td><code>gh pr view N --json title,body,baseRefName,headRefName</code> → GH005/GH008/GH009/BR005</td><td><code>check_pr.py</code></td></tr>
+      <tr><td><code>mygit profile use</code></td><td><code>gh auth switch --user …</code>, <code>gh auth setup-git</code></td><td>new</td></tr>
+    </table>
+  </div>
+  <figure class="fig">
+  <svg viewBox="0 0 900 400" role="img" aria-label="Sequence of mygit pr create">
+    <defs><marker id="arr-pr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink)"/></marker></defs>
+    <g font-size="13" fill="var(--ink)">
+      <rect x="30" y="14" width="120" height="34" rx="8" fill="var(--p5-soft)" stroke="var(--p5)"/><text x="90" y="36" text-anchor="middle" font-weight="600">you / agent</text>
+      <rect x="210" y="14" width="120" height="34" rx="8" fill="var(--p2-soft)" stroke="var(--p2)"/><text x="270" y="36" text-anchor="middle" font-weight="600">mygit</text>
+      <rect x="390" y="14" width="120" height="34" rx="8" fill="var(--p4-soft)" stroke="var(--p4)"/><text x="450" y="36" text-anchor="middle" font-weight="600">git</text>
+      <rect x="570" y="14" width="120" height="34" rx="8" fill="var(--p4-soft)" stroke="var(--p4)"/><text x="630" y="36" text-anchor="middle" font-weight="600">gh</text>
+      <rect x="750" y="14" width="120" height="34" rx="8" fill="var(--panel)" stroke="var(--line)"/><text x="810" y="36" text-anchor="middle" font-weight="600">GitHub</text>
+      <line x1="90" y1="48" x2="90" y2="390" stroke="var(--line)" stroke-dasharray="4 4"/>
+      <line x1="270" y1="48" x2="270" y2="390" stroke="var(--line)" stroke-dasharray="4 4"/>
+      <line x1="450" y1="48" x2="450" y2="390" stroke="var(--line)" stroke-dasharray="4 4"/>
+      <line x1="630" y1="48" x2="630" y2="390" stroke="var(--line)" stroke-dasharray="4 4"/>
+      <line x1="810" y1="48" x2="810" y2="390" stroke="var(--line)" stroke-dasharray="4 4"/>
+
+      <line x1="90" y1="78" x2="266" y2="78" stroke="var(--ink)" stroke-width="1.6" marker-end="url(#arr-pr)"/>
+      <text x="180" y="70" text-anchor="middle" font-size="12">① mygit pr create</text>
+      <line x1="270" y1="112" x2="446" y2="112" stroke="var(--ink)" stroke-width="1.6" marker-end="url(#arr-pr)"/>
+      <text x="360" y="104" text-anchor="middle" font-size="12">② branch, log, diff</text>
+      <text x="282" y="134" font-size="12" fill="var(--p2)">③ BR003 name · BR005 base · run test + lint</text>
+      <line x1="270" y1="170" x2="626" y2="170" stroke="var(--ink)" stroke-width="1.6" marker-end="url(#arr-pr)"/>
+      <text x="450" y="162" text-anchor="middle" font-size="12">④ gh auth status → ID005 · gh pr list (already open?)</text>
+      <text x="282" y="196" font-size="12" fill="var(--p2)">⑤ render title + body → GH005 · GH008 · GH009</text>
+      <line x1="270" y1="232" x2="446" y2="232" stroke="var(--ink)" stroke-width="1.6" marker-end="url(#arr-pr)"/>
+      <text x="360" y="224" text-anchor="middle" font-size="12">⑥ push -u (ID003/4)</text>
+      <line x1="450" y1="252" x2="806" y2="252" stroke="var(--muted)" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#arr-pr)"/>
+      <line x1="270" y1="290" x2="626" y2="290" stroke="var(--ink)" stroke-width="1.6" marker-end="url(#arr-pr)"/>
+      <text x="450" y="282" text-anchor="middle" font-size="12">⑦ gh pr create --base develop/base --body-file …</text>
+      <line x1="630" y1="310" x2="806" y2="310" stroke="var(--muted)" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#arr-pr)"/>
+      <line x1="270" y1="356" x2="94" y2="356" stroke="var(--ok)" stroke-width="1.6" marker-end="url(#arr-pr)"/>
+      <text x="180" y="348" text-anchor="middle" font-size="12" fill="var(--ok)">⑧ PR URL</text>
+    </g>
+  </svg>
+  <figcaption>All checks (③ ④ ⑤) run before anything leaves your machine. Pushing (⑥) and creating the PR (⑦) are the only steps that change state. With <code>--dry-run</code>, mygit stops after ⑤ and prints the title, the body and the exact commands it would run. Steps follow today's <code>/my-git:pr</code> skill. <a class="cite" href="#src-11">S11</a></figcaption>
+  </figure>
+</section>
+
+<section id="views">
+  <h2>Seeing the repo: graph and workflow views</h2>
+  <p>There are two read-only views built from the same data. <code>mygit graph</code> answers "what is where": commits, local and <code>origin</code> branches, and what is signed. <code>mygit flow</code> answers "where is each piece of work in the branching model, and what is the next step". Both print to the terminal, and with <code>--html</code> they write an offline page.</p>
+
+  <h3 id="views-graph">mygit graph</h3>
+<pre><code>$ mygit graph --limit 10
+* a1f9c02 (HEAD → develop/feat/login)         feat(auth): add login endpoint   ✔ ssh   ↑2 not on origin
+* 77be310                                       feat(auth): add session store    ✔ ssh
+│ * 5c0d1e9 (origin/develop/fix/timeout)        fix(api): raise client timeout   ✔ ssh   PR #18 open · checks ✓
+├─╯
+* 3e21aa0 (develop/base, origin/develop/base) ⛨  Merge pull request #16           ✔ github
+│ * 9d4410b (main, origin/main) ⛨               Merge pull request #15 release   ✔ github
+├─╯
+* 0b7c1d4                                       chore: bootstrap repository      ✗ unsigned
+legend  ⛨ protected (BR001/BR002) · ↑ ahead / ↓ behind origin · ✔ signature ok · ✗ unsigned/bad</code></pre>
+  <div class="tbl">
+    <p class="cap">Where each piece of the graph comes from</p>
+    <table>
+      <tr><th>Shown</th><th>Source command</th></tr>
+      <tr><td>Commits, parents, refs, signature status</td><td><code>git log --all --topo-order --format=%H%x1f%P%x1f%D%x1f%G?%x1f%s</code>, laid out into lanes by <code>internal/graph</code> (no <code>--graph</code> text parsing)</td></tr>
+      <tr><td><code>origin/*</code> branches</td><td>Included via <code>--all</code>. <code>--fetch</code> first runs <code>git fetch --prune origin</code>, which is a write to refs and so goes through the plan/mode flow</td></tr>
+      <tr><td>Ahead / behind</td><td><code>git for-each-ref --format=%(refname:short)%x1f%(upstream:track)</code></td></tr>
+      <tr><td>Protected marker</td><td>Protected branches from the active workflow template</td></tr>
+      <tr><td>PR number and checks</td><td><code>gh pr list --state open --json number,headRefName,baseRefName,isDraft,statusCheckRollup</code> (skipped offline)</td></tr>
+    </table>
+  </div>
+
+  <h3 id="views-flow">mygit flow</h3>
+  <figure class="fig">
+  <svg viewBox="0 0 900 290" role="img" aria-label="Workflow view: work branches flow into develop/base, which releases into main">
+    <defs><marker id="arr-flow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker></defs>
+    <g font-size="13" fill="var(--ink)">
+      <text x="20" y="18" font-size="12" fill="var(--muted)">WORK BRANCHES</text>
+      <rect x="20" y="28" width="270" height="68" rx="10" fill="var(--warn-soft)" stroke="var(--warn)"/>
+      <text x="34" y="52" font-weight="600">develop/feat/login</text>
+      <text x="34" y="72" font-size="12" fill="var(--muted)">↑2 vs base · 2 not pushed · no PR</text>
+      <text x="34" y="88" font-size="12" fill="var(--warn)">next: mygit pr create</text>
+      <rect x="20" y="110" width="270" height="68" rx="10" fill="var(--info-soft)" stroke="var(--info)"/>
+      <text x="34" y="134" font-weight="600">develop/fix/timeout</text>
+      <text x="34" y="154" font-size="12" fill="var(--muted)">PR #18 · checks ✓ · review pending</text>
+      <text x="34" y="170" font-size="12" fill="var(--info)">next: wait for review / merge on GitHub</text>
+      <rect x="20" y="192" width="270" height="68" rx="10" fill="var(--ok-soft)" stroke="var(--ok)"/>
+      <text x="34" y="216" font-weight="600">develop/docs/readme</text>
+      <text x="34" y="236" font-size="12" fill="var(--muted)">PR #16 merged · local branch left</text>
+      <text x="34" y="252" font-size="12" fill="var(--ok)">next: mygit branch prune</text>
+
+      <rect x="370" y="100" width="210" height="86" rx="10" fill="var(--p2-soft)" stroke="var(--p2)"/>
+      <text x="475" y="126" text-anchor="middle" font-weight="700">develop/base ⛨</text>
+      <text x="475" y="146" text-anchor="middle" font-size="12" fill="var(--muted)">staging · in sync with origin</text>
+      <text x="475" y="166" text-anchor="middle" font-size="12" fill="var(--muted)">3 commits not in main</text>
+
+      <rect x="660" y="100" width="220" height="86" rx="10" fill="var(--p4-soft)" stroke="var(--p4)"/>
+      <text x="770" y="126" text-anchor="middle" font-weight="700">main ⛨</text>
+      <text x="770" y="146" text-anchor="middle" font-size="12" fill="var(--muted)">production · in sync</text>
+      <text x="770" y="166" text-anchor="middle" font-size="12" fill="var(--muted)">last release PR #15</text>
+
+      <line x1="290" y1="62" x2="368" y2="128" stroke="var(--muted)" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arr-flow)"/>
+      <line x1="290" y1="144" x2="368" y2="144" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#arr-flow)"/>
+      <line x1="290" y1="226" x2="368" y2="162" stroke="var(--ok)" stroke-width="1.6" marker-end="url(#arr-flow)"/>
+      <line x1="580" y1="143" x2="658" y2="143" stroke="var(--muted)" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arr-flow)"/>
+      <text x="620" y="214" text-anchor="middle" font-size="12" fill="var(--p2)">next: mygit pr release (3 commits)</text>
+    </g>
+  </svg>
+  <figcaption>A mock of <code>mygit flow</code>. Dashed arrow = no PR yet, solid = PR open, green = merged. Each box ends with the one command that moves it forward. Columns and arrows are the active workflow template’s branches and transitions, so a custom template gets its own picture. <a class="cite" href="#src-15">S15</a></figcaption>
+  </figure>
+</section>
+
+<section id="agents">
+  <h2>Plugging into AI agents</h2>
+  <p>Each agent gets three things. A <strong>pre-command hook</strong> calls <code>mygit guard</code>. <strong>Skills</strong> now just say "run <code>mygit commit</code>" instead of re-describing the rules. The <strong>git hooks</strong> act as the backstop. <code>mygit agent install &lt;agent&gt;</code> writes all three.</p>
+  <figure class="fig">
+  <svg viewBox="0 0 900 330" role="img" aria-label="Sequence of an agent command checked by mygit guard">
+    <defs><marker id="arr-guard" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink)"/></marker></defs>
+    <g font-size="13" fill="var(--ink)">
+      <rect x="40" y="14" width="140" height="34" rx="8" fill="var(--p3-soft)" stroke="var(--p3)"/><text x="110" y="36" text-anchor="middle" font-weight="600">agent</text>
+      <rect x="270" y="14" width="160" height="34" rx="8" fill="var(--p1-soft)" stroke="var(--p1)"/><text x="350" y="36" text-anchor="middle" font-weight="600">guard adapter</text>
+      <rect x="510" y="14" width="140" height="34" rx="8" fill="var(--p2-soft)" stroke="var(--p2)"/><text x="580" y="36" text-anchor="middle" font-weight="600">engine</text>
+      <rect x="730" y="14" width="140" height="34" rx="8" fill="var(--p4-soft)" stroke="var(--p4)"/><text x="800" y="36" text-anchor="middle" font-weight="600">git / gh (read)</text>
+      <line x1="110" y1="48" x2="110" y2="320" stroke="var(--line)" stroke-dasharray="4 4"/>
+      <line x1="350" y1="48" x2="350" y2="320" stroke="var(--line)" stroke-dasharray="4 4"/>
+      <line x1="580" y1="48" x2="580" y2="320" stroke="var(--line)" stroke-dasharray="4 4"/>
+      <line x1="800" y1="48" x2="800" y2="320" stroke="var(--line)" stroke-dasharray="4 4"/>
+      <line x1="110" y1="84" x2="346" y2="84" stroke="var(--ink)" stroke-width="1.6" marker-end="url(#arr-guard)"/>
+      <text x="230" y="76" text-anchor="middle" font-size="12">① stdin: tool + command + cwd</text>
+      <line x1="350" y1="128" x2="576" y2="128" stroke="var(--ink)" stroke-width="1.6" marker-end="url(#arr-guard)"/>
+      <text x="465" y="120" text-anchor="middle" font-size="12">② Request{cmd, dialect, cwd}</text>
+      <line x1="580" y1="172" x2="796" y2="172" stroke="var(--ink)" stroke-width="1.6" marker-end="url(#arr-guard)"/>
+      <text x="690" y="164" text-anchor="middle" font-size="12">③ current branch, author,</text>
+      <text x="690" y="190" text-anchor="middle" font-size="12">remotes, gh account</text>
+      <line x1="580" y1="236" x2="354" y2="236" stroke="var(--ink)" stroke-width="1.6" marker-end="url(#arr-guard)"/>
+      <text x="465" y="228" text-anchor="middle" font-size="12">④ Verdict{decision, findings[]}</text>
+      <line x1="350" y1="286" x2="114" y2="286" stroke="var(--bad)" stroke-width="1.6" marker-end="url(#arr-guard)"/>
+      <text x="230" y="278" text-anchor="middle" font-size="12" fill="var(--bad)">⑤ agent-format deny/ask/warn</text>
+    </g>
+  </svg>
+  <figcaption>Only the adapter (blue) knows any agent's JSON. Adding a new agent means writing one <code>Decode</code> and one <code>Encode</code> function. The Claude adapter keeps today's output fields (<code>permissionDecision</code>, <code>permissionDecisionReason</code>, <code>systemMessage</code>). <a class="cite" href="#src-5">S5</a></figcaption>
+  </figure>
+  <div class="tbl">
+    <p class="cap">What <code>mygit agent install</code> writes per agent</p>
+    <table>
+      <tr><th>Agent</th><th>Pre-command hook</th><th>Skills / instructions</th><th>Status</th></tr>
+      <tr><td>Claude Code</td><td>Plugin <code>hooks.json</code>: PreToolUse <code>Bash|PowerShell</code> → <code>mygit guard --agent claude</code>; SessionStart → <code>mygit guard --agent claude --session-start</code> <a class="cite" href="#src-18">S18</a></td><td>Existing <code>commit</code>, <code>push</code>, <code>pr</code>, <code>git-guard</code> skills, slimmed down to call mygit</td><td><span class="tag sure">VERIFIED</span> format in use today</td></tr>
+      <tr><td>Codex CLI</td><td>Codex hook config, if your Codex version offers a pre-exec hook; else none</td><td>Skill folder + an <code>AGENTS.md</code> block: "use <code>mygit commit</code> / <code>mygit pr create</code>"</td><td><span class="tag open">OPEN</span> confirm Codex's hook event and payload</td></tr>
+      <tr><td>Antigravity CLI</td><td>Same approach, if agy exposes a pre-command hook</td><td>agy skill/rules file pointing at mygit</td><td><span class="tag open">OPEN</span> confirm agy's extension points</td></tr>
+      <tr><td>Any other tool</td><td><code>mygit guard --agent json</code>: JSON in, JSON out, exit code <code>0</code> allow · <code>1</code> ask · <code>2</code> deny</td><td>-</td><td>Generic fallback</td></tr>
+    </table>
+  </div>
+  <div class="callout tip"><span class="kind">Why git hooks matter here</span>When an agent has no pre-command hook, git's <code>commit-msg</code> and <code>pre-push</code> still run <code>mygit hook</code>. The agent sees the rejection in the command's stderr and fixes the message. You lose the identity and gh checks before the command runs, but commit and branch rules still hold.</div>
+</section>
+
+<section id="usage">
+  <h2>Using the CLI</h2>
+  <p>Commands are grouped by noun. Every command that changes something does a dry run by default and needs approval or <code>--apply &lt;plan-id&gt;</code> to run. Every command accepts <code>--json</code>, so agents can parse the output.</p>
+<pre><code>mygit   global flags: --workflow NAME  --mode auto|manual  --shell powershell|cmd|gitbash|bash|zsh  --apply [id]  --yes
+                      --json  --profile NAME  --ruleset NAME  --rule ID=severity
+├── init      [--workflow NAME]  create .mygit.json (+ .gitignore entry), suggest a profile, rule set and workflow
+├── doctor                       git/gh versions, config validity, identity, signing, hooks, agent installs, shell
+├── profile   list | show [name] | add &lt;name&gt; [--from-current] | edit &lt;name&gt; | rm &lt;name&gt;
+│             use &lt;name&gt; [--global] | current | import   (from the git-guard profile files)
+├── sign      setup [--format ssh|openpgp|x509|default|none] [--key PATH] [--upload] | status | verify [range]
+├── rules     list | explain &lt;ID&gt; | show [--origin] [IDs…] | sets | use &lt;set&gt; [--project|--local]
+│             set &lt;ID&gt; &lt;severity&gt; [--global|--project|--local] | view
+├── workflow  list | show [name] [--origin] | use &lt;name&gt; [--global|--project|--local]
+│             new &lt;name&gt; [--from default] [--global|--project] | validate [file] | diagram [--html out.html]
+├── config    get &lt;key&gt; | set &lt;key&gt; &lt;value&gt; [--global|--project|--local] | show [--origin] | schema | validate
+├── commit    [-t type] [-s scope] [-m subject] [--body …] [--breaking] [-a]          (signed per profile)
+├── branch    new &lt;type&gt; &lt;name&gt; | cut &lt;transition&gt; [version] | prune       (patterns from the workflow)
+├── push      [--upstream]        (never --force)
+├── pr        create [--draft] [--to BRANCH] | release | run &lt;transition&gt; | check [num] | template
+├── repo      create &lt;owner/name&gt; --private|--public | protect [--approvals N] [--require-signed] | bootstrap
+├── graph     [--remote origin] [--limit N] [--fetch] [--html out.html]
+├── flow      [--fetch] [--html out.html]
+├── plan      show &lt;id&gt; | verify &lt;id&gt; [--out plan.ps1|.cmd|.sh]
+├── lint      msg &lt;text|-f file&gt; | pr --title … --body-file … | cmd "&lt;shell command&gt;"
+├── hooks     install | uninstall | status
+├── hook      commit-msg|pre-commit|pre-push …         (called by git, not by you)
+├── agent     install|uninstall &lt;claude|codex|agy&gt; [--scope project|user] | status
+└── guard     --agent &lt;claude|codex|agy|json&gt;          (called by agents; reads stdin)</code></pre>
+
+  <h3 id="usage-setup">First-time setup on a machine</h3>
+<pre><code>$ brew install mygit                      # or: go install …/mygit/cmd/mygit@latest
+$ mygit profile add personal --from-current
+  captured git user.name/email, gh login octocat, transport gh, signing: default
+$ mygit profile add work --github-user octo-acme --ssh-key ~/.ssh/id_acme --org acme
+$ mygit config set match '[{"remoteOwner":"acme","profile":"work"}]' --global
+$ mygit sign setup --format ssh --key ~/.ssh/id_sign --upload
+$ mygit agent install claude --scope user
+$ mygit doctor
+✓ git 2.47  ✓ gh 2.63  ✓ config valid (2 files)  ✓ signing ssh  ✓ shell powershell  ✓ claude hooks installed</code></pre>
+
+  <h3 id="usage-project">New project</h3>
+<pre><code>$ mkdir api &amp;&amp; cd api &amp;&amp; git init
+$ mygit init --workflow default          # or a custom one: --workflow release-train
+$ mygit repo bootstrap                    # first commit on main, create develop/base
+$ mygit repo create acme/api --private    # profile "work" picked by owner match
+$ mygit repo protect --approvals 1        # ruleset: PR-only main + develop/base
+$ mygit hooks install                     # core.hooksPath=.githooks, 3 shims</code></pre>
+
+  <h3 id="usage-daily">A normal change</h3>
+<pre><code>$ mygit branch new feat login --yes
+✓ develop/feat/login (from develop/base)
+$ mygit commit -a -t feat -s auth -m "add login endpoint"
+plan 7f3a2c  …3 steps, all checks ✓…  apply? [y/N] y
+✓ a1f9c02 feat(auth): add login endpoint   signed ssh (Good)
+$ mygit pr create
+plan 2b81de  dry-run · mode auto
+  1 read   go test ./...                 → 42 passed
+  2 read   golangci-lint run             → clean
+  3 read   mygit sign verify develop/base..HEAD → 2/2 signed
+  4 write  git push -u origin develop/feat/login
+  5 write  gh pr create --base develop/base --head develop/feat/login --title … --body-file …
+apply? [y/N] y
+✓ https://github.com/acme/api/pull/17   develop/feat/login → develop/base</code></pre>
+  <h3 id="usage-manual">The same change in manual mode (Windows)</h3>
+<pre><code>PS C:\src\api&gt; mygit commit -a -t feat -s auth -m "add login endpoint" --mode manual
+# plan 7f3a2c · manual · shell powershell · run these, then: mygit plan verify 7f3a2c
+git -C 'C:\src\api' add -A
+if (-not $?) { exit 1 }
+git -C 'C:\src\api' -c user.name='Octo Cat' -c user.email='octo@acme.example' `
+    -c gpg.format=ssh -c user.signingkey='C:\Users\octo\.ssh\id_sign.pub' `
+    commit -S -F "$env:TEMP\mygit-7f3a2c.msg"
+if (-not $?) { exit 1 }</code></pre>
+  <p>Add <code>--shell cmd</code> or <code>--shell gitbash</code> for the other two shells, or <code>--out plan.ps1</code> to save the script.</p>
+
+  <h3 id="usage-blocked">What a block looks like</h3>
+<pre><code>$ mygit lint cmd 'git commit -m "Added stuff."'
+✗ deny  CM003  header must be '&lt;type&gt;(&lt;scope&gt;)!: &lt;subject&gt;'
+  try:  git commit -m "feat: add stuff"
+$ echo $?
+2</code></pre>
+  <p>An agent sees exactly the same findings in its hook response, worded as an instruction it can act on. <code>mygit rules explain CM003</code> prints the rule's description and its good and bad examples, taken from the contract. <a class="cite" href="#src-15">S15</a></p>
+</section>
+
+<section id="roadmap">
+  <h2>Build order</h2>
+  <p>Each phase ships something usable, and the Python plugin keeps working until phase 4 replaces its hook command.</p>
+  <ol class="steps">
+    <li class="p1"><strong>Skeleton, config, plan core</strong><span class="chip p1">week 1</span>
+      <p><code>go mod init</code>, cobra, <code>internal/config</code> (4 layers, schema, <code>config get/set/show --origin</code>). <code>internal/plan</code> with dry-run as the default, <code>--apply</code>, plan ids, and auto/manual mode. <code>internal/shellfmt</code> for posix, Git Bash, PowerShell and cmd, with golden tests that run on macOS. Windows paths and <code>.exe</code> lookup are written now. Embed today's <code>contracts/*.json</code>.</p></li>
+    <li class="p2"><strong>Profiles + signing</strong><span class="chip p2">week 1–2</span>
+      <p><code>profile add/list/show/use/import</code>, match rules, applying profiles to git config and gh. <code>sign setup/status/verify</code> for ssh, openpgp and x509, the allowed-signers file, and key upload through gh.</p></li>
+    <li class="p3"><strong>Rules engine, rule scopes, lint</strong><span class="chip p3">week 2–3</span>
+      <p>Port the four rule groups and the shell parser, and add <code>ID006</code>. Rule sets with <code>extends</code>, <code>locked</code>, and <code>rules use/set/show --origin</code>. <code>internal/workflow</code>: template schema, built-in <code>default</code>, scoped selection, <code>extends</code>, validation, and compiling to BR params. Exit criterion: the <code>default</code> template gives the same BR verdicts as <code>branching.json</code> today. Port <code>tests/*.py</code> to Go table tests. Exit criterion: every Python test case gives the same verdict.</p></li>
+    <li class="p4"><strong>Hooks: git + Claude</strong><span class="chip p4">week 3</span>
+      <p><code>hook</code>, <code>hooks install</code> (shims), <code>guard --agent claude</code> including the <code>--apply</code> → <code>ask</code> policy. Switch <code>hooks/hooks.json</code> to <code>mygit</code>, then delete the duplicate regexes in the templates.</p></li>
+    <li class="p5"><strong>Workflow commands + gh</strong><span class="chip p5">week 4</span>
+      <p><code>commit</code>, <code>branch new/prune</code>, <code>push</code>, <code>pr create/release/check</code>, <code>repo create/protect/bootstrap</code>, all built as plans and routed by the workflow template. <code>workflow list/show/use/new/validate</code>, transition commands (<code>branch cut</code>, <code>pr run</code>), and a ruleset per template. Slim the skills so they show the plan and then <code>--apply</code>.</p></li>
+    <li class="p6"><strong>Graph + flow views</strong><span class="chip p6">week 5</span>
+      <p><code>internal/graph</code> lane layout, terminal renderer (Unicode, plus an ASCII fallback for old Windows consoles), <code>--html</code> renderer, and <code>flow</code> laid out from the active workflow template plus <code>gh pr list</code>.</p></li>
+    <li class="ok"><strong>More agents + release</strong><span class="chip">week 6</span>
+      <p><code>agent install codex|agy</code> once their hook formats are confirmed, and <code>guard --agent json</code>. goreleaser builds for darwin, linux and windows (amd64/arm64). The Windows binaries are built but not tested. Homebrew tap. Retire <code>scripts/</code>.</p></li>
+  </ol>
+  <div class="callout warn"><span class="kind">Riskiest port</span>The shell parser: 455 lines handling <code>bash -c</code>, chains, quoting and PowerShell. <code>mvdan.cc/sh</code> covers bash. PowerShell has no Go parser, so its tokenizer must be ported by hand and tested against the existing <code>test_shellparse.py</code> cases.</div>
+</section>
+
+<section id="open">
+  <h2>Open questions</h2>
+  <ul>
+    <li><span class="tag open">OPEN</span> <strong>Ship more built-in templates?</strong> The current plan ships only <code>default</code>. GitHub flow, gitflow and trunk-based could ship as example custom templates (<code>mygit workflow new --from-example gitflow</code>) rather than built-ins.</li>
+    <li><span class="tag open">OPEN</span> <strong>Merge method enforcement.</strong> Should <code>mergeMethod</code> per transition also restrict the allowed merge methods in the GitHub ruleset? Rulesets set this per branch, not per source branch.</li>
+    <li><span class="tag open">OPEN</span> <strong>Windows test setup.</strong> When to add a <code>windows-latest</code> CI runner, and which PowerShell is the baseline: 5.1 (built in) or 7.</li>
+    <li><span class="tag open">OPEN</span> <strong>Agents and <code>--apply</code>.</strong> Proposed default: the guard asks you before an agent applies a plan. Set <code>execution.agentApply: "allow"</code> to let the agent apply after it has shown you the plan.</li>
+    <li><span class="tag open">OPEN</span> <strong>Plan expiry.</strong> Should a plan id also expire after some time, on top of the repo-state hash?</li>
+    <li><span class="tag open">OPEN</span> <strong>Codex and Antigravity hooks.</strong> Do the versions you run offer a pre-command hook, and what payload and response do they expect? This decides between a full guard and git-hook-only for those agents.</li>
+    <li><span class="tag open">OPEN</span> <strong>May a project loosen a rule?</strong> For example, can <code>.mygit.json</code> set <code>CM016</code> to <code>off</code>? One option is a global <code>"locked": ["CM016","BR002"]</code> list that lower layers cannot weaken.</li>
+    <li><span class="tag open">OPEN</span> <strong>JSON or JSONC.</strong> Plain JSON is strict and fits the goal. JSONC allows the comments shown in the examples above.</li>
+    <li><span class="tag open">OPEN</span> <strong>Git-hook shim without mygit installed:</strong> fail open (current proposal) or fail closed?</li>
+    <li><span class="tag open">OPEN</span> <strong>Keep the Python plugin as a fallback</strong> after phase 6, or remove <code>scripts/</code> completely?</li>
+    <li><span class="tag open">OPEN</span> <strong>Distribution:</strong> Homebrew tap only, or also <code>go install</code> and a plugin-bundled binary that Claude's hook can find through <code>${CLAUDE_PLUGIN_ROOT}/bin</code>?</li>
+  </ul>
+</section>
+
+<section id="sources">
+  <h2>Sources</h2>
+  <p class="muted">All code locations: repo <code>agentic-workflows</code>, branch <code>develop/feat/my-git</code> @ <code>2a3b817</code>, read 2026-11-14. Paths are relative to <code>plugins/my-git/</code>.</p>
+  <ol class="sources">
+    <li id="src-1">
+      <div class="src-head"><span class="src-id">S1</span><span class="src-type">Code</span><span class="src-title">gitguard engine: evaluate()</span></div>
+      <div class="src-loc"><code>scripts/gitguard/engine.py:22-48</code></div>
+      <blockquote class="src-quote"><code>if inv.program == "git": … identity.check_author … _check_commit_message … identity.check_network … branching.check_git
+elif inv.program == "gh": … identity.check_gh_account … gh_policy.check_gh … branching.check_gh</code></blockquote>
+    </li>
+    <li id="src-2">
+      <div class="src-head"><span class="src-id">S2</span><span class="src-type">Code</span><span class="src-title">commit-msg git hook template</span></div>
+      <div class="src-loc"><code>templates/repo/.githooks/commit-msg:11-22</code></div>
+      <blockquote class="src-quote"><code>grep -Eq '^(&#123;&#123;TYPES&#125;&#125;)(\([a-z0-9][a-z0-9._/-]*\))?!?: .{3,}$'</code> …
+<code>if [ "${#header}" -gt 72 ]; then</code> …
+<code>grep -Eiq '^(co-authored-by|assisted-by|generated-by|ai-assisted):.*(claude|anthropic|openai|…</code></blockquote>
+      <div class="src-note">Header limit 72 and the AI-name list are literals in the template, separate from <code>contracts/commit-message.json</code>.</div>
+    </li>
+    <li id="src-3">
+      <div class="src-head"><span class="src-id">S3</span><span class="src-type">Code</span><span class="src-title">Shipped contracts and their rule ids</span></div>
+      <div class="src-loc"><code>contracts/identity.json</code> (ID001–ID005), <code>commit-message.json</code> (CM001–CM016), <code>github-cli.json</code> (GH001–GH009), <code>branching.json</code> (BR001–BR005); listed with a <code>json.load</code> one-liner</div>
+      <blockquote class="src-quote">BR001 deny No direct commits on main or develop/base · CM003 deny Header follows type(scope)!: subject · GH008 deny PR bodies have summary, detailed changes, explanation and local test results · ID005 deny gh is logged in as the expected account</blockquote>
+    </li>
+    <li id="src-4">
+      <div class="src-head"><span class="src-id">S4</span><span class="src-type">Code</span><span class="src-title">Profile resolution order</span></div>
+      <div class="src-loc"><code>scripts/gitguard/profile.py:3-8</code></div>
+      <blockquote class="src-quote">Each variable declared in identity.json "profile_variables" is resolved, first match wins, from:
+  1. its environment variable (e.g. GIT_GUARD_GITHUB_USER; lists are comma-separated),
+  2. &lt;project&gt;/.claude/git-guard/profile.local.json (per project, git-ignored; …)
+  3. ~/.claude/git-guard/profile.json (per user, all projects).</blockquote>
+    </li>
+    <li id="src-5">
+      <div class="src-head"><span class="src-id">S5</span><span class="src-type">Code</span><span class="src-title">Claude PreToolUse hook entry point</span></div>
+      <div class="src-loc"><code>scripts/pre_tool_use.py:19-54</code> · <code>decide()</code>, <code>_fail_safe()</code></div>
+      <blockquote class="src-quote"><code>"permissionDecision": decision,
+"permissionDecisionReason": verdict.reason(),</code> …
+<code>"permissionDecisionReason": f"git-guard could not check this command: {reason}"</code></blockquote>
+    </li>
+    <li id="src-6">
+      <div class="src-head"><span class="src-id">S6</span><span class="src-type">Doc</span><span class="src-title">my-git README: what the plugin is</span></div>
+      <div class="src-loc"><code>README.md:3-10</code></div>
+      <blockquote class="src-quote">A Claude Code plugin with a customized git workflow:
+- **git-guard hooks** check every `Bash` / `PowerShell` command Claude runs against JSON contracts …</blockquote>
+    </li>
+    <li id="src-7">
+      <div class="src-head"><span class="src-id">S7</span><span class="src-type">Decision</span><span class="src-title">Target feature list for mygit</span></div>
+      <div class="src-loc">Given by the user in this conversation, 2026-11-14</div>
+      <blockquote class="src-quote">Name: mygit · Type: CLI · Language: Go … Multi-scrope Git profile configuration in JSON (Global, Local per project) … Integratable with AI agents: Claude Code, Codex, Antigravity CLI via skills and hooks</blockquote>
+    </li>
+    <li id="src-8">
+      <div class="src-head"><span class="src-id">S8</span><span class="src-type">Code</span><span class="src-title">setup_profile.py subcommands</span></div>
+      <div class="src-loc"><code>scripts/setup_profile.py:191-210</code></div>
+      <blockquote class="src-quote"><code>sub.add_parser("show", help="print every profile variable, its value and where it came from")
+p = sub.add_parser("init", help="create or update a profile file")
+u = sub.add_parser("unset", …)  e = sub.add_parser("eject", help="copy shipped contracts into the project so they can be customized")</code></blockquote>
+    </li>
+    <li id="src-9">
+      <div class="src-head"><span class="src-id">S9</span><span class="src-type">Code</span><span class="src-title">Contract override lookup</span></div>
+      <div class="src-loc"><code>scripts/gitguard/paths.py:60-66</code> · <code>contract_path()</code></div>
+      <blockquote class="src-quote">"""A project override in &lt;local&gt;/contracts/ wins over the shipped default."""</blockquote>
+      <div class="src-note">Override is per whole file: one changed rule means copying the full contract.</div>
+    </li>
+    <li id="src-10">
+      <div class="src-head"><span class="src-id">S10</span><span class="src-type">Code</span><span class="src-title">setup_repo.py: ruleset via gh api</span></div>
+      <div class="src-loc"><code>scripts/setup_repo.py:196-204</code></div>
+      <blockquote class="src-quote"><code>code, out = run.query(["gh", "api", f"repos/{repo}/rulesets", "--jq", …])
+method, endpoint = ("PUT", f"repos/{repo}/rulesets/{existing}") if existing else ("POST", f"repos/{repo}/rulesets")</code></blockquote>
+    </li>
+    <li id="src-11">
+      <div class="src-head"><span class="src-id">S11</span><span class="src-type">Code</span><span class="src-title">/my-git:pr skill</span></div>
+      <div class="src-loc"><code>skills/pr/SKILL.md:45,100</code></div>
+      <blockquote class="src-quote">If a PR already exists (`gh pr list --head &lt;head&gt; --base &lt;base&gt; --state open`), show its URL and stop.
+`gh pr create --base &lt;base&gt; --head &lt;head&gt; --title "&lt;title&gt;" --body-file &lt;bodyfile&gt; [--draft]`</blockquote>
+    </li>
+    <li id="src-12">
+      <div class="src-head"><span class="src-id">S12</span><span class="src-type">Doc</span><span class="src-title">README: three enforcement layers</span></div>
+      <div class="src-loc"><code>README.md:37-41, 57</code></div>
+      <blockquote class="src-quote">| git-guard hooks | Claude's Bash/PowerShell calls | …
+| local git hooks | `.githooks/` in the repo (`core.hooksPath`) | … Applies to you too, outside Claude |
+| GitHub ruleset | the GitHub repo | the real enforcement: PR required on both branches, no force-push, no deletion |</blockquote>
+    </li>
+    <li id="src-13">
+      <div class="src-head"><span class="src-id">S13</span><span class="src-type">Doc</span><span class="src-title">README: account-agnostic contracts</span></div>
+      <div class="src-loc"><code>README.md:12</code></div>
+      <blockquote class="src-quote">The guard is **account-agnostic**: the shared contracts never name a user. Each person supplies their own account values in a profile.</blockquote>
+    </li>
+    <li id="src-14">
+      <div class="src-head"><span class="src-id">S14</span><span class="src-type">Code</span><span class="src-title">profile_variables declaration</span></div>
+      <div class="src-loc"><code>contracts/identity.json:7-49</code></div>
+      <blockquote class="src-quote">"github_user" … "github_orgs" … "git_name" … "git_email" … "git_transport": { "choices": ["ssh", "gh"] … } … "ssh_key" … "signing_key"</blockquote>
+    </li>
+    <li id="src-15">
+      <div class="src-head"><span class="src-id">S15</span><span class="src-type">Code</span><span class="src-title">Branching contract settings and examples</span></div>
+      <div class="src-loc"><code>contracts/branching.json:12-37</code></div>
+      <blockquote class="src-quote">"settings": { "production_branch": "main", "staging_branch": "develop/base", "remote": "origin" } …
+"examples": { "good": ["git switch -c develop/feat/login develop/base &amp;&amp; git commit -m \"feat: add login\""], …</blockquote>
+    </li>
+    <li id="src-16">
+      <div class="src-head"><span class="src-id">S16</span><span class="src-type">Code</span><span class="src-title">${var} substitution semantics</span></div>
+      <div class="src-loc"><code>scripts/gitguard/profile.py:86-92</code> · <code>substitute()</code></div>
+      <blockquote class="src-quote">* "${var}" alone -&gt; the value (list or string), or None when unset.
+* a list item "${var}" -&gt; spliced in (lists flatten); dropped when unset.
+* "${var}" embedded in a longer string -&gt; substituted (re.escape'd when regex); None/dropped when unset.</blockquote>
+    </li>
+    <li id="src-17">
+      <div class="src-head"><span class="src-id">S17</span><span class="src-type">Doc</span><span class="src-title">README: unset variables fall back to presence checks</span></div>
+      <div class="src-loc"><code>README.md:192-197</code></div>
+      <blockquote class="src-quote">**Unset variables** make the rule fall back to a presence check:
+- an author name must be set, and the author email must be a valid address
+- gh must be logged in, as any account</blockquote>
+    </li>
+    <li id="src-18">
+      <div class="src-head"><span class="src-id">S18</span><span class="src-type">Code</span><span class="src-title">Plugin hook registration</span></div>
+      <div class="src-loc"><code>hooks/hooks.json:4-25</code></div>
+      <blockquote class="src-quote">"PreToolUse": [ { "matcher": "Bash|PowerShell", … "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/pre_tool_use.py\"" …
+"SessionStart": [ { "matcher": "startup|resume|clear", … session_start.py</blockquote>
+    </li>
+    <li id="src-19">
+      <div class="src-head"><span class="src-id">S19</span><span class="src-type">Code</span><span class="src-title">commit skill: signing pinned on the command</span></div>
+      <div class="src-loc"><code>skills/commit/SKILL.md:57-64</code></div>
+      <blockquote class="src-quote">4. **Commit with the identity (and signing key) pinned on the command**, so a different global config can never leak in: …
+`git -C "&lt;repo&gt;" -c user.name="&lt;name&gt;" -c user.email="&lt;email&gt;" -c gpg.format=ssh -c user.signingkey="&lt;key path&gt;" commit -S -F &lt;msgfile&gt;` …
+- If signing fails (…, git older than 2.34 for SSH signing), stop and show the error. Never retry without `-S` unless the user says so.</blockquote>
+    </li>
+    <li id="src-20">
+      <div class="src-head"><span class="src-id">S20</span><span class="src-type">Doc</span><span class="src-title">README: dry-run is opt-in today</span></div>
+      <div class="src-loc"><code>README.md:147</code></div>
+      <blockquote class="src-quote">Both modes support `--uninstall` and `--dry-run`.</blockquote>
+    </li>
+  </ol>
+</section>
+
+
+<footer class="doc-foot">Legend: <span class="tag sure">VERIFIED</span> seen directly in the cited source · <span class="tag infer">INFERRED</span> reasoned from evidence, not confirmed end-to-end · <span class="tag open">OPEN</span> unresolved, needs an answer. Press <code>/</code> to search; the ⟳ button reloads the latest version of this file.</footer>
+<!-- ===================== DOCUMENT CONTENT END ===================== -->
+</main>
+</div>
+
+<script id="haise-shell-js">
+/* ===== haise-doc shell v3.1.0 — do not edit per document ===== */
+(function(){
+  var root=document.documentElement, body=document.body;
+  var LANG=(root.lang||'en').slice(0,2).toLowerCase();
+  var I18N={
+    en:{toc:'Contents',search:'Search this document…  ( / )',none:'No matches',nav:'Show / hide contents',
+        prev:'Previous match (Shift+Enter)',next:'Next match (Enter)',citedIn:'Cited in',
+        reload:'Reload latest version (keeps your place)',
+        zoom:{hint:'Click to enlarge',zin:'Zoom in (+)',zout:'Zoom out (−)',fit:'Fit to screen (0)',one:'Actual size (1)',close:'Close (Esc)'},
+        theme:{auto:'Theme: auto',light:'Theme: light',dark:'Theme: dark'}},
+    vi:{toc:'Mục lục',search:'Tìm trong tài liệu…  ( / )',none:'Không có kết quả',nav:'Ẩn / hiện mục lục',
+        prev:'Kết quả trước (Shift+Enter)',next:'Kết quả sau (Enter)',citedIn:'Được dẫn ở',
+        reload:'Tải lại bản mới nhất (giữ vị trí đang đọc)',
+        zoom:{hint:'Nhấn để phóng to',zin:'Phóng to (+)',zout:'Thu nhỏ (−)',fit:'Vừa màn hình (0)',one:'Kích thước thật (1)',close:'Đóng (Esc)'},
+        theme:{auto:'Giao diện: tự động',light:'Giao diện: sáng',dark:'Giao diện: tối'}}
+  };
+  var T=I18N[LANG]||I18N.en;
+  var store={get:function(k){try{return localStorage.getItem(k);}catch(e){return null;}},
+             set:function(k,v){try{localStorage.setItem(k,v);}catch(e){}}};
+  var $=function(id){return document.getElementById(id);};
+  var main=$('content');
+
+  /* ---------- theme ---------- */
+  var themeBtn=$('haise-theme'), ICON={auto:'◐',light:'☀',dark:'☾'};
+  function applyTheme(t){
+    if(t==='light'||t==='dark') root.setAttribute('data-theme',t); else root.removeAttribute('data-theme');
+    themeBtn.textContent=ICON[t]; themeBtn.title=T.theme[t]; themeBtn.setAttribute('aria-label',T.theme[t]);
+  }
+  var theme=store.get('haise.theme'); if(theme!=='light'&&theme!=='dark') theme='auto';
+  applyTheme(theme);
+  themeBtn.addEventListener('click',function(){
+    theme=theme==='auto'?'light':theme==='light'?'dark':'auto';
+    store.set('haise.theme',theme); applyTheme(theme);
+  });
+
+  /* ---------- numbering + table of contents ---------- */
+  $('haise-toc-label').textContent=T.toc;
+  var toc=$('haise-toc'), ol=document.createElement('ol'), tocLinks=[], sections=[];
+  [].forEach.call(main.querySelectorAll('section'),function(sec,i){
+    var h2=sec.querySelector(':scope > h2'); if(!h2) return;
+    if(!sec.id) sec.id='s'+(i+1);
+    var n=String(sections.length+1);
+    sections.push(sec);
+    var num=document.createElement('span'); num.className='num'; num.textContent=n+'.'; h2.insertBefore(num,h2.firstChild);
+    var li=document.createElement('li'), a=mkLink('#'+sec.id,n+'.',h2);
+    a.dataset.sec=sec.id; li.appendChild(a); tocLinks.push({el:sec,a:a});
+    var subs=sec.querySelectorAll('h3');
+    if(subs.length){
+      var sub=document.createElement('ol');
+      [].forEach.call(subs,function(h3,j){
+        if(!h3.id) h3.id=sec.id+'-'+(j+1);
+        var m=n+'.'+(j+1);
+        var s=document.createElement('span'); s.className='num'; s.textContent=m; h3.insertBefore(s,h3.firstChild);
+        var sli=document.createElement('li'), sa=mkLink('#'+h3.id,m,h3);
+        sli.appendChild(sa); sub.appendChild(sli); tocLinks.push({el:h3,a:sa});
+      });
+      li.appendChild(sub);
+    }
+    ol.appendChild(li);
+  });
+  toc.appendChild(ol);
+  function mkLink(href,n,h){
+    var a=document.createElement('a'); a.href=href;
+    var s=document.createElement('span'); s.className='num'; s.textContent=n;
+    var t=document.createElement('span'); t.className='t';
+    var clone=h.cloneNode(true); var c=clone.querySelector('.num'); if(c) c.remove();
+    [].forEach.call(clone.querySelectorAll('a.cite,.tag'),function(x){x.remove();});
+    t.textContent=clone.textContent.trim();
+    var b=document.createElement('span'); b.className='badge';
+    a.appendChild(s); a.appendChild(t); a.appendChild(b);
+    a.addEventListener('click',function(){ if(isMobile()) body.classList.remove('nav-open'); });
+    return a;
+  }
+
+  /* ---------- sidebar toggle ---------- */
+  var navBtn=$('haise-nav-btn'); navBtn.title=T.nav; navBtn.setAttribute('aria-label',T.nav);
+  var mq=window.matchMedia('(max-width:960px)');
+  function isMobile(){return mq.matches;}
+  if(store.get('haise.nav')==='collapsed') body.classList.add('nav-collapsed');
+  navBtn.addEventListener('click',function(){
+    if(isMobile()){ body.classList.toggle('nav-open'); }
+    else{ body.classList.toggle('nav-collapsed'); store.set('haise.nav',body.classList.contains('nav-collapsed')?'collapsed':'open'); }
+  });
+  $('haise-backdrop').addEventListener('click',function(){body.classList.remove('nav-open');});
+
+  /* ---------- scroll spy + progress ---------- */
+  var ticking=false, prog=$('haise-progress');
+  function onScroll(){
+    ticking=false;
+    var y=window.scrollY, H=document.documentElement.scrollHeight-window.innerHeight;
+    prog.style.width=(H>0?Math.min(100,y/H*100):0)+'%';
+    var off=parseInt(getComputedStyle(root).getPropertyValue('--topbar-h'))+30, cur=null;
+    for(var i=0;i<tocLinks.length;i++){ if(tocLinks[i].el.getBoundingClientRect().top-off<=0) cur=tocLinks[i]; }
+    if(!cur&&tocLinks.length) cur=tocLinks[0];
+    tocLinks.forEach(function(t){t.a.classList.toggle('active',t===cur);});
+    if(cur&&!isMobile()){
+      var r=cur.a.getBoundingClientRect(), sb=$('haise-sidebar').getBoundingClientRect();
+      if(r.top<sb.top+20||r.bottom>sb.bottom-20) cur.a.scrollIntoView({block:'nearest'});
+    }
+  }
+  window.addEventListener('scroll',function(){ if(!ticking){ticking=true;requestAnimationFrame(onScroll);} },{passive:true});
+  onScroll();
+
+  /* ---------- citations: tooltips + back-references ---------- */
+  var back={};
+  [].forEach.call(main.querySelectorAll('a.cite'),function(a,i){
+    var id=(a.getAttribute('href')||'').replace(/^#/,''), src=document.getElementById(id);
+    if(!a.id) a.id='cite-'+(i+1);
+    if(!src){a.classList.add('broken');return;}
+    var t=src.querySelector('.src-title'); if(t) a.title=t.textContent.trim();
+    (back[id]=back[id]||[]).push(a);
+  });
+  Object.keys(back).forEach(function(id){
+    var src=document.getElementById(id), box=src.querySelector('.backrefs');
+    if(!box){box=document.createElement('div');box.className='backrefs';src.appendChild(box);}
+    box.textContent=T.citedIn+': ';
+    back[id].forEach(function(a){
+      var sec=a.closest('section'), n=sec?sec.querySelector(':scope > h2 .num'):null;
+      var l=document.createElement('a'); l.href='#'+a.id; l.textContent='↩ §'+(n?n.textContent.replace('.',''):'?');
+      var h=sec?sec.querySelector(':scope > h2'):null; if(h) l.title=h.textContent.trim();
+      box.appendChild(l);
+    });
+  });
+
+  /* ---------- search (case- and accent-insensitive) ---------- */
+  var q=$('haise-q'), countEl=$('haise-count'), hits=[], cur=-1, opened=[], timer=null;
+  q.placeholder=T.search; q.setAttribute('aria-label',T.search);
+  $('haise-prev').title=T.prev; $('haise-prev').setAttribute('aria-label',T.prev);
+  $('haise-next').title=T.next; $('haise-next').setAttribute('aria-label',T.next);
+  function foldChar(c){
+    if(c==='đ'||c==='Đ') return 'd';
+    return c.normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
+  }
+  function fold(s){
+    var out='', map=[];
+    for(var i=0;i<s.length;i++){ var f=foldChar(s[i]); for(var j=0;j<f.length;j++){out+=f[j];map.push(i);} }
+    return {s:out,map:map};
+  }
+  function clear(){
+    var parents=[];
+    hits.forEach(function(m){ var p=m.parentNode; if(!p) return; p.replaceChild(document.createTextNode(m.textContent),m); if(parents.indexOf(p)<0) parents.push(p); });
+    parents.forEach(function(p){p.normalize();});
+    opened.forEach(function(d){d.open=false;}); opened=[];
+    hits=[]; cur=-1;
+    tocLinks.forEach(function(t){t.a.querySelector('.badge').textContent='';});
+  }
+  function run(noJump){
+    clear();
+    var raw=q.value.trim(); if(raw.length<2){countEl.textContent='';return;}
+    var needle=fold(raw).s, nodes=[];
+    var w=document.createTreeWalker(main,NodeFilter.SHOW_TEXT,{acceptNode:function(n){
+      if(!n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+      var p=n.parentNode;
+      if(p.closest('script,style,svg,.no-search,textarea')) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;}});
+    while(w.nextNode()) nodes.push(w.currentNode);
+    for(var k=0;k<nodes.length&&hits.length<3000;k++){
+      var node=nodes[k], text=node.nodeValue, f=fold(text), idx=f.s.indexOf(needle);
+      if(idx<0) continue;
+      var frag=document.createDocumentFragment(), last=0;
+      while(idx>=0){
+        var a=f.map[idx], b=f.map[idx+needle.length-1]+1;
+        if(a>=last){
+          frag.appendChild(document.createTextNode(text.slice(last,a)));
+          var m=document.createElement('mark'); m.className='hit'; m.textContent=text.slice(a,b);
+          frag.appendChild(m); hits.push(m); last=b;
+        }
+        idx=f.s.indexOf(needle,idx+needle.length);
+      }
+      frag.appendChild(document.createTextNode(text.slice(last)));
+      node.parentNode.replaceChild(frag,node);
+    }
+    hits.forEach(function(m){
+      var d=m.parentNode.closest('details');
+      while(d){ if(!d.open){d.open=true;opened.push(d);} d=d.parentNode.closest('details'); }
+    });
+    tocLinks.forEach(function(t){
+      var scope=t.el.tagName==='SECTION'?t.el:null; if(!scope) return;
+      var n=scope.querySelectorAll('mark.hit').length;
+      t.a.querySelector('.badge').textContent=n?String(n):'';
+    });
+    if(!hits.length) countEl.textContent=T.none;
+    else if(noJump===true) countEl.textContent='– / '+hits.length;
+    else go(0);
+  }
+  function go(i){
+    if(!hits.length) return;
+    if(cur>=0&&hits[cur]) hits[cur].classList.remove('cur');
+    cur=(i+hits.length)%hits.length;
+    hits[cur].classList.add('cur');
+    hits[cur].scrollIntoView({block:'center',behavior:'smooth'});
+    countEl.textContent=(cur+1)+' / '+hits.length;
+  }
+  q.addEventListener('input',function(){clearTimeout(timer);timer=setTimeout(run,180);});
+  q.addEventListener('keydown',function(e){
+    if(e.key==='Enter'){e.preventDefault(); if(timer){clearTimeout(timer);timer=null;} if(!hits.length) run(); else go(cur+(e.shiftKey?-1:1));}
+    else if(e.key==='Escape'){q.value='';clear();countEl.textContent='';q.blur();}
+  });
+  $('haise-prev').addEventListener('click',function(){go(cur-1);});
+  $('haise-next').addEventListener('click',function(){go(cur+1);});
+
+  /* ---------- reload: re-read the file from disk, keep the reader's place ---------- */
+  var RK='haise.reload:'+location.pathname, reloadBtn=$('haise-reload');
+  reloadBtn.title=T.reload; reloadBtn.setAttribute('aria-label',T.reload);
+  function ss(k,v){try{if(v===undefined){var r=sessionStorage.getItem(k);sessionStorage.removeItem(k);return r;}sessionStorage.setItem(k,v);}catch(e){return null;}}
+  function reload(){
+    var anchor=null, top=0;
+    for(var i=tocLinks.length-1;i>=0;i--){ var r=tocLinks[i].el.getBoundingClientRect(); if(r.top<=window.innerHeight/3){anchor=tocLinks[i].el.id;top=r.top;break;} }
+    var open=[].map.call(main.querySelectorAll('details'),function(d){return d.open&&opened.indexOf(d)<0;});
+    ss(RK,JSON.stringify({y:window.scrollY,anchor:anchor,top:top,q:q.value,open:open}));
+    location.reload();
+  }
+  reloadBtn.addEventListener('click',reload);
+  (function restore(){
+    var s=ss(RK); if(!s) return;
+    try{s=JSON.parse(s);}catch(e){return;}
+    if('scrollRestoration' in history) history.scrollRestoration='manual';
+    var ds=main.querySelectorAll('details');
+    (s.open||[]).forEach(function(o,i){ if(o&&ds[i]) ds[i].open=true; });
+    if(s.q){q.value=s.q; run(true);}
+    var el=s.anchor&&document.getElementById(s.anchor);
+    var y=el?el.getBoundingClientRect().top+window.scrollY-s.top:s.y;
+    root.style.scrollBehavior='auto'; window.scrollTo(0,y); root.style.scrollBehavior='';
+    onScroll();
+  })();
+  /* ---------- zoom: click a figure image or diagram to view it large (vector stays sharp) ---------- */
+  (function zoom(){
+    var items=[].slice.call(main.querySelectorAll('figure.fig img, figure.fig svg')).filter(function(el){
+      return !el.closest('[data-nozoom]') && !(el.tagName.toLowerCase()==='svg' && el.parentElement.closest('svg'));
+    });
+    if(!items.length) return;
+    var Z=T.zoom, ov=document.createElement('div');
+    ov.className='zoom-ov'; ov.setAttribute('role','dialog'); ov.setAttribute('aria-modal','true');
+    ov.innerHTML='<div class="zoom-bar"><span class="zoom-pct"></span>'+
+      '<button class="iconbtn" type="button" data-z="out">−</button><button class="iconbtn" type="button" data-z="fit">⤢</button>'+
+      '<button class="iconbtn" type="button" data-z="one">1:1</button><button class="iconbtn" type="button" data-z="in">+</button>'+
+      '<button class="iconbtn" type="button" data-z="close">✕</button></div><div class="zoom-cap"></div>';
+    body.appendChild(ov);
+    var bar=ov.querySelector('.zoom-bar'), cap=ov.querySelector('.zoom-cap'), pct=ov.querySelector('.zoom-pct');
+    var TT={out:Z.zout,fit:Z.fit,one:Z.one,'in':Z.zin,close:Z.close};
+    [].forEach.call(bar.querySelectorAll('button'),function(b){b.title=TT[b.dataset.z];b.setAttribute('aria-label',TT[b.dataset.z]);});
+    var node=null,isSvg=false,w=1,h=1,s=1,fit=1,x=0,y=0,idx=-1,lastFocus=null,pts={},moved=false;
+    function dims(el){
+      if(el.tagName.toLowerCase()==='svg'){var vb=el.viewBox&&el.viewBox.baseVal; if(vb&&vb.width) return [vb.width,vb.height];}
+      else if(el.naturalWidth) return [el.naturalWidth,el.naturalHeight];
+      var r=el.getBoundingClientRect(); return [r.width||1,r.height||1];
+    }
+    function vw(){return ov.clientWidth;} function vh(){return ov.clientHeight;}
+    function lim(){var b=Math.max(fit,1); return [fit*0.5, b*(isSvg?10:4)];}
+    function render(){
+      node.style.width=(w*s)+'px'; node.style.height=(h*s)+'px';
+      node.style.transform='translate('+Math.round(x)+'px,'+Math.round(y)+'px)';
+      pct.textContent=Math.round(s*100)+'%';
+    }
+    function setScale(ns,cx,cy){
+      var l=lim(); ns=Math.min(l[1],Math.max(l[0],ns));
+      if(cx===undefined){cx=vw()/2;cy=vh()/2;}
+      x=cx-(cx-x)*ns/s; y=cy-(cy-y)*ns/s; s=ns; render();
+    }
+    function toFit(){
+      var top=60, bottom=(cap.textContent?cap.offsetHeight+24:16), room=vh()-top-bottom;
+      fit=Math.min((vw()-32)/w,room/h);
+      s=fit; x=(vw()-w*s)/2; y=top+(room-h*s)/2; render();
+    }
+    function open(i){
+      idx=(i+items.length)%items.length;
+      var src=items[idx]; isSvg=src.tagName.toLowerCase()==='svg';
+      if(node) node.remove();
+      node=src.cloneNode(true); node.removeAttribute('id'); node.removeAttribute('tabindex');
+      node.classList.remove('zoomable'); node.removeAttribute('style'); node.classList.add('zoom-item');
+      if(isSvg){node.removeAttribute('width');node.removeAttribute('height');node.setAttribute('preserveAspectRatio','xMidYMid meet');}
+      var d=dims(src); w=d[0]; h=d[1];
+      ov.insertBefore(node,bar);
+      var fig=src.closest('figure'), fc=fig&&fig.querySelector(':scope > figcaption');
+      var label=src.getAttribute('alt')||src.getAttribute('aria-label')||'';
+      cap.innerHTML='';
+      if(items.length>1){var n=document.createElement('b');n.textContent=(idx+1)+' / '+items.length+'  ';cap.appendChild(n);}
+      cap.appendChild(document.createTextNode([label,fc?fc.textContent.trim():''].filter(Boolean).join(' — ')));
+      if(!ov.classList.contains('on')){lastFocus=document.activeElement; ov.classList.add('on'); body.style.overflow='hidden';}
+      toFit(); bar.querySelector('[data-z="close"]').focus();
+    }
+    function close(){
+      ov.classList.remove('on'); body.style.overflow=''; pts={};
+      if(node){node.remove();node=null;} if(lastFocus&&lastFocus.focus) lastFocus.focus();
+    }
+    function act(z){
+      if(z==='close') close(); else if(z==='fit') toFit(); else if(z==='one') setScale(1);
+      else if(z==='in') setScale(s*1.4); else if(z==='out') setScale(s/1.4);
+    }
+    items.forEach(function(el,i){
+      el.classList.add('zoomable'); el.setAttribute('tabindex','0');
+      if(el.tagName.toLowerCase()==='img') el.title=Z.hint;
+      el.addEventListener('click',function(e){ if(e.target.closest&&e.target.closest('a')) return; open(i); });
+      el.addEventListener('keydown',function(e){ if(e.key==='Enter'||e.key===' '){e.preventDefault();open(i);} });
+    });
+    bar.addEventListener('click',function(e){var b=e.target.closest('button'); if(b) act(b.dataset.z);});
+    ov.addEventListener('wheel',function(e){
+      e.preventDefault(); setScale(s*Math.exp(-e.deltaY*(e.ctrlKey?0.01:0.0015)),e.clientX,e.clientY);
+    },{passive:false});
+    ov.addEventListener('pointerdown',function(e){
+      if(e.target.closest('.zoom-bar')) return;
+      try{ov.setPointerCapture(e.pointerId);}catch(_){}
+      pts[e.pointerId]={x:e.clientX,y:e.clientY,t:e.target}; if(Object.keys(pts).length===1) moved=false;
+      ov.classList.add('drag');
+    });
+    ov.addEventListener('pointermove',function(e){
+      var p=pts[e.pointerId]; if(!p) return;
+      var ids=Object.keys(pts);
+      if(ids.length===1){
+        var dx=e.clientX-p.x, dy=e.clientY-p.y; if(Math.abs(dx)+Math.abs(dy)>2) moved=true;
+        x+=dx; y+=dy; p.x=e.clientX; p.y=e.clientY; render();
+      }else if(ids.length===2){
+        var o=pts[ids[0]===String(e.pointerId)?ids[1]:ids[0]];
+        var d0=Math.hypot(p.x-o.x,p.y-o.y); p.x=e.clientX; p.y=e.clientY;
+        var d1=Math.hypot(p.x-o.x,p.y-o.y); moved=true;
+        if(d0>0) setScale(s*d1/d0,(p.x+o.x)/2,(p.y+o.y)/2);
+      }
+    });
+    function up(e){
+      var p=pts[e.pointerId]; delete pts[e.pointerId];
+      if(!Object.keys(pts).length){ ov.classList.remove('drag'); if(e.type==='pointerup'&&!moved&&p&&p.t===ov) close(); }
+    }
+    ov.addEventListener('pointerup',up); ov.addEventListener('pointercancel',up);
+    ov.addEventListener('dblclick',function(e){
+      if(!node||!node.contains(e.target)) return;
+      if(s>fit*1.05) toFit(); else setScale(isSvg?fit*2.5:Math.max(1,fit*2),e.clientX,e.clientY);
+    });
+    document.addEventListener('keydown',function(e){
+      if(!ov.classList.contains('on')) return;
+      var k=e.key, map={'Escape':'close','+':'in','=':'in','-':'out','_':'out','0':'fit','1':'one'};
+      if(map[k]) act(map[k]);
+      else if(k==='ArrowRight') open(idx+1);
+      else if(k==='ArrowLeft') open(idx-1);
+      else if(k==='Tab'){ /* keep focus inside the viewer */
+        var bs=bar.querySelectorAll('button'), f=bs[0], l=bs[bs.length-1];
+        if(e.shiftKey&&document.activeElement===f){l.focus();} else if(!e.shiftKey&&document.activeElement===l){f.focus();} else return;
+      } else return;
+      e.preventDefault(); e.stopImmediatePropagation();
+    },true);
+    window.addEventListener('resize',function(){ if(ov.classList.contains('on')) toFit(); });
+  })();
+
+  /* ---------- phase focus: hover anything with data-phase to light up the same phase everywhere; tap/click pins it ---------- */
+  (function phases(){
+    var els=[].slice.call(main.querySelectorAll('[data-phase]'));
+    if(!els.length) return;
+    var pinned=null;
+    function focus(p){
+      body.classList.toggle('focus-on',!!p);
+      els.forEach(function(el){el.classList.toggle('on',!!p&&el.getAttribute('data-phase')===p);});
+    }
+    els.forEach(function(el){
+      var p=el.getAttribute('data-phase');
+      el.addEventListener('mouseenter',function(){focus(p);});
+      el.addEventListener('mouseleave',function(){focus(pinned);});
+      if(!el.closest('svg')){ /* clicks inside diagrams stay with the zoom viewer */
+        el.addEventListener('click',function(e){
+          if(e.target.closest('a,button,summary,input,code')) return;
+          e.stopPropagation(); pinned=pinned===p?null:p; focus(pinned);
+        });
+      }
+    });
+    document.addEventListener('keydown',function(e){
+      if(e.key==='Escape'&&pinned&&!document.querySelector('.zoom-ov.on')){pinned=null;focus(null);}
+    });
+  })();
+
+  document.addEventListener('keydown',function(e){
+    var tag=(e.target.tagName||'').toLowerCase(), typing=tag==='input'||tag==='textarea'||e.target.isContentEditable;
+    if((e.key==='/'&&!typing)||((e.ctrlKey||e.metaKey)&&(e.key==='k'||e.key==='K'))){e.preventDefault();q.focus();q.select();}
+  });
+})();
+</script>
+</body>
+</html>

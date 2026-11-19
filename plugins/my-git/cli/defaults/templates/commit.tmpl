@@ -1,0 +1,5 @@
+{{.Type}}{{if .Scope}}({{.Scope}}){{end}}{{if .Breaking}}!{{end}}: {{.Subject}}
+{{if .Body}}
+{{.Body}}{{end}}
+{{range .Trailers}}
+{{.}}{{end}}

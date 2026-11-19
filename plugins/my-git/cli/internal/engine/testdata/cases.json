@@ -1,0 +1,1348 @@
+[
+  {
+    "name": "spec_block_example",
+    "command": "git commit -m \"Added stuff.\"",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "deny",
+    "rules": [
+      "CM003"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "spec_fixed_example",
+    "command": "git commit -m \"feat: add stuff\"",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "allow",
+    "rules": [],
+    "source": "python"
+  },
+  {
+    "name": "subject_period",
+    "command": "git commit -m \"feat: add stuff.\"",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "deny",
+    "rules": [
+      "CM008"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "not_interesting",
+    "command": "ls -la && echo done",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "allow",
+    "rules": [],
+    "source": "python"
+  },
+  {
+    "name": "read_only_chain",
+    "command": "git status; git log --oneline | head -5",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "allow",
+    "rules": [],
+    "source": "python"
+  },
+  {
+    "name": "and_chain_good_commit",
+    "command": "git add -A && git commit -m 'feat: add login'",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "allow",
+    "rules": [],
+    "source": "python"
+  },
+  {
+    "name": "chain_echo_bad_commit",
+    "command": "echo hi && git commit -m 'update stuff'",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "deny",
+    "rules": [
+      "CM003"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "or_chain",
+    "command": "git pull --rebase || git commit -m 'Fix stuff'",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "deny",
+    "rules": [
+      "CM003"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "pipe_redirect_push",
+    "command": "git push origin develop/feat/test 2>&1 | tee push.log",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "allow",
+    "rules": [],
+    "source": "python"
+  },
+  {
+    "name": "bash_c_commit",
+    "command": "bash -c \"git commit -m 'feat: add x'\"",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "allow",
+    "rules": [],
+    "source": "python"
+  },
+  {
+    "name": "bash_lc_cd_push_main",
+    "command": "bash -lc 'cd x && git push origin main'",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "deny",
+    "rules": [
+      "BR002"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "sh_c_bad_commit",
+    "command": "sh -c 'git commit -m WIP'",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "deny",
+    "rules": [
+      "CM003",
+      "CM014"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "env_prefix_author",
+    "command": "GIT_AUTHOR_NAME=bob git commit -m 'feat: add x'",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "deny",
+    "rules": [
+      "ID001"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "env_cmd_prefix_email",
+    "command": "env GIT_AUTHOR_EMAIL=m@evil.io git commit -m 'feat: add x'",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "deny",
+    "rules": [
+      "ID002"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "export_ssh_then_push",
+    "command": "export GIT_SSH_COMMAND='ssh -i \"D:/keys/gh/id_ed25519\" -o IdentitiesOnly=yes'; git push",
+    "dialect": "bash",
+    "profile": "default",
+    "repo": {
+      "ssh": null
+    },
+    "decision": "allow",
+    "rules": [],
+    "source": "python"
+  },
+  {
+    "name": "env_prefix_ssh_fetch",
+    "command": "GIT_SSH_COMMAND='ssh -i \"D:/keys/gh/id_ed25519\" -o IdentitiesOnly=yes' git fetch",
+    "dialect": "bash",
+    "profile": "default",
+    "repo": {
+      "ssh": null
+    },
+    "decision": "allow",
+    "rules": [],
+    "source": "python"
+  },
+  {
+    "name": "git_C_commit",
+    "command": "git -C sub commit -m 'feat: add x'",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "allow",
+    "rules": [],
+    "source": "python"
+  },
+  {
+    "name": "dash_c_user_name",
+    "command": "git -c user.name=mallory commit -m 'feat: add x'",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "deny",
+    "rules": [
+      "ID001"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "dash_c_ssh_pull",
+    "command": "git -c core.sshCommand='ssh -i \"D:/keys/gh/id_ed25519\" -o IdentitiesOnly=yes' pull",
+    "dialect": "bash",
+    "profile": "default",
+    "repo": {
+      "ssh": null
+    },
+    "decision": "allow",
+    "rules": [],
+    "source": "python"
+  },
+  {
+    "name": "heredoc_message",
+    "command": "git commit -m \"$(cat <<'EOF'\nfeat(hooks): add git-guard\n\nChecks identity and messages.\nEOF\n)\"",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "allow",
+    "rules": [],
+    "source": "python"
+  },
+  {
+    "name": "heredoc_ai_coauthor",
+    "command": "git commit -m \"$(cat <<'EOF'\nfeat(hooks): add git-guard\n\nChecks identity.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\"",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "deny",
+    "rules": [
+      "CM016"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "heredoc_stdin_F",
+    "command": "git commit -F - <<'EOF'\nfix: handle null\n\nbody\nEOF",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "allow",
+    "rules": [],
+    "source": "python"
+  },
+  {
+    "name": "file_F_good",
+    "command": "git commit -F msg.txt",
+    "dialect": "bash",
+    "profile": "default",
+    "files": {
+      "pr.md": "## Summary\nAdd x.\n\n## Detailed changes\n- add x\n\n## Explanation\nNeeded.\n\n## Test results\n### Unit\n`npm test`: 3 passed\n### Lint\n`npm run lint`: clean\n",
+      "msg.txt": "fix(api): handle null body\n",
+      "bad.txt": "update stuff\n"
+    },
+    "decision": "allow",
+    "rules": [],
+    "source": "python"
+  },
+  {
+    "name": "file_F_bad",
+    "command": "git commit --file=bad.txt",
+    "dialect": "bash",
+    "profile": "default",
+    "files": {
+      "pr.md": "## Summary\nAdd x.\n\n## Detailed changes\n- add x\n\n## Explanation\nNeeded.\n\n## Test results\n### Unit\n`npm test`: 3 passed\n### Lint\n`npm run lint`: clean\n",
+      "msg.txt": "fix(api): handle null body\n",
+      "bad.txt": "update stuff\n"
+    },
+    "decision": "deny",
+    "rules": [
+      "CM003"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "file_F_missing",
+    "command": "git commit -F nope.txt",
+    "dialect": "bash",
+    "profile": "default",
+    "files": {
+      "pr.md": "## Summary\nAdd x.\n\n## Detailed changes\n- add x\n\n## Explanation\nNeeded.\n\n## Test results\n### Unit\n`npm test`: 3 passed\n### Lint\n`npm run lint`: clean\n",
+      "msg.txt": "fix(api): handle null body\n",
+      "bad.txt": "update stuff\n"
+    },
+    "decision": "ask",
+    "rules": [
+      "CM002"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "dynamic_message",
+    "command": "git commit -m \"$MSG\"",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "ask",
+    "rules": [
+      "CM002"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "amend_no_edit",
+    "command": "git commit --amend --no-edit",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "allow",
+    "rules": [],
+    "source": "python"
+  },
+  {
+    "name": "commit_no_message",
+    "command": "git commit",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "deny",
+    "rules": [
+      "CM001"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "commit_on_main",
+    "command": "git commit -m 'feat: add x'",
+    "dialect": "bash",
+    "profile": "default",
+    "repo": {
+      "branch": "main"
+    },
+    "decision": "deny",
+    "rules": [
+      "BR001"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "initial_commit_main",
+    "command": "git commit -m 'chore: initialize repository'",
+    "dialect": "bash",
+    "profile": "default",
+    "repo": {
+      "branch": "main",
+      "has_commits": false
+    },
+    "decision": "ask",
+    "rules": [
+      "BR001"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "wrong_identity",
+    "command": "git commit -m 'feat: add x'",
+    "dialect": "bash",
+    "profile": "default",
+    "repo": {
+      "name": "someone",
+      "email": "x@other.example"
+    },
+    "decision": "deny",
+    "rules": [
+      "ID001",
+      "ID002"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "push_work_branch",
+    "command": "git push -u origin develop/feat/test",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "allow",
+    "rules": [],
+    "source": "python"
+  },
+  {
+    "name": "push_force_work_branch",
+    "command": "git push --force origin develop/feat/test",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "allow",
+    "rules": [],
+    "source": "python"
+  },
+  {
+    "name": "push_force_main",
+    "command": "git push --force origin main",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "deny",
+    "rules": [
+      "BR002"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "push_force_plus_base",
+    "command": "git push --force origin +develop/base",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "deny",
+    "rules": [
+      "BR002"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "push_head_to_main",
+    "command": "git push origin HEAD:refs/heads/main",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "deny",
+    "rules": [
+      "BR002"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "push_delete_main",
+    "command": "git push origin --delete main",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "deny",
+    "rules": [
+      "BR002"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "push_all",
+    "command": "git push --all origin",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "deny",
+    "rules": [
+      "BR002"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "push_from_main",
+    "command": "git push",
+    "dialect": "bash",
+    "profile": "default",
+    "repo": {
+      "branch": "main"
+    },
+    "decision": "deny",
+    "rules": [
+      "BR002"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "first_push_protected",
+    "command": "git push -u origin develop/base",
+    "dialect": "bash",
+    "profile": "default",
+    "repo": {
+      "branch": "develop/base",
+      "remote_branches": []
+    },
+    "decision": "ask",
+    "rules": [
+      "BR002"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "sudo_push_main",
+    "command": "sudo git push origin main",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "deny",
+    "rules": [
+      "BR002"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "subshell_push_main",
+    "command": "(cd sub && git push origin main)",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "deny",
+    "rules": [
+      "BR002"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "push_no_ssh",
+    "command": "git push",
+    "dialect": "bash",
+    "profile": "default",
+    "repo": {
+      "ssh": null
+    },
+    "decision": "deny",
+    "rules": [
+      "ID003"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "push_https_remote",
+    "command": "git push",
+    "dialect": "bash",
+    "profile": "default",
+    "repo": {
+      "remotes": {
+        "origin": "https://github.com/octocat/repo.git"
+      }
+    },
+    "decision": "deny",
+    "rules": [
+      "ID004"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "push_foreign_remote",
+    "command": "git push upstream",
+    "dialect": "bash",
+    "profile": "default",
+    "repo": {
+      "remotes": {
+        "upstream": "git@github.com:someone/repo.git"
+      }
+    },
+    "decision": "deny",
+    "rules": [
+      "ID004"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "fetch_all_mixed",
+    "command": "git fetch --all",
+    "dialect": "bash",
+    "profile": "default",
+    "repo": {
+      "remotes": {
+        "origin": "git@github.com:octocat/r.git",
+        "other": "https://gitlab.com/x/y.git"
+      }
+    },
+    "decision": "deny",
+    "rules": [
+      "ID004"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "remote_add_https",
+    "command": "git remote add up https://github.com/a/b",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "deny",
+    "rules": [
+      "ID004"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "clone_ssh_pinned",
+    "command": "git clone -c core.sshCommand='ssh -i \"D:/keys/gh/id_ed25519\" -o IdentitiesOnly=yes' git@github.com:octocat/x.git",
+    "dialect": "bash",
+    "profile": "default",
+    "repo": {
+      "ssh": null
+    },
+    "decision": "allow",
+    "rules": [],
+    "source": "python"
+  },
+  {
+    "name": "switch_c_good",
+    "command": "git switch -c develop/feat/login develop/base",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "allow",
+    "rules": [],
+    "source": "python"
+  },
+  {
+    "name": "switch_c_bad_name",
+    "command": "git switch -c Feature/Login develop/base",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "deny",
+    "rules": [
+      "BR003"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "switch_c_bad_base",
+    "command": "git switch -c develop/feat/x main",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "deny",
+    "rules": [
+      "BR004"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "switch_no_track_good",
+    "command": "git switch --no-track -c develop/feat/login origin/develop/base",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "allow",
+    "rules": [],
+    "source": "go"
+  },
+  {
+    "name": "switch_no_track_bad_base",
+    "command": "git switch --no-track -c develop/feat/x main",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "deny",
+    "rules": [
+      "BR004"
+    ],
+    "source": "go"
+  },
+  {
+    "name": "checkout_b_from_work",
+    "command": "git checkout -b develop/fix/x",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "deny",
+    "rules": [
+      "BR004"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "branch_listing",
+    "command": "git branch -a && git switch develop/base",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "allow",
+    "rules": [],
+    "source": "python"
+  },
+  {
+    "name": "merge_on_base",
+    "command": "git merge develop/feat/x",
+    "dialect": "bash",
+    "profile": "default",
+    "repo": {
+      "branch": "develop/base"
+    },
+    "decision": "deny",
+    "rules": [
+      "BR001"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "gh_pr_list",
+    "command": "gh pr list",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "allow",
+    "rules": [],
+    "source": "python"
+  },
+  {
+    "name": "gh_wrong_account",
+    "command": "gh pr list",
+    "dialect": "bash",
+    "profile": "default",
+    "repo": {
+      "gh_login": "someone-else"
+    },
+    "decision": "deny",
+    "rules": [
+      "ID005"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "gh_not_logged_in",
+    "command": "gh issue list",
+    "dialect": "bash",
+    "profile": "default",
+    "repo": {
+      "gh_login": null
+    },
+    "decision": "deny",
+    "rules": [
+      "ID005"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "gh_repo_delete",
+    "command": "gh repo delete octocat/x --yes",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "deny",
+    "rules": [
+      "GH002"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "gh_auth_token",
+    "command": "gh auth token",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "deny",
+    "rules": [
+      "GH002"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "gh_pr_merge",
+    "command": "gh pr merge 3 --squash",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "ask",
+    "rules": [
+      "GH002"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "gh_api_delete",
+    "command": "gh api -X DELETE repos/octocat/x/git/refs/heads/y",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "deny",
+    "rules": [
+      "GH003"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "gh_api_graphql_mutation",
+    "command": "gh api graphql -f query='mutation { x }'",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "ask",
+    "rules": [
+      "GH003"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "gh_api_foreign_owner",
+    "command": "gh api repos/someone/x/issues",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "ask",
+    "rules": [
+      "GH006"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "gh_pr_create_body_file",
+    "command": "gh pr create --base develop/base --title 'feat: add x' --body-file pr.md",
+    "dialect": "bash",
+    "profile": "default",
+    "files": {
+      "pr.md": "## Summary\nAdd x.\n\n## Detailed changes\n- add x\n\n## Explanation\nNeeded.\n\n## Test results\n### Unit\n`npm test`: 3 passed\n### Lint\n`npm run lint`: clean\n",
+      "msg.txt": "fix(api): handle null body\n",
+      "bad.txt": "update stuff\n"
+    },
+    "decision": "allow",
+    "rules": [],
+    "source": "python"
+  },
+  {
+    "name": "gh_pr_create_body_file_eq",
+    "command": "gh pr create --base develop/base --title 'feat: add x' --body-file=pr.md",
+    "dialect": "bash",
+    "profile": "default",
+    "files": {
+      "pr.md": "## Summary\nAdd x.\n\n## Detailed changes\n- add x\n\n## Explanation\nNeeded.\n\n## Test results\n### Unit\n`npm test`: 3 passed\n### Lint\n`npm run lint`: clean\n",
+      "msg.txt": "fix(api): handle null body\n",
+      "bad.txt": "update stuff\n"
+    },
+    "decision": "allow",
+    "rules": [],
+    "source": "python"
+  },
+  {
+    "name": "gh_pr_create_body_missing",
+    "command": "gh pr create --base develop/base --title 'feat: add x' --body-file nope.md",
+    "dialect": "bash",
+    "profile": "default",
+    "files": {
+      "pr.md": "## Summary\nAdd x.\n\n## Detailed changes\n- add x\n\n## Explanation\nNeeded.\n\n## Test results\n### Unit\n`npm test`: 3 passed\n### Lint\n`npm run lint`: clean\n",
+      "msg.txt": "fix(api): handle null body\n",
+      "bad.txt": "update stuff\n"
+    },
+    "decision": "ask",
+    "rules": [
+      "GH008"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "gh_pr_create_no_base",
+    "command": "gh pr create --title 'feat: add x' -F pr.md",
+    "dialect": "bash",
+    "profile": "default",
+    "files": {
+      "pr.md": "## Summary\nAdd x.\n\n## Detailed changes\n- add x\n\n## Explanation\nNeeded.\n\n## Test results\n### Unit\n`npm test`: 3 passed\n### Lint\n`npm run lint`: clean\n",
+      "msg.txt": "fix(api): handle null body\n",
+      "bad.txt": "update stuff\n"
+    },
+    "decision": "deny",
+    "rules": [
+      "BR005"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "gh_pr_create_interactive",
+    "command": "gh pr create",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "deny",
+    "rules": [
+      "BR005",
+      "GH004",
+      "GH008"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "gh_pr_create_bad_title",
+    "command": "gh pr create --title 'Fix stuff' --base develop/base -F pr.md",
+    "dialect": "bash",
+    "profile": "default",
+    "files": {
+      "pr.md": "## Summary\nAdd x.\n\n## Detailed changes\n- add x\n\n## Explanation\nNeeded.\n\n## Test results\n### Unit\n`npm test`: 3 passed\n### Lint\n`npm run lint`: clean\n",
+      "msg.txt": "fix(api): handle null body\n",
+      "bad.txt": "update stuff\n"
+    },
+    "decision": "deny",
+    "rules": [
+      "GH005"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "gh_pr_create_release",
+    "command": "gh pr create --base main --head develop/base --title 'chore(release): v1.0.0' -F pr.md",
+    "dialect": "bash",
+    "profile": "default",
+    "files": {
+      "pr.md": "## Summary\nAdd x.\n\n## Detailed changes\n- add x\n\n## Explanation\nNeeded.\n\n## Test results\n### Unit\n`npm test`: 3 passed\n### Lint\n`npm run lint`: clean\n",
+      "msg.txt": "fix(api): handle null body\n",
+      "bad.txt": "update stuff\n"
+    },
+    "decision": "allow",
+    "rules": [],
+    "source": "python"
+  },
+  {
+    "name": "gh_repo_create_public",
+    "command": "gh repo create octocat/x --public",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "ask",
+    "rules": [
+      "GH007"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "gh_repo_create_no_vis",
+    "command": "gh repo create octocat/x",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "deny",
+    "rules": [
+      "GH007"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "gh_chain_strictest",
+    "command": "gh pr list && gh pr merge 1 && gh repo delete a/b --yes",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "deny",
+    "rules": [
+      "GH002",
+      "GH006"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "gh_auth_switch_wrong",
+    "command": "gh auth switch --user octocat",
+    "dialect": "bash",
+    "profile": "default",
+    "repo": {
+      "gh_login": "someone-else"
+    },
+    "decision": "ask",
+    "rules": [
+      "GH002"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "nested_powershell_from_bash",
+    "command": "powershell -NoProfile -Command \"gh auth token\"",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "deny",
+    "rules": [
+      "GH002"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "curl_api",
+    "command": "curl -s https://api.github.com/user",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "deny",
+    "rules": [
+      "GH001"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "curl_post_api",
+    "command": "curl -X POST -H 'Accept: application/json' https://api.github.com/repos/a/b/issues -d '{}'",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "deny",
+    "rules": [
+      "GH001"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "wget_api",
+    "command": "wget -qO- https://api.github.com/rate_limit",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "deny",
+    "rules": [
+      "GH001"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "curl_lookalike",
+    "command": "curl https://example.com/api.github.com.html",
+    "dialect": "bash",
+    "profile": "default",
+    "decision": "allow",
+    "rules": [],
+    "source": "python"
+  },
+  {
+    "name": "gh_transport_push",
+    "command": "git push",
+    "dialect": "bash",
+    "profile": "gh",
+    "repo": {
+      "ssh": null,
+      "remotes": {
+        "origin": "https://github.com/octocat/repo.git"
+      },
+      "helper": "!/opt/homebrew/bin/gh auth git-credential"
+    },
+    "decision": "allow",
+    "rules": [],
+    "source": "python"
+  },
+  {
+    "name": "gh_transport_bad_helper",
+    "command": "git push",
+    "dialect": "bash",
+    "profile": "gh",
+    "repo": {
+      "ssh": null,
+      "remotes": {
+        "origin": "https://github.com/octocat/repo.git"
+      },
+      "helper": "osxkeychain"
+    },
+    "decision": "deny",
+    "rules": [
+      "ID003"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "gh_transport_token_url",
+    "command": "git push https://x:ghp_secret@github.com/octocat/repo.git develop/feat/test",
+    "dialect": "bash",
+    "profile": "gh",
+    "repo": {
+      "ssh": null,
+      "remotes": {
+        "origin": "https://github.com/octocat/repo.git"
+      },
+      "helper": "!/opt/homebrew/bin/gh auth git-credential"
+    },
+    "decision": "deny",
+    "rules": [
+      "ID003"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "no_profile_commit",
+    "command": "git commit -m 'feat: add x'",
+    "dialect": "bash",
+    "profile": "none",
+    "decision": "allow",
+    "rules": [],
+    "source": "python"
+  },
+  {
+    "name": "no_profile_push",
+    "command": "git push",
+    "dialect": "bash",
+    "profile": "none",
+    "decision": "allow",
+    "rules": [],
+    "source": "python"
+  },
+  {
+    "name": "ps_spec_block_example",
+    "command": "git commit -m \"Added stuff.\"",
+    "dialect": "powershell",
+    "profile": "default",
+    "decision": "deny",
+    "rules": [
+      "CM003"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "ps_here_string_good",
+    "command": "git commit -m @'\nfeat: add login\n\nIt's \"quoted\".\n'@",
+    "dialect": "powershell",
+    "profile": "default",
+    "decision": "allow",
+    "rules": [],
+    "source": "python"
+  },
+  {
+    "name": "ps_here_string_bad",
+    "command": "git commit -m @'\nupdated things\n'@",
+    "dialect": "powershell",
+    "profile": "default",
+    "decision": "deny",
+    "rules": [
+      "CM003"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "ps_backtick_escape",
+    "command": "git commit -m \"fix: say `\"hi`\"\"",
+    "dialect": "powershell",
+    "profile": "default",
+    "decision": "allow",
+    "rules": [],
+    "source": "python"
+  },
+  {
+    "name": "ps_dynamic",
+    "command": "git commit -m \"$msg\"",
+    "dialect": "powershell",
+    "profile": "default",
+    "decision": "ask",
+    "rules": [
+      "CM002"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "ps_irm_api",
+    "command": "Invoke-RestMethod -Uri https://api.github.com/repos/a/b",
+    "dialect": "powershell",
+    "profile": "default",
+    "decision": "deny",
+    "rules": [
+      "GH001"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "ps_irm_alias_post",
+    "command": "irm https://api.github.com/user -Method Post",
+    "dialect": "powershell",
+    "profile": "default",
+    "decision": "deny",
+    "rules": [
+      "GH001"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "ps_iwr_example",
+    "command": "iwr https://example.com",
+    "dialect": "powershell",
+    "profile": "default",
+    "decision": "allow",
+    "rules": [],
+    "source": "python"
+  },
+  {
+    "name": "ps_env_ssh_push",
+    "command": "$env:GIT_SSH_COMMAND = \"ssh -i `\"D:/keys/gh/id_ed25519`\" -o IdentitiesOnly=yes\"; git push",
+    "dialect": "powershell",
+    "profile": "default",
+    "repo": {
+      "ssh": null
+    },
+    "decision": "allow",
+    "rules": [],
+    "source": "python"
+  },
+  {
+    "name": "ps_call_operator_push_main",
+    "command": "& \"C:\\Program Files\\Git\\cmd\\git.exe\" push origin main",
+    "dialect": "powershell",
+    "profile": "default",
+    "decision": "deny",
+    "rules": [
+      "BR002"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "ps_semicolon_strictest",
+    "command": "git status; gh repo delete a/b --yes",
+    "dialect": "powershell",
+    "profile": "default",
+    "decision": "deny",
+    "rules": [
+      "GH002",
+      "GH006"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "ps_pipeline",
+    "command": "gh pr list | Select-Object -First 1",
+    "dialect": "powershell",
+    "profile": "default",
+    "decision": "allow",
+    "rules": [],
+    "source": "python"
+  },
+  {
+    "name": "ps_set_location_commit",
+    "command": "Set-Location sub; git commit -m 'feat: add x'",
+    "dialect": "powershell",
+    "profile": "default",
+    "decision": "allow",
+    "rules": [],
+    "source": "python"
+  },
+  {
+    "name": "ps_pr_create_body_file",
+    "command": "gh pr create --base develop/base --title \"feat: add x\" --body-file pr.md",
+    "dialect": "powershell",
+    "profile": "default",
+    "files": {
+      "pr.md": "## Summary\nAdd x.\n\n## Detailed changes\n- add x\n\n## Explanation\nNeeded.\n\n## Test results\n### Unit\n`npm test`: 3 passed\n### Lint\n`npm run lint`: clean\n",
+      "msg.txt": "fix(api): handle null body\n",
+      "bad.txt": "update stuff\n"
+    },
+    "decision": "allow",
+    "rules": [],
+    "source": "python"
+  },
+  {
+    "name": "ps_switch_bad_name",
+    "command": "git switch -c feat/login develop/base",
+    "dialect": "powershell",
+    "profile": "default",
+    "decision": "deny",
+    "rules": [
+      "BR003"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "ps_bash_c_inside",
+    "command": "bash -c 'git push origin main'",
+    "dialect": "powershell",
+    "profile": "default",
+    "decision": "deny",
+    "rules": [
+      "BR002"
+    ],
+    "source": "python"
+  },
+  {
+    "name": "id006_unsigned",
+    "command": "git commit -m 'feat: add x'",
+    "dialect": "bash",
+    "profile": "default",
+    "vars": {
+      "signing_format": "ssh"
+    },
+    "decision": "warn",
+    "rules": [
+      "ID006"
+    ],
+    "source": "go"
+  },
+  {
+    "name": "id006_S",
+    "command": "git commit -S -m 'feat: add x'",
+    "dialect": "bash",
+    "profile": "default",
+    "vars": {
+      "signing_format": "ssh"
+    },
+    "decision": "allow",
+    "rules": [],
+    "source": "go"
+  },
+  {
+    "name": "id006_aS",
+    "command": "git commit -aS -m 'feat: add x'",
+    "dialect": "bash",
+    "profile": "default",
+    "vars": {
+      "signing_format": "ssh"
+    },
+    "decision": "allow",
+    "rules": [],
+    "source": "go"
+  },
+  {
+    "name": "id006_gpg_sign",
+    "command": "git commit --gpg-sign -m 'feat: add x'",
+    "dialect": "bash",
+    "profile": "default",
+    "vars": {
+      "signing_format": "ssh"
+    },
+    "decision": "allow",
+    "rules": [],
+    "source": "go"
+  },
+  {
+    "name": "id006_gpg_sign_key",
+    "command": "git commit --gpg-sign=ABC123 -m 'feat: add x'",
+    "dialect": "bash",
+    "profile": "default",
+    "vars": {
+      "signing_format": "openpgp"
+    },
+    "decision": "allow",
+    "rules": [],
+    "source": "go"
+  },
+  {
+    "name": "id006_config_true",
+    "command": "git -c commit.gpgsign=true commit -m 'feat: add x'",
+    "dialect": "bash",
+    "profile": "default",
+    "vars": {
+      "signing_format": "ssh"
+    },
+    "decision": "allow",
+    "rules": [],
+    "source": "go"
+  },
+  {
+    "name": "id006_no_gpg_sign",
+    "command": "git commit -S --no-gpg-sign -m 'feat: add x'",
+    "dialect": "bash",
+    "profile": "default",
+    "vars": {
+      "signing_format": "ssh"
+    },
+    "decision": "warn",
+    "rules": [
+      "ID006"
+    ],
+    "source": "go"
+  },
+  {
+    "name": "id006_config_false",
+    "command": "git -c commit.gpgsign=false commit -S -m 'feat: add x'",
+    "dialect": "bash",
+    "profile": "default",
+    "vars": {
+      "signing_format": "ssh"
+    },
+    "decision": "warn",
+    "rules": [
+      "ID006"
+    ],
+    "source": "go"
+  },
+  {
+    "name": "id006_format_none",
+    "command": "git commit -m 'feat: add x'",
+    "dialect": "bash",
+    "profile": "default",
+    "vars": {
+      "signing_format": "none"
+    },
+    "decision": "allow",
+    "rules": [],
+    "source": "go"
+  },
+  {
+    "name": "id006_with_bad_message",
+    "command": "git commit -m 'Added stuff.'",
+    "dialect": "bash",
+    "profile": "default",
+    "vars": {
+      "signing_format": "x509"
+    },
+    "decision": "deny",
+    "rules": [
+      "CM003",
+      "ID006"
+    ],
+    "source": "go"
+  },
+  {
+    "name": "id006_not_commit",
+    "command": "git push origin develop/feat/test",
+    "dialect": "bash",
+    "profile": "default",
+    "vars": {
+      "signing_format": "ssh"
+    },
+    "decision": "allow",
+    "rules": [],
+    "source": "go"
+  },
+  {
+    "name": "id006_powershell",
+    "command": "git commit -S -m 'feat: add x'",
+    "dialect": "powershell",
+    "profile": "default",
+    "vars": {
+      "signing_format": "ssh"
+    },
+    "decision": "allow",
+    "rules": [],
+    "source": "go"
+  }
+]

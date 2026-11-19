@@ -1,0 +1,6 @@
+git commit --allow-empty -m "" || exit /b 1
+git tag -a v1 -m "café ünïcødé — 日本" || exit /b 1
+REM mygit: this step has an argument with a line break, which cmd cannot pass;
+REM   render the plan with --shell powershell or --shell gitbash instead
+exit /b 1
+git log --format="%H %s" -- "dir with space/file.go" || exit /b 1

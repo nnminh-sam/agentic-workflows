@@ -1,0 +1,130 @@
+{
+  "contract": "identity",
+  "version": "2.1.0",
+  "title": "Git & GitHub identity",
+  "description": "Account-agnostic identity rules. Expected values come from each user's profile (see profile_variables), never from this shared file. When a variable is unset, the rule falls back to a presence / consistency check.",
+  "applies_to": ["git commit", "git push/pull/fetch/clone/ls-remote", "git remote add/set-url", "gh *"],
+  "profile_variables": {
+    "github_user": {
+      "type": "string",
+      "env": "GIT_GUARD_GITHUB_USER",
+      "description": "Your GitHub login. gh must be logged in as this account; remotes and gh targets may belong to it.",
+      "example": "octocat"
+    },
+    "github_orgs": {
+      "type": "list",
+      "env": "GIT_GUARD_GITHUB_ORGS",
+      "description": "Extra owners (organisations) whose repositories you work on. Comma-separated in the env var.",
+      "example": ["my-org"]
+    },
+    "git_name": {
+      "type": "string",
+      "env": "GIT_GUARD_GIT_NAME",
+      "description": "The commit author name you commit as.",
+      "example": "Octo Cat"
+    },
+    "git_email": {
+      "type": "list",
+      "env": "GIT_GUARD_GIT_EMAIL",
+      "description": "Author email(s) you commit with. Comma-separated in the env var.",
+      "example": ["12345+octocat@users.noreply.github.com"]
+    },
+    "git_transport": {
+      "type": "string",
+      "env": "GIT_GUARD_GIT_TRANSPORT",
+      "choices": ["ssh", "gh"],
+      "description": "How git authenticates to GitHub. 'ssh' (default): SSH remotes with a pinned key (ssh_key). 'gh': HTTPS remotes authenticated by the gh credential helper (gh auth setup-git), so pushes go out as the active gh account; no SSH key needed.",
+      "example": "gh"
+    },
+    "ssh_key": {
+      "type": "string",
+      "env": "GIT_GUARD_SSH_KEY",
+      "description": "Path (or path suffix) of the private key network git operations must pin with -i. Only used when git_transport is 'ssh'.",
+      "example": "~/.ssh/id_ed25519_github"
+    }
+  },
+  "settings": {
+    "gh_hostname": "github.com",
+    "gh_status_cache_seconds": 300
+  },
+  "rules": [
+    {
+      "id": "ID001",
+      "name": "git-user-name",
+      "title": "Commit author name is set and expected",
+      "description": "The effective author name of a commit (from --author, -c user.name=, GIT_AUTHOR_NAME, or git config user.name) must be set. If the profile defines git_name it must equal it.",
+      "severity": "deny",
+      "params": { "expected": ["${git_name}"] },
+      "examples": {
+        "good": ["git config user.name \"<your git_name>\""],
+        "bad": ["git commit -m \"fix: x\"   (user.name unset, or not your git_name)"]
+      }
+    },
+    {
+      "id": "ID002",
+      "name": "git-user-email",
+      "title": "Commit author email is set and expected",
+      "description": "The effective author email must look like an email. If the profile defines git_email it must be one of them (case-insensitive); any regex in patterns is also accepted.",
+      "severity": "deny",
+      "params": { "expected": ["${git_email}"], "patterns": [] },
+      "examples": {
+        "good": ["git config user.email \"<one of your git_email>\""],
+        "bad": ["user.email unset", "a work email when the profile lists only your personal one"]
+      }
+    },
+    {
+      "id": "ID003",
+      "name": "ssh-key-pinned",
+      "title": "Network git operations use the pinned credential",
+      "description": "git_transport 'ssh' (default): push / pull / fetch / clone / ls-remote over SSH must run with an SSH command (GIT_SSH_COMMAND, -c core.sshCommand=, or git config core.sshCommand) that passes -i <key> and every required option; if the profile defines ssh_key, the key path must end with it. git_transport 'gh': the same operations over HTTPS must use the gh credential helper (gh auth setup-git), carry no credentials in the URL, and gh must be logged in as the expected account (ID005's expected_logins).",
+      "severity": "deny",
+      "params": {
+        "key_path": "${ssh_key}",
+        "required_options": ["IdentitiesOnly=yes"]
+      },
+      "examples": {
+        "good": [
+          "ssh: git config core.sshCommand 'ssh -i \"<your ssh_key>\" -o IdentitiesOnly=yes'",
+          "gh:  gh auth setup-git  (credential.https://github.com.helper = !gh auth git-credential)"
+        ],
+        "bad": [
+          "ssh: git push origin main   (no core.sshCommand configured)",
+          "gh:  git push with osxkeychain / a token in the URL instead of the gh helper"
+        ]
+      }
+    },
+    {
+      "id": "ID004",
+      "name": "remote-allowed",
+      "title": "Remotes use the profile's transport on allowed hosts and owners",
+      "description": "The URL used by clone / remote add / remote set-url, and the URL of the remote used by push / pull / fetch, must be on one of hosts and use the profile's transport: SSH when git_transport is 'ssh' (and require_ssh), HTTPS when it is 'gh'. If allowed_owners resolves to a non-empty list, the owner must be in it. Any URL matching extra_patterns is always accepted.",
+      "severity": "deny",
+      "params": {
+        "require_ssh": true,
+        "hosts": ["github.com"],
+        "allowed_owners": ["${github_user}", "${github_orgs}"],
+        "extra_patterns": []
+      },
+      "examples": {
+        "good": ["ssh: git@github.com:<github_user>/my-repo.git", "gh:  https://github.com/<github_user>/my-repo.git"],
+        "bad": [
+          "ssh: https://github.com/<github_user>/my-repo.git",
+          "gh:  git@github.com:<github_user>/my-repo.git",
+          "git@github.com:someone-else/repo.git"
+        ]
+      }
+    },
+    {
+      "id": "ID005",
+      "name": "gh-active-account",
+      "title": "gh is logged in as the expected account",
+      "description": "Before any gh command runs, gh must be logged in on gh_hostname. If the profile defines github_user, the active account (gh auth status --active) must be it. Switch with: gh auth switch --hostname github.com --user <login>.",
+      "severity": "deny",
+      "params": { "expected_logins": ["${github_user}"] },
+      "examples": {
+        "good": ["gh auth status  ->  Logged in to github.com account <github_user>"],
+        "bad": ["gh auth status  ->  not logged in, or logged in as another account"]
+      }
+    }
+  ]
+}

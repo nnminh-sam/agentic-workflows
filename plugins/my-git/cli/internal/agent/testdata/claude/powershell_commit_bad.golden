@@ -1,0 +1,2 @@
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"mygit: [CM003] header 'did stuff' is not '<type>(<scope>)!: <subject>' (start with a type, e.g. 'feat: ...')\nRule details: mygit rules explain CM003"}}
+exit=0

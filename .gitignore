@@ -45,3 +45,14 @@ desktop.ini
 .idea/
 .vscode/
 *.swp
+
+# From main
+*$py.class
+*.so
+.Python
+env/
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db

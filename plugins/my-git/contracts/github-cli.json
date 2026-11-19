@@ -1,0 +1,349 @@
+{
+  "contract": "github-cli",
+  "version": "2.1.0",
+  "title": "GitHub via gh",
+  "description": "How GitHub is managed from this project: through the gh CLI only, with risky commands blocked or confirmed. The gh account itself is checked by identity rule ID005.",
+  "applies_to": [
+    "gh *",
+    "curl / wget / Invoke-WebRequest / Invoke-RestMethod to api.github.com"
+  ],
+  "settings": {},
+  "rules": [
+    {
+      "id": "GH001",
+      "name": "use-gh-for-api",
+      "title": "Call the GitHub API through gh",
+      "description": "Direct HTTP calls to api.github.com (curl, wget, Invoke-WebRequest, Invoke-RestMethod, irm, iwr) are blocked; use gh api so the checked gh account is used.",
+      "severity": "deny",
+      "params": {
+        "hosts": [
+          "api.github.com",
+          "uploads.github.com"
+        ]
+      },
+      "examples": {
+        "good": [
+          "gh api repos/<owner>/<repo>/issues"
+        ],
+        "bad": [
+          "curl -H \"Authorization: token ...\" https://api.github.com/user"
+        ]
+      }
+    },
+    {
+      "id": "GH002",
+      "name": "command-policy",
+      "title": "Risky gh commands are blocked or confirmed",
+      "description": "Each entry matches a gh command prefix (e.g. 'repo delete'). 'deny' blocks it, 'ask' asks you to confirm. The first matching entry wins.",
+      "severity": "deny",
+      "params": {
+        "commands": [
+          {
+            "match": "repo delete",
+            "decision": "deny",
+            "reason": "Deleting a repository is irreversible; do it yourself in the browser."
+          },
+          {
+            "match": "repo archive",
+            "decision": "ask",
+            "reason": "Archiving makes the repository read-only."
+          },
+          {
+            "match": "repo rename",
+            "decision": "ask",
+            "reason": "Renaming changes the remote URL for everyone."
+          },
+          {
+            "match": "repo edit",
+            "decision": "ask",
+            "reason": "Repository settings change (visibility, default branch, features)."
+          },
+          {
+            "match": "repo transfer",
+            "decision": "deny",
+            "reason": "Transferring ownership is not allowed from the agent."
+          },
+          {
+            "match": "auth logout",
+            "decision": "deny",
+            "reason": "Would remove gh credentials."
+          },
+          {
+            "match": "auth token",
+            "decision": "deny",
+            "reason": "Would print a secret token into the transcript."
+          },
+          {
+            "match": "auth login",
+            "decision": "ask",
+            "reason": "Changes gh credentials."
+          },
+          {
+            "match": "auth switch",
+            "decision": "ask",
+            "reason": "Changes the active gh account."
+          },
+          {
+            "match": "auth refresh",
+            "decision": "ask",
+            "reason": "Changes token scopes."
+          },
+          {
+            "match": "secret",
+            "decision": "ask",
+            "reason": "Reads or writes repository/org secrets."
+          },
+          {
+            "match": "variable delete",
+            "decision": "ask",
+            "reason": "Deletes an Actions variable."
+          },
+          {
+            "match": "ssh-key",
+            "decision": "ask",
+            "reason": "Changes account SSH keys."
+          },
+          {
+            "match": "gpg-key",
+            "decision": "ask",
+            "reason": "Changes account GPG keys."
+          },
+          {
+            "match": "pr merge",
+            "decision": "ask",
+            "reason": "Merging a pull request."
+          },
+          {
+            "match": "pr close",
+            "decision": "ask",
+            "reason": "Closing a pull request."
+          },
+          {
+            "match": "issue delete",
+            "decision": "deny",
+            "reason": "Deleting an issue is irreversible."
+          },
+          {
+            "match": "issue transfer",
+            "decision": "ask",
+            "reason": "Moves an issue to another repository."
+          },
+          {
+            "match": "release delete",
+            "decision": "deny",
+            "reason": "Deleting a release is irreversible."
+          },
+          {
+            "match": "release create",
+            "decision": "ask",
+            "reason": "Publishes a release."
+          },
+          {
+            "match": "release edit",
+            "decision": "ask",
+            "reason": "Changes a published release."
+          },
+          {
+            "match": "workflow run",
+            "decision": "ask",
+            "reason": "Triggers a CI workflow."
+          },
+          {
+            "match": "workflow disable",
+            "decision": "ask",
+            "reason": "Disables a CI workflow."
+          },
+          {
+            "match": "run cancel",
+            "decision": "ask",
+            "reason": "Cancels a CI run."
+          },
+          {
+            "match": "run delete",
+            "decision": "deny",
+            "reason": "Deletes CI run history."
+          },
+          {
+            "match": "cache delete",
+            "decision": "ask",
+            "reason": "Deletes Actions caches."
+          },
+          {
+            "match": "gist delete",
+            "decision": "deny",
+            "reason": "Deleting a gist is irreversible."
+          },
+          {
+            "match": "extension install",
+            "decision": "ask",
+            "reason": "Installs third-party code."
+          },
+          {
+            "match": "config set",
+            "decision": "ask",
+            "reason": "Changes gh configuration."
+          }
+        ]
+      },
+      "examples": {
+        "good": [
+          "gh pr list",
+          "gh issue view 12"
+        ],
+        "bad": [
+          "gh repo delete <github_user>/x --yes"
+        ]
+      }
+    },
+    {
+      "id": "GH003",
+      "name": "api-mutation",
+      "title": "Mutating gh api calls need confirmation",
+      "description": "gh api with -X/--method other than GET, or with -f/-F/--field/--raw-field/--input (which imply POST), uses this rule's severity. DELETE uses delete_severity.",
+      "severity": "ask",
+      "params": {
+        "delete_severity": "deny"
+      },
+      "examples": {
+        "good": [
+          "gh api repos/o/r/pulls"
+        ],
+        "bad": [
+          "gh api -X DELETE repos/o/r/git/refs/heads/x"
+        ]
+      }
+    },
+    {
+      "id": "GH004",
+      "name": "pr-noninteractive",
+      "title": "gh pr create must not prompt",
+      "description": "gh pr create must pass --title and one of --body / --body-file / --fill / --fill-first / --fill-verbose / --template, so it never opens an interactive prompt.",
+      "severity": "deny",
+      "params": {},
+      "examples": {
+        "good": [
+          "gh pr create --title \"feat: x\" --body \"...\""
+        ],
+        "bad": [
+          "gh pr create"
+        ]
+      }
+    },
+    {
+      "id": "GH005",
+      "name": "pr-title-convention",
+      "title": "PR titles follow the commit header convention",
+      "description": "--title on gh pr create / gh pr edit is checked with the header rules of the commit-message contract (CM003-CM010, CM014). Errors use this rule's severity.",
+      "severity": "deny",
+      "params": {},
+      "examples": {
+        "good": [
+          "gh pr create --title \"fix(api): handle 404\" --body x"
+        ],
+        "bad": [
+          "gh pr create --title \"Fix stuff\" --body x"
+        ]
+      }
+    },
+    {
+      "id": "GH006",
+      "name": "repo-owner-scope",
+      "title": "Target repositories belong to an allowed owner",
+      "description": "An explicit repository (-R/--repo owner/name, the OWNER/REPO argument of gh repo clone/view/create/fork/sync, or a repos/OWNER/... gh api path) whose owner is not in allowed_owners uses this rule's severity. Skipped when allowed_owners resolves to an empty list (no github_user / github_orgs in the profile).",
+      "severity": "ask",
+      "params": {
+        "allowed_owners": [
+          "${github_user}",
+          "${github_orgs}"
+        ]
+      },
+      "examples": {
+        "good": [
+          "gh issue list -R <github_user>/x"
+        ],
+        "bad": [
+          "gh issue create -R someone-else/x --title t --body b"
+        ]
+      }
+    },
+    {
+      "id": "GH007",
+      "name": "repo-create-visibility",
+      "title": "gh repo create states its visibility",
+      "description": "gh repo create must pass --private, --public or --internal. --public uses public_severity.",
+      "severity": "deny",
+      "params": {
+        "public_severity": "ask"
+      },
+      "examples": {
+        "good": [
+          "gh repo create <github_user>/x --private"
+        ],
+        "bad": [
+          "gh repo create x"
+        ]
+      }
+    },
+    {
+      "id": "GH008",
+      "name": "pr-body-sections",
+      "title": "PR bodies have summary, detailed changes, explanation and local test results",
+      "description": "The body of gh pr create (and of gh pr edit when it sets one) must contain a markdown heading matching each entry of 'sections', each with real content under it (not empty, not only placeholders or HTML comments). A section's 'must_mention' words must appear in its content, so the test section reports both unit tests and lint. A body that cannot be read (--fill, --web, --template, shell variables) uses unreadable_severity.",
+      "severity": "deny",
+      "params": {
+        "unreadable_severity": "ask",
+        "placeholders": [
+          "^\\s*(todo|tbd|n/?a|-|\\.\\.\\.|_?none_?)\\s*$",
+          "`<command>`|<N passed|<clean"
+        ],
+        "sections": [
+          {
+            "name": "Summary",
+            "heading": "^#{1,4}\\s*summary\\b"
+          },
+          {
+            "name": "Detailed changes",
+            "heading": "^#{1,4}\\s*(detailed changes|changes)\\b"
+          },
+          {
+            "name": "Explanation",
+            "heading": "^#{1,4}\\s*(explanation|why|rationale)\\b"
+          },
+          {
+            "name": "Test results (local)",
+            "heading": "^#{1,4}\\s*(local )?test(s|ing)?( results?)?\\b",
+            "must_mention": [
+              "unit",
+              "lint"
+            ]
+          }
+        ]
+      },
+      "examples": {
+        "good": [
+          "## Summary\nAdd OAuth login.\n\n## Detailed changes\n- add /auth/oauth route\n\n## Explanation\nUsers asked for SSO.\n\n## Test results\n- Unit tests: `npm test` 42 passed\n- Lint: `npm run lint` clean"
+        ],
+        "bad": [
+          "Adds login",
+          "## Summary\nAdd login (no changes, explanation or test results)"
+        ]
+      }
+    },
+    {
+      "id": "GH009",
+      "name": "pr-body-no-ai-attribution",
+      "title": "PR bodies do not credit an AI assistant",
+      "description": "The PR body is checked with the patterns of commit-message rule CM016: no AI co-author trailers and no 'Generated with <AI tool>' lines.",
+      "severity": "deny",
+      "params": {},
+      "examples": {
+        "good": [
+          "## Summary\nAdd login"
+        ],
+        "bad": [
+          "## Summary\nAdd login\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)"
+        ]
+      }
+    }
+  ]
+}

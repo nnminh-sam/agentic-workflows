@@ -1,0 +1,20 @@
+{
+  "name": "my-git",
+  "version": "2.1.0",
+  "description": "Customized git workflow for Claude: the git-guard hooks (git identity, Conventional Commits without AI co-authors, safe gh usage, main + develop/base branching model with PR-only protected branches) plus /my-git:commit, /my-git:push and /my-git:pr skills and a reusable repo template (PR template, git hooks, GitHub ruleset). Works with a pinned SSH key or, for a single GitHub account, with HTTPS through the gh credential helper.",
+  "author": {
+    "name": "MINHNN4"
+  },
+  "keywords": [
+    "branch-protection",
+    "branching",
+    "commit",
+    "conventional-commits",
+    "git",
+    "github",
+    "hooks",
+    "identity",
+    "pull-request",
+    "push"
+  ]
+}

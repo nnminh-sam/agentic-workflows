@@ -1,0 +1,3 @@
+REM plan 7f3a2c · manual · shell cmd · run these, then: mygit plan verify 7f3a2c
+git -C "C:\src\api" add -A || exit /b 1
+git -C "C:\src\api" -c user.name="Octo Cat" -c user.email=octo@acme.example -c gpg.format=ssh -c user.signingkey="C:\Users\octo\.ssh\id_sign.pub" commit -S -F "%TEMP%\mygit-7f3a2c.msg" || exit /b 1
