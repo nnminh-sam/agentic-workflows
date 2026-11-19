@@ -267,6 +267,137 @@ def waiting(s: Any, node: str | None = None, problems: list[str] | None = None) 
     return {"on": "agent", "node": n, "reason": "awaiting-gate"}
 
 
+def gate_request(s: Any, node: str | None = None) -> dict[str, Any]:
+    """What the gate on `node` (default: the next pending node N) would accept, as the desktop app's `GateRequest`.
+    Read-only: it runs the same checks `sdlc gate` runs (cli.gate_readiness, shared) but closes nothing.
+
+    `readiness` is the approved gate as the user would call it (`--actor user`, no `--reopen`); `controllerReadiness` is
+    the same gate as the controller. Every choice carries both views (`allowed`/`whyNot`, `controllerAllowed`/
+    `controllerWhyNot`) and the `argv` of the `sdlc` call that makes it. A node that `reopens` has one approve view per
+    `--reopen` target. No node to ask about gives `{contractVersion, ticket, node: None}`."""
+    from .cli import _effective_boundary, node_inputs, readiness_views
+    from .state import next_pending
+
+    n = node if node is not None else next_pending(s.state, s.order)
+    if n is None:
+        return {"contractVersion": CONTRACT_VERSION, "ticket": s.ctx["ticket"], "node": None}
+    spec = s.spec(n)
+    rec = s.state["nodes"][n]
+    ticket = s.ctx["ticket"]
+    _, log_problems = s.ticket.verify_log()
+    wait = waiting(s, n, problems=log_problems)
+    memo: dict[str, Any] = {}  # one commit-rule / receipts check per request, however many views ask for it
+    current = [u for u in rec["units"] if u["generation"] == rec["generation"]]
+    reviewer = next((u for u in reversed(current) if u["unit"] == "reviewer"), None)
+    bare = readiness_views(s, n, "approved", None, memo)
+    boundary = _effective_boundary(s, n)
+    return {
+        "contractVersion": CONTRACT_VERSION, "ticket": ticket, "node": n, "generation": rec["generation"],
+        "attempts": rec["attempts"], "loopCap": s.profile.get("gates", {}).get("loopCap", 2), "boundary": boundary,
+        "gates": list(spec.get("gates", [])), "question": _gate_question(s, n, spec, rec, boundary, wait["reason"]),
+        "waitingReason": wait["reason"],
+        "readiness": {"ok": not bare["user"], "problems": bare["user"]},
+        "controllerReadiness": {"ok": not bare["controller"], "problems": bare["controller"]},
+        "reviewer": None if reviewer is None else {
+            "unit": reviewer["unit"], "model": reviewer["model"], "tier": reviewer["tier"],
+            "verdict": reviewer.get("verdict"), "failureClass": reviewer.get("failureClass"), "at": reviewer["at"],
+            "resultFile": reviewer.get("result")},
+        "units": [dict(u) for u in current],
+        "evidence": _gate_evidence(s, n, reviewer, node_inputs(s, n)),
+        "ngItems": [],
+        "choices": _gate_choices(s, n, spec, bare, memo),
+    }
+
+
+def _gate_question(s: Any, node: str, spec: dict[str, Any], rec: dict[str, Any], boundary: str, reason: str) -> str:
+    """The sentence the gate card asks. No spec fixes the wording; the loop-cap and approval cases follow the gate
+    messages (cli.cmd_gate G4 / G0)."""
+    if reason == "loop-cap":
+        return f"NEEDS CHANGES again after {rec['attempts'] + 1} rounds: loop once more, reopen earlier, or stop?"
+    if boundary == "user":
+        return "Approve the plan?" if node in ("fix-plan", "feature-plan") else "Proceed, re-run or stop?"
+    return spec["purpose"]
+
+
+def _gate_fields(user: list[str], controller: list[str]) -> dict[str, Any]:
+    """`allowed`/`whyNot` for the user and `controllerAllowed`/`controllerWhyNot` for the controller, from the problems
+    each would meet (the first one is the reason)."""
+    fields: dict[str, Any] = {"allowed": not user}
+    if user:
+        fields["whyNot"] = user[0]
+    fields["controllerAllowed"] = not controller
+    if controller:
+        fields["controllerWhyNot"] = controller[0]
+    return fields
+
+
+def _gate_evidence(s: Any, node: str, reviewer: dict[str, Any] | None, inputs: list[dict[str, str]]) -> list[dict[str, Any]]:
+    """The files behind the decision: the node's artifacts, the last reviewer result, the inputs it read. `headings`
+    are the `#` lines of the live text (what a rerun left below the last SUPERSEDED line)."""
+    from .cli import live_text
+
+    def entry(name: str, path: Path, source: str) -> dict[str, Any]:
+        exists = path.is_file()
+        headings = []
+        if exists and path.suffix == ".md":
+            headings = [line.strip() for line in live_text(path).splitlines() if line.startswith("#")]
+        return {"name": name, "path": str(path), "exists": exists, "source": source, "headings": headings}
+
+    out = [entry(a, s.ticket.dir / a, "artifact") for a in s.artifacts(node)]
+    if reviewer and reviewer.get("result"):
+        out.append(entry(Path(reviewer["result"]).name, Path(reviewer["result"]), "result"))
+    out += [entry(Path(i["file"]).name, Path(i["file"]), "input") for i in inputs]
+    return out
+
+
+def _gate_choices(s: Any, node: str, spec: dict[str, Any], bare: dict[str, Any], memo: dict[str, Any]) -> list[dict[str, Any]]:
+    """approve, needs-changes (only with `loopBackTo`), reject, stop and reopen, each with its `sdlc gate` argv."""
+    from .cli import readiness_views, stale_preview, superseded_preview
+    from .state import settled
+
+    def argv(status: str, *extra: str) -> list[str]:
+        return ["gate", "--ticket", s.ctx["ticket"], "--node", node, "--status", status, "--actor", "user", *extra]
+
+    def choice(cid: str, label: str, fields: dict[str, Any], args: list[str], **more: Any) -> dict[str, Any]:
+        return {"id": cid, "label": label, **fields, "argv": args, "reopenTargets": more.pop("reopenTargets", []),
+                "staleIfChosen": more.pop("stale", []), "supersededIfChosen": more.pop("superseded", []),
+                "needsNote": more.pop("needsNote", False), "needsReason": more.pop("needsReason", False), **more}
+
+    settled_before = [n for n in s.order[:s.order.index(node)] if settled(s.state, n)]
+    approve_fields = _gate_fields(bare["user"], bare["controller"])
+    targets: list[dict[str, Any]] = []
+    if spec.get("reopens"):  # one approve view per --reopen target; nothing is preselected
+        for target in settled_before + ["none"]:
+            view = readiness_views(s, node, "approved", target, memo)
+            targets.append({"node": target, "staleNodes": [] if target == "none" else stale_preview(s, target),
+                            **_gate_fields(view["user"], view["controller"]),
+                            "argv": argv("approved", "--reopen", target)})
+        ok_user = any(t["allowed"] for t in targets)
+        ok_controller = any(t["controllerAllowed"] for t in targets)
+        approve_fields = {"allowed": ok_user}
+        if not ok_user:
+            approve_fields["whyNot"] = bare["user"][0]
+        approve_fields["controllerAllowed"] = ok_controller
+        if not ok_controller:
+            approve_fields["controllerWhyNot"] = bare["controller"][0]
+    choices = [choice("approve", "Approve", approve_fields, argv("approved"), reopenTargets=targets)]
+
+    back = spec.get("loopBackTo")
+    if back:
+        view = readiness_views(s, node, "needs-changes", None, memo)
+        choices.append(choice("needs-changes", "Needs changes", _gate_fields(view["user"], view["controller"]),
+                              argv("needs-changes"), stale=stale_preview(s, back),
+                              superseded=superseded_preview(s, back), needsNote=True))
+    verdict_only = readiness_views(s, node, "rejected", None, memo)  # rejected and stopped check the same two things
+    fields = _gate_fields(verdict_only["user"], verdict_only["controller"])
+    choices.append(choice("reject", "Reject", fields, argv("rejected"), needsNote=True))
+    choices.append(choice("stop", "Stop", fields, argv("stopped")))
+    choices.append(choice("reopen", "Reopen an earlier node", fields, argv("rejected"), needsNote=True, needsReason=True,
+                          followUp=[["invalidate", "--ticket", s.ctx["ticket"], "--node", "<node>", "--reason", "<required>"]],
+                          reopenTargets=[{"node": n, "staleNodes": stale_preview(s, n)} for n in settled_before]))
+    return choices
+
+
 def summarize_ticket(profile: Path, ticket: str) -> dict[str, Any]:
     from .cli import Session
     try:
