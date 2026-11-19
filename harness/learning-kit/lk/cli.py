@@ -7,7 +7,8 @@ import json
 import sys
 from pathlib import Path
 
-from . import __version__, gate, install, learnpath, paths, quiz, reader, service, sessions, sources, srs, topics
+from . import (__version__, gate, install, learnpath, lesson, paths, quiz, reader, service, sessions, sources, srs,
+               topics)
 from .lock import locked
 from .store import LkError, dumps, now_iso, read_json, slugify, write_json, write_text
 
@@ -41,7 +42,7 @@ def cmd_config(a):
 def cmd_topic(a):
     if a.action == "new":
         slug = slugify(a.slug)
-        out(topics.create(slug, a.title or a.slug, a.depth, a.fresh))
+        out(topics.create(slug, a.title or a.slug, a.depth, a.fresh, a.mode))
     elif a.action == "list":
         rows = topics.list_topics()
         if a.json:
@@ -50,8 +51,11 @@ def cmd_topic(a):
             return print("no topics yet")
         for r in rows:
             c = r["concepts"]
-            print(f"{r['slug']:<28} {r['stage']:<10} {r['depth']:<6} v{r['version']} r{r['round']}  "
+            print(f"{r['slug']:<28} {r['stage']:<10} {r['mode']:<4} {r['depth']:<6} v{r['version']} r{r['round']}  "
                   f"mastered {c['mastered']}/{sum(c.values())}  lapsed {c['lapsed']}")
+    elif a.action == "mode":
+        topics.set_mode(a.slug, a.mode)
+        out(topics.status(a.slug))
     elif a.action == "status":
         out(topics.status(a.slug))
     elif a.action == "advance":
@@ -180,9 +184,29 @@ def cmd_quiz(a):
                   f"{i['prompt'][:60]!r}")
 
 
+def cmd_lesson(a):
+    if a.action == "validate":
+        _, errs, warns = lesson.validate_draft(_load_json_file(a.file), a.topic)
+        out({"ok": not errs, "errors": errs, "warnings": warns})
+        if errs:
+            sys.exit(1)
+    elif a.action == "import":
+        out(lesson.import_draft(a.slug, _load_json_file(a.file), a.reviewed_by or ""))
+    elif a.action == "coverage":
+        out(lesson.coverage(a.slug))
+    elif a.action == "list":
+        ps = lesson.current_pieces(a.slug) if a.current else lesson.load(a.slug)
+        if a.json:
+            return out(ps)
+        for p in ps:
+            print(f"{p['id']} r{p['round']} {p['concept']:<28} {len(p['check_items'])} check(s)  {p['title'][:60]}")
+
+
 def cmd_session(a):
     if a.action == "gate":
         s = sessions.create_gate(a.slug, a.force)
+    elif a.action == "lesson":
+        s = sessions.create_lesson(a.slug, a.force)
     elif a.action == "practice":
         s = sessions.create_practice(a.slug, a.n)
     elif a.action == "review":
@@ -212,7 +236,13 @@ def _serve_session(a) -> str:
     if a.session:
         sid = a.session
     elif a.topic:
-        sid = (sessions.create_practice(a.topic, a.n) if a.practice else sessions.create_gate(a.topic, a.force))["id"]
+        if a.practice:
+            s = sessions.create_practice(a.topic, a.n)
+        elif topics.mode_of(topics.load_state(a.topic)) == "bite":
+            s = sessions.create_lesson(a.topic, a.force)  # a bite-sized topic's gate is its lesson
+        else:
+            s = sessions.create_gate(a.topic, a.force)
+        sid = s["id"]
     elif a.review:
         sid = sessions.create_review(a.limit, _load_json_file(a.variants) if a.variants else None)["id"]
     elif a.placement:
@@ -351,7 +381,11 @@ def build_parser() -> argparse.ArgumentParser:
     t = sub.add_parser("topic").add_subparsers(dest="action", required=True)
     x = t.add_parser("new"); x.add_argument("slug"); x.add_argument("--title"); x.add_argument("--fresh", action="store_true")
     x.add_argument("--depth", choices=topics.DEPTHS, default="use")
+    x.add_argument("--mode", choices=topics.MODES, help="bite: piece-by-piece lesson; doc: research doc + quiz "
+                                                         "(default: learn.default_mode in config)")
     x = t.add_parser("list"); x.add_argument("--json", action="store_true")
+    x = t.add_parser("mode", help="switch how the topic is taught (bite | doc)"); x.add_argument("slug")
+    x.add_argument("mode", choices=topics.MODES)
     x = t.add_parser("status"); x.add_argument("slug")
     x = t.add_parser("advance"); x.add_argument("slug"); x.add_argument("stage", choices=topics.STAGES)
     x.add_argument("--force", action="store_true"); x.add_argument("--note")
@@ -418,9 +452,21 @@ def build_parser() -> argparse.ArgumentParser:
     x = qs.add_parser("list"); x.add_argument("slug"); x.add_argument("--json", action="store_true")
     q.set_defaults(fn=cmd_quiz)
 
+    le = sub.add_parser("lesson", help="bite-sized lessons: pieces of question -> paragraph -> own words -> check")
+    ls = le.add_subparsers(dest="action", required=True)
+    x = ls.add_parser("validate", help="check a lesson draft"); x.add_argument("file"); x.add_argument("--topic")
+    x = ls.add_parser("import", help="add a validated draft's pieces to the current round"); x.add_argument("slug")
+    x.add_argument("file"); x.add_argument("--reviewed-by")
+    x = ls.add_parser("coverage", help="does every target concept have a piece this round?"); x.add_argument("slug")
+    x = ls.add_parser("list"); x.add_argument("slug"); x.add_argument("--current", action="store_true",
+                                                                       help="only this round's unanswered pieces")
+    x.add_argument("--json", action="store_true")
+    le.set_defaults(fn=cmd_lesson)
+
     se = sub.add_parser("session")
     sss = se.add_subparsers(dest="action", required=True)
     x = sss.add_parser("gate"); x.add_argument("slug"); x.add_argument("--force", action="store_true")
+    x = sss.add_parser("lesson"); x.add_argument("slug"); x.add_argument("--force", action="store_true")
     x = sss.add_parser("practice"); x.add_argument("slug"); x.add_argument("--n", type=int, default=10)
     x = sss.add_parser("review"); x.add_argument("--limit", type=int); x.add_argument("--variants")
     x.add_argument("--no-mistakes", action="store_true")

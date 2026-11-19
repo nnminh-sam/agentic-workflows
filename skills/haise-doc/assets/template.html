@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="{{LANG}}" data-haise="doc" data-haise-version="3.1.0">
+<html lang="{{LANG}}" data-haise="doc" data-haise-version="3.1.1">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -9,7 +9,7 @@
 (function(){try{var t=localStorage.getItem('haise.theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </script>
 <style id="haise-shell-css">
-/* ===== haise-doc shell v3.1.0 — do not edit per document ===== */
+/* ===== haise-doc shell v3.1.1 — do not edit per document ===== */
 :root{
   --bg:#f7f7f5; --panel:#ffffff; --panel-2:#f0efeb; --ink:#1d1d1b; --muted:#6b6a66; --line:#e2e0da;
   --accent:#3b5bdb; --accent-soft:#e9edff; --ok:#2b8a3e; --ok-soft:#e7f5ea;
@@ -145,7 +145,7 @@ hr{border:none;border-top:1px solid var(--line);margin:28px 0}
 
 /* translated keyword + original */
 strong.kw{font-weight:700}
-.orig{color:var(--muted);font-size:.94em;white-space:nowrap}
+.orig{color:var(--muted);font-size:.94em;white-space:normal;overflow-wrap:anywhere}
 
 /* lead answer / callouts / tags / chips */
 .verdict{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;margin:0 0 18px;
@@ -349,7 +349,7 @@ footer.doc-foot{color:var(--muted);font-size:.8rem;margin-top:56px;padding-top:1
 </div>
 
 <script id="haise-shell-js">
-/* ===== haise-doc shell v3.1.0 — do not edit per document ===== */
+/* ===== haise-doc shell v3.1.1 — do not edit per document ===== */
 (function(){
   var root=document.documentElement, body=document.body;
   var LANG=(root.lang||'en').slice(0,2).toLowerCase();

@@ -22,11 +22,12 @@ Commands are for a POSIX shell (Bash tool; Git Bash on Windows). In PowerShell, 
    Save it to `note.md` **in their words**. Only fix dictation artifacts (filler words, obvious
    mis-transcriptions). Never improve, expand or restructure it. If a previous note exists, keep the old one
    as `note.v<N>.md`.
-   Remind them, if useful: write it without the research doc open. The prompts are: core idea in 3 sentences;
+   Remind them, if useful: write it without the research doc (or the lesson) open. The prompts are: core idea in 3 sentences;
    what I got wrong at first (see prior.md and mistakes); when I'd use it and when I wouldn't; how it
    connects to things I already know.
 3. **Review** with a fresh Agent using `agents.note_review` from `LK config show`. Give it note.md,
-   concepts.json (`LK concepts list <slug> --json`), research.md and prior.md, the gate's `weak_concepts`
+   concepts.json (`LK concepts list <slug> --json`), research.md (doc mode) or lesson.md (bite mode) and prior.md,
+   the gate's `weak_concepts`
    (`LK gate <slug>` → `last.weak_concepts`: concepts that scraped through, so check them hardest), plus
    `KIT/docs/authoring/note-rubric.md`. It returns the rubric JSON. Save it to the scratchpad.
 4. `LK note record <slug> <review.json>`. The script applies the bar (≥ 8/10, correctness 2/2, nothing at 0),

@@ -1,8 +1,18 @@
 # learning-kit
 
 A learning loop where retrieval comes first, built on Claude Code:
-**what I know → research (source bank) → read → quiz (80% gate) → reteach → lab → own-words note → spaced recall.**
+**what I know → research (source bank) → learn it → 80% gate → reteach → lab → own-words note → spaced recall.**
 Broad goals become a **learning path**: a reviewed, ordered set of topics with a placement quiz and milestone checkpoints.
+
+Each topic is taught in one of two modes:
+
+- **Bite-sized** (default): the topic is cut into small pieces. Each piece is **a question → one short paragraph →
+  your answer in your own words (paragraph hidden) → a small check with instant feedback**. Stop between any two
+  pieces; it resumes where you left off. The pieces are the gate, so there's no long quiz at the end.
+- **Doc**: one research doc to read (diagrams, citations), then a gate quiz over the whole topic.
+
+Pick per topic with `/learn <topic> --mode bite|doc`, or change the default with `"learn": {"default_mode": "doc"}`
+in `<home>/config.json`.
 
 Browse everything (paths, topics, research docs, quiz history, mistakes) and take quizzes in a local web app,
 and let agents read it and quiz you through an MCP server.
@@ -15,7 +25,7 @@ is an optional extra). Design and architecture: [docs/DESIGN.md](docs/DESIGN.md)
 ```sh
 git clone git@github.com:nnminh-sam/agentic-workflows.git && cd agentic-workflows/learning-kit
 python lk.py install --home ~/learning     # data home + user-level skills in ~/.claude/skills
-python -m unittest discover -s tests       # 61 tests, no network (3 skip without the mcp SDK)
+python -m unittest discover -s tests       # 76 tests, no network (3 skip without the mcp SDK)
 ```
 
 ## Web app and MCP server
@@ -49,7 +59,8 @@ claude mcp add learning-kit -- python "$PWD/lk.py" mcp   # Claude Code can now b
 | `/learn <topic> --new` | brand-new topic: just 3 questions + 1 prediction to start |
 | `/learn <topic> --extend` | grow a finished topic (new concepts become the next gate) |
 | `/learn <topic> --depth aware\|use\|deep` | how far to go (deep adds a lab) |
-| `/quiz <topic> [--practice]` | open the quiz app (gate round, or no-stakes practice) |
+| `/learn <topic> --mode bite\|doc` | bite-sized lesson (default) or research doc + quiz; switch between rounds |
+| `/quiz <topic> [--practice]` | open the quiz app (gate round or lesson, or no-stakes practice) |
 | `/note <topic>` | write or dictate your note; rubric review at 80% |
 | `/recall [--stats]` | today's spaced-recall cards, reworded, mixed across topics |
 
@@ -57,13 +68,15 @@ claude mcp add learning-kit -- python "$PWD/lk.py" mcp   # Claude Code can now b
 
 ```sh
 python lk.py topic list | topic status <slug> | topic advance <slug> <stage>
+python lk.py topic new <slug> [--mode bite|doc] | topic mode <slug> bite|doc
+python lk.py lesson validate <draft> --topic <slug> | lesson import <slug> <draft> | lesson coverage <slug>
 python lk.py read <slug> [--check] [--file reteach/round-2.md]   # research as an HTML page with diagrams
 python lk.py path new <slug> | path validate <draft> | path import <slug> <draft> [--reason]
 python lk.py path next <slug> | path show <slug> | path override <slug> <node> tested_out|skipped|clear
 python lk.py serve --placement <path> | --checkpoint <path> --milestone <id>
 python lk.py source fetch <url> --topic <slug> --kind docs --quality 3
 python lk.py quiz validate <file> --topic <slug> | quiz import <slug> <file>
-python lk.py serve --topic <slug> | --review | --session <id>
+python lk.py serve --topic <slug> | --review | --session <id>     # --topic: the gate quiz, or a bite topic's lesson
 python lk.py web [--port N] [--no-open]                       # the library app
 python lk.py mcp                                              # MCP server on stdio (needs .[mcp])
 python lk.py srs due | srs stats | stats

@@ -152,7 +152,36 @@ a.row:hover { background: var(--surface-2); }
 .chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0 0; }
 .foot { text-align: center; margin-top: 16px; overflow-wrap: anywhere; }
 
+/* lesson (bite-sized mode) */
+.stepper { list-style: none; display: flex; gap: 4px; padding: 0; margin: 0 0 16px; counter-reset: st; }
+.stepper li { flex: 1; font-size: .75rem; color: var(--muted); padding-top: 6px; border-top: 3px solid var(--surface-2); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }
+.stepper li.done { border-top-color: color-mix(in srgb, var(--accent) 45%, var(--surface-2)); }
+.stepper li.on { border-top-color: var(--accent); color: var(--text); font-weight: 600; }
+.lesson-q { border-left: 3px solid var(--accent); padding: 4px 0 4px 12px; margin: 0 0 14px; color: var(--muted); }
+.lesson-q p { margin: 0; }
+.lesson-q.big { font-size: 1.3rem; line-height: 1.45; color: var(--text); padding: 8px 0 8px 16px; margin: 8px 0 18px; }
+.lesson-title { margin: 6px 0 8px; }
+.lesson-body { font-size: 1.08rem; line-height: 1.7; max-width: 64ch; }
+.lesson-body p { margin: 0 0 10px; }
+.lesson-src { margin-top: 10px; overflow-wrap: anywhere; }
+.lesson-how { padding-left: 1.3em; } .lesson-how li { margin: 4px 0; }
+.cite { font: 11px var(--mono); padding: 0 5px; border-radius: 4px; background: var(--surface-2); border: 1px solid var(--border);
+  color: var(--muted); text-decoration: none; vertical-align: 1px; }
+a.cite:hover { color: var(--accent); border-color: var(--accent); }
+details.peek { border: 1px dashed var(--border); border-radius: 8px; padding: 6px 12px; margin: 0 0 6px; }
+details.peek > summary { cursor: pointer; color: var(--muted); font-size: .9rem; }
+details.peek[open] { background: var(--surface-2); }
+details.peek .lesson-body { margin-top: 8px; font-size: 1rem; }
+.fb-own { border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+.fb-head { display: flex; gap: 10px; align-items: center; }
+.fb-checks { margin-top: 14px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.fb-checks details.res + details.res { margin-top: 0; }
+.fb-checks details.res > summary .q { white-space: normal; } /* just answered it: show the whole question */
+
 @media (max-width: 520px) {
+  .stepper li { font-size: .68rem; }
+  .lesson-q.big { font-size: 1.15rem; }
   main { padding: 16px 16px 64px; }
   .card { padding: 16px; }
   .barrow { grid-template-columns: 1fr 1fr 44px; }

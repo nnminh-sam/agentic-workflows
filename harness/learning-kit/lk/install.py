@@ -70,7 +70,8 @@ def init_home(home: Path) -> list[str]:
         write_text(readme, (
             "# Learning data (learning-kit)\n\n"
             f"Tool: `{paths.KIT_DIR.as_posix()}` — design: `docs/DESIGN.md` there.\n\n"
-            "- `topics/<slug>/` prior.md, research.md, concepts.json, quiz.json, attempts.jsonl, note.md, lab/\n"
+            "- `topics/<slug>/` prior.md, research.md (doc mode) or lesson.json + lesson.md (bite mode),\n"
+            "  concepts.json, quiz.json, attempts.jsonl, note.md, lab/\n"
             "- `paths/<slug>/` learning paths: path.json (plan + record), intake.md, plan.md, placement.json\n"
             "- `sources/` global source bank (index.json + S####.md snapshots)\n"
             "- `sessions/` one JSON per quiz sitting\n"
