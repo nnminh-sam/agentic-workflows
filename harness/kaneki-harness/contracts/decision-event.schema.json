@@ -28,6 +28,7 @@
         "lock-broken",
         "ship-request",
         "ship",
+        "ship-record",
         "review-fetch",
         "lane"
       ]
@@ -135,6 +136,21 @@
         "properties": {
           "event": {
             "const": "ship"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "repo",
+          "approval"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event": {
+            "const": "ship-record"
           }
         }
       },

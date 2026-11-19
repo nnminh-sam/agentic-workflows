@@ -30,7 +30,8 @@ tests/                        end-to-end driver tests
 ## Quick start
 
 ```bash
-# 1. install the skills, agents and git guard into a project (or into ~/.claude for every project)
+# 1. install the skills, agents, git guard and the my-git plugin (same checkout) into a project
+#    (or into ~/.claude for every project); restart Claude Code afterwards
 sh skills/kaneki-flow/scripts/sdlc install --target /path/to/project
 
 # 2. in Claude Code, inside the project
@@ -125,17 +126,22 @@ nothing is inferred from the repository or from the language you write in. Onboa
 
 ## Git identity and the commit rule
 
-Every git command runs as the project's account (`git.user`, optional `git.sshCommand`, per-repo override), and
-**nodes never commit**: only `/kaneki-ship` commits, pushes and opens the PR/MR.
+Git goes through the **my-git** plugin (`<checkout>/plugins/my-git`). `sdlc install` registers it in the target
+project from the same checkout as the harness, so both are always the same version. Re-install after updating the
+checkout. Install refuses if my-git is missing; `SDLC_MYGIT` points it at another copy. my-git's guard checks
+identity, the pinned SSH key, remotes, branch names and commit messages on every git/gh command. **Nodes never
+commit**: only `/kaneki-ship` does, through my-git.
 
-- During the flow, git runs through `sdlc git --ticket <id> --repo <repo> -- <args>` (identity and SSH key per call,
-  logged). It refuses commit/merge/rebase/push/pull/tag, anything that deletes work, and identity changes.
-- A guard hook on the Bash and PowerShell tools refuses the same as plain `git`, plus plain remote access. It fails
-  closed: if it cannot check, git is refused.
-- `sdlc ship-request` prints the exact request (files, message, branch, identity) and its digest; `sdlc ship
-  --approve <digest>` refuses any drift since, stages exactly those files, commits as the project identity, pushes,
-  and opens the PR (`gh`/`glab`). `sdlc review-fetch` pulls the review back (GitHub).
-- Gates reject any commit since the ticket started that kaneki-ship did not make.
+- The kaneki-flow guard hook adds the node rules only. It refuses commit/merge/rebase/push/pull/tag and anything that
+  deletes work. It needs no harness path (self-contained) and fails closed if it crashes.
+- `sdlc git --ticket <id> --repo <repo> -- <args>` runs git in the ticket worktree as the profile identity, logged.
+  It refuses the same commands, plus identity changes.
+- `sdlc ship-request` validates the commit message with my-git and prints the exact request (files, message,
+  branch, identity) and its digest. `sdlc ship --approve <digest>` refuses any drift since, stages exactly those
+  files, and lets the guard pass commit/push in that checkout for 30 minutes. Then `/my-git:commit`, `/my-git:push`
+  and `/my-git:pr` do the git work. `sdlc ship-record` checks the commit is the approved one (parent, tree, message,
+  identity) and records it. `sdlc review-fetch` pulls the review back (GitHub with `gh`).
+- Gates reject any commit since the ticket started that kaneki-ship did not record.
 
 ## Integrity
 

@@ -505,7 +505,7 @@ def _git_block(s: Session) -> str:
              "  (it runs in the ticket worktree, applies the identity and SSH command, and logs the call).",
              "- Never run plain `git` for anything that writes or talks to the remote, never set `user.*` or `core.sshCommand`, "
              "never pass `--author`. Nodes never commit, push, merge or rebase, and never delete work (reset --hard, clean -f): "
-             "only kaneki-ship commits and pushes, after the user approves."]
+             "only kaneki-ship commits and pushes (through the my-git plugin), after the user approves."]
     return "\n".join(lines)
 
 
@@ -936,8 +936,9 @@ def _delivery(s: "Session") -> dict[str, Any]:
 
 def cmd_ship_request(args: argparse.Namespace) -> None:
     """kaneki-ship step 1: the exact request the user approves (printed in full; its digest is the approval)."""
+    from . import mygit
     s = Session(args)
-    request = SHIP.build_request(s, args.repo, _delivery(s))
+    request = SHIP.build_request(s, args.repo, _delivery(s), mygit.require_root(HOME))
     digest = SHIP.request_digest(request)
     path = s.ticket.dir / "ship" / f"{args.repo}-request.json"
     path.parent.mkdir(exist_ok=True)
@@ -945,26 +946,36 @@ def cmd_ship_request(args: argparse.Namespace) -> None:
     s.ticket.log({"event": "ship-request", "repo": args.repo, "requestDigest": digest})
     out({"requestDigest": digest, "requestFile": str(path), "repo": args.repo, "branch": request["branch"],
          "base": request["base"], "files": request["paths"], "identity": request["identity"],
-         "commitMessage": request["commitMessage"], "push": request["push"], "pr": request["pr"],
+         "commitMessage": request["commitMessage"], "push": request["push"], "pr": request["pr"], "via": "my-git",
          "approveWith": f"ship --ticket {s.ctx['ticket']} --repo {args.repo} --approve {digest}"})
 
 
 def cmd_ship(args: argparse.Namespace) -> None:
-    """kaneki-ship step 2: only with the digest of the request the user approved; refuses any drift since."""
+    """kaneki-ship step 2: only with the digest of the request the user approved; refuses any drift since.
+    Stages exactly the approved files and hands the commit/push/PR to my-git (the `next` steps)."""
+    from . import mygit
     s = Session(args)
-    delivery = _delivery(s)
-    request = SHIP.build_request(s, args.repo, delivery)
+    root = mygit.require_root(HOME)
+    request = SHIP.build_request(s, args.repo, _delivery(s), root)
     digest = SHIP.request_digest(request)
     if args.approve != digest:
         raise HarnessError("G0: the request changed since it was approved (or the digest is wrong): run ship-request "
                            "again, show it to the user, and approve the new digest")
-    result = SHIP.run_ship(s, request, delivery, open_pr=not args.no_pr)
+    if args.no_pr:
+        request["pr"] = None
+    result = SHIP.stage(s, request, root)
     s.save()
-    s.ticket.log({"event": "ship", "repo": args.repo, "commit": result["commit"], "approval": digest,
+    s.ticket.log({"event": "ship", "repo": args.repo, "approval": digest, "tree": result["tree"], "via": "my-git"})
+    out(result)
+
+
+def cmd_ship_record(args: argparse.Namespace) -> None:
+    """kaneki-ship step 3: after /my-git:commit (push, pr), verify the commit is the approved one and record it."""
+    s = Session(args)
+    result = SHIP.record_ship(s, args.repo, args.pr)
+    s.save()
+    s.ticket.log({"event": "ship-record", "repo": args.repo, "commit": result["commit"], "approval": result["approval"],
                   "pushed": result["pushed"], "pr": result.get("pr")})
-    if result.get("pushError"):
-        raise HarnessError(f"G7: committed {result['commit'][:10]} as the project identity, but the push failed: "
-                           f"{result['pushError']}. Fix access, then run ship-request/ship again (it pushes the same branch).")
     out(result)
 
 
@@ -1200,11 +1211,16 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--repo", required=True)
     x.set_defaults(fn=cmd_ship_request)
 
-    x = sub.add_parser("ship", parents=[ticketed], help="kaneki-ship: commit as the project identity, push, open the PR (needs the approved digest)")
+    x = sub.add_parser("ship", parents=[ticketed], help="kaneki-ship: stage exactly the approved files and hand commit/push/PR to my-git (needs the approved digest)")
     x.add_argument("--repo", required=True)
     x.add_argument("--approve", required=True, help="requestDigest of the request the user approved")
     x.add_argument("--no-pr", action="store_true", help="push but do not open a PR/MR")
     x.set_defaults(fn=cmd_ship)
+
+    x = sub.add_parser("ship-record", parents=[ticketed], help="kaneki-ship: after /my-git:commit, verify the commit is the approved one and record it as shipped")
+    x.add_argument("--repo", required=True)
+    x.add_argument("--pr", help="the PR/MR URL (or the compare link a person submitted)")
+    x.set_defaults(fn=cmd_ship_record)
 
     x = sub.add_parser("review-fetch", parents=[ticketed], help="fetch the PR review (GitHub) and start a review round")
     x.add_argument("--repo", required=True)
@@ -1248,7 +1264,7 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--reason", help="the user's words that asked for the change")
     x.set_defaults(fn=cmd_lang)
 
-    x = sub.add_parser("install", help="install the kaneki skills, agents and guard into <target>/.claude")
+    x = sub.add_parser("install", help="install the kaneki skills, agents and guard into <target>/.claude, and the my-git plugin from the same checkout")
     x.add_argument("--target", required=True, help="project folder (or a .claude folder, e.g. ~/.claude for all projects)")
     x.add_argument("--force", action="store_true", help="also overwrite installed files you edited")
     x.add_argument("--dry-run", action="store_true")

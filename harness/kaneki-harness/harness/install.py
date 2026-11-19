@@ -5,6 +5,9 @@
 - every installed scripts/ folder gets `.harness-home` (the harness path), so no SDLC_HOME is needed
 - <target>/.claude/kaneki-harness.json records the version and the digest of every installed file; a re-install
   overwrites only files still identical to what was installed (a file you edited is kept and reported).
+- my-git: kaneki commits, pushes and opens PRs only through the my-git plugin, so the install also registers the
+  my-git found in the same checkout as the harness (`<checkout>/plugins/my-git`, see mygit.py) as the target's
+  plugin. Re-installing after updating the checkout keeps the two at the same version. Missing my-git = refused.
 """
 
 from __future__ import annotations
@@ -35,8 +38,10 @@ def _files(home: Path) -> list[tuple[Path, str]]:
 
 
 def install(home: Path, target: Path, force: bool = False, dry_run: bool = False) -> dict[str, Any]:
+    from . import mygit
     if not target.is_dir():
         raise HarnessError(f"install target is not a folder: {target}")
+    mygit_root = mygit.require_root(home)  # checked first: no half install without the git toolchain
     claude = target / ".claude" if target.name != ".claude" else target
     manifest_path = claude / MANIFEST
     old = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.is_file() else {"files": {}}
@@ -65,10 +70,14 @@ def install(home: Path, target: Path, force: bool = False, dry_run: bool = False
         if not dry_run:
             marker.parent.mkdir(parents=True, exist_ok=True)
             marker.write_text(str(home.resolve()) + "\n", encoding="utf-8")
+    my_git = mygit.install(mygit_root, claude.parent, dry_run=dry_run,
+                           user_scope=claude.resolve() == (Path.home() / ".claude").resolve())
     manifest = {"schemaVersion": 1, "version": __version__, "harnessHome": str(home.resolve()),
-                "installedAt": now(), "files": record}
+                "installedAt": now(), "files": record,
+                "myGit": {"root": my_git["root"], "version": my_git["version"], "plugin": my_git["plugin"]}}
     if not dry_run:
         manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     return {"target": str(claude), "version": __version__, "written": written, "unchanged": len(unchanged),
-            "keptYourEdits": kept, "dryRun": dry_run,
-            "next": "In Claude Code, inside the project: /kaneki-onboarding, then /kaneki-flow <ticket>."}
+            "keptYourEdits": kept, "dryRun": dry_run, "myGit": my_git,
+            "next": "Restart Claude Code in the project (accept the my-git marketplace trust prompt), then "
+                    "/kaneki-onboarding, then /kaneki-flow <ticket>."}

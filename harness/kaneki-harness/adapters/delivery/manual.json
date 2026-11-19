@@ -18,9 +18,11 @@
     "push": false,
     "steps": [
       "sdlc ship-request --ticket <id> --repo <repo>  (show the full request to the user)",
-      "sdlc ship --ticket <id> --repo <repo> --approve <requestDigest>  (only after the user approves that exact request)"
+      "sdlc ship --ticket <id> --repo <repo> --approve <requestDigest>  (only after the user approves that exact request)",
+      "/my-git:commit",
+      "sdlc ship-record --ticket <id> --repo <repo>"
     ],
-    "note": "kaneki-ship stages exactly the reviewed files, commits as git.user, and stops there: a person pushes and opens the PR/MR on any platform."
+    "note": "kaneki-ship stages exactly the reviewed files, /my-git:commit commits them, and it stops there: a person pushes and opens the PR/MR on any platform."
   },
   "reship": {
     "requiresUserGo": true,

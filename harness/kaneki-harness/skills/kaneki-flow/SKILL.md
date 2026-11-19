@@ -10,8 +10,9 @@ hooks:
       hooks:
         - type: command
           # CLAUDE_SKILL_DIR is not exported to hook processes: find the installed guard from the project dir
-          # upwards, then in the user's ~/.claude. Missing guard = git refused (fail closed), other commands pass.
-          command: 'g=".claude/skills/kaneki-flow/scripts/guard-git"; d="${CLAUDE_PROJECT_DIR}"; while [ -n "$d" ] && [ ! -f "$d/$g" ]; do d="${d%/*}"; done; if [ -f "$d/$g" ]; then exec sh "$d/$g"; fi; if [ -f "$HOME/$g" ]; then exec sh "$HOME/$g"; fi; if grep -q "git" 2>/dev/null; then echo "Blocked by kaneki-flow: guard not installed (run sdlc install)." >&2; exit 2; fi; exit 0'
+          # upwards, then in the user's ~/.claude. Missing guard = commands that run git refused (fail closed), other
+          # commands pass. The guard itself is self-contained: it needs no harness path.
+          command: 'g=".claude/skills/kaneki-flow/scripts/guard-git"; d="${CLAUDE_PROJECT_DIR}"; while [ -n "$d" ] && [ ! -f "$d/$g" ]; do d="${d%/*}"; done; if [ -f "$d/$g" ]; then exec sh "$d/$g"; fi; if [ -f "$HOME/$g" ]; then exec sh "$HOME/$g"; fi; if grep -Eq "(^|[^[:alnum:]_.-])git(\\.exe)?([[:space:]]|$)" 2>/dev/null; then echo "Blocked by kaneki-flow: guard not installed (run sdlc install)." >&2; exit 2; fi; exit 0'
 ---
 
 # Kaneki Flow (controller)
@@ -103,18 +104,20 @@ names, status values and quoted source text verbatim in every language.
 
 ## Git
 
-**Nodes never commit.** Only `/kaneki-ship` commits, pushes and opens the PR/MR, as the project account, after
-the user approves the exact request. During the flow:
+**Nodes never commit.** Only `/kaneki-ship` commits, pushes and opens the PR/MR, after the user approves the exact
+request, and it does so through the **my-git** plugin (`/my-git:commit`, `/my-git:push`, `/my-git:pr`). `sdlc install`
+registers my-git from the same checkout as the harness. my-git's own guard checks identity, the pinned SSH key,
+remotes, branch names and commit messages on every git/gh command. During the flow:
 
-- Run git through `$SDLC git --ticket <id> --repo <repo-id> -- <git args>`: it runs in the ticket worktree,
-  applies `git.user` and `git.sshCommand`, and logs the call. It refuses commit, merge, rebase, push, pull and
-  tag; anything that deletes work (`reset --hard`, `clean -f`, `branch -D`, …); and identity changes
-  (`config user.*`, `-c user.*`, `--author`).
-- A guard hook (Bash and PowerShell tools) refuses the same commands as plain `git`, and also plain remote access
-  (`fetch`, `ls-remote`, …), which must go through `$SDLC git` so the project SSH key is used. Read-only plain git
-  (`status`, `diff`, `log`, `show`) is allowed.
+- The kaneki-flow guard hook (Bash and PowerShell tools) adds the node rules on top of that. It refuses history
+  changes (commit, merge, rebase, push, pull, tag, …) and anything that deletes work (`reset --hard`, `clean -f`,
+  `branch -D`, …). Commit and push pass only in the checkout of a request approved in `/kaneki-ship`. Everything else
+  (`status`, `diff`, `log`, `add`, `fetch`, `worktree add`, …) is allowed.
+- `$SDLC git --ticket <id> --repo <repo-id> -- <git args>` is still there to run git in the ticket worktree as the
+  profile identity, logged. It refuses the same commands plus identity changes (`config user.*`, `-c user.*`,
+  `--author`).
 - Gates on `coding`, `final-review` and `deliverable-ready` refuse any commit since the ticket started that
-  kaneki-ship did not make, and any commit not authored as the project identity.
+  kaneki-ship did not record (`sdlc ship-record`), and any commit not authored as the project identity.
 
 ## Execution loop
 

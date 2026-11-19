@@ -240,23 +240,64 @@ class SchemaTests(Flow):
         self.assertIn("obsereved", res["error"])
 
 
+GUARD = HOME / "skills" / "kaneki-flow" / "scripts" / "guard_git.py"
+
+
 class GuardHookTests(unittest.TestCase):
-    def hook(self, command: str) -> int:
-        res = subprocess.run([sys.executable, str(HOME / "skills" / "kaneki-flow" / "scripts" / "guard_git.py")],
-                             input=json.dumps({"tool_input": {"command": command}}), capture_output=True, text=True,
-                             env=dict(os.environ, SDLC_HOME=str(HOME)))
+    def hook(self, command: str, project: Path | None = None, cwd: Path | None = None) -> int:
+        env = {k: v for k, v in os.environ.items() if k not in ("SDLC_HOME", "CLAUDE_PROJECT_DIR")}
+        if project:
+            env["CLAUDE_PROJECT_DIR"] = str(project)
+        payload = {"tool_input": {"command": command}, **({"cwd": str(cwd)} if cwd else {})}
+        res = subprocess.run([sys.executable, str(GUARD)], input=json.dumps(payload), capture_output=True, text=True, env=env)
         return res.returncode
 
-    def test_guard_policy(self) -> None:
-        blocked = ["git commit -m x", "cd app && git push origin HEAD", "git -C app reset --hard", "git fetch origin",
-                   "git config user.email a@b.c", "echo ok; git rebase main", "/usr/bin/git merge x"]
-        allowed = ["git status", "git diff HEAD", "git log -5", "npm test", "git add src/a.ts",
+    def test_guard_policy_needs_no_harness(self) -> None:
+        """Node rules only (identity/remote rules are my-git's), and no SDLC_HOME or .harness-home is needed."""
+        blocked = ["git commit -m x", "cd app && git push origin HEAD", "git -C app reset --hard",
+                   "echo ok; git rebase main", "/usr/bin/git merge x", "git branch -D old", "git clean -fd"]
+        allowed = ["git status", "git diff HEAD", "git log -5", "npm test", "git add src/a.ts", "git fetch origin",
                    'sh "/x/.claude/skills/kaneki-flow/scripts/sdlc" --profile "p.json" git --ticket T-1 --repo app -- fetch',
-                   "git worktree add ../app-T1 -b ticket/T1 main", "git remote -v"]
+                   "git worktree add ../app-T1 -b ticket/T1 main", "git remote -v", "cat plugins/my-git/README.md"]
         for cmd in blocked:
             self.assertEqual(self.hook(cmd), 2, cmd)
         for cmd in allowed:
             self.assertEqual(self.hook(cmd), 0, cmd)
+
+    def test_ship_approval_lets_commit_and_push_through_in_that_checkout_only(self) -> None:
+        from harness import mygit
+        project = Path(tempfile.mkdtemp(prefix="sdlc-guard-"))
+        self.addCleanup(lambda: __import__("shutil").rmtree(project, ignore_errors=True))
+        wt, other = project / "wt", project / "other"
+        wt.mkdir()
+        other.mkdir()
+        commit = f'git -C "{wt.as_posix()}" -c user.name="A" commit -S -F msg.txt'
+        self.assertEqual(self.hook(commit, project), 2)
+        mygit.grant(project, "T-1", "app", str(wt), "develop/feat/x", "d" * 64)
+        self.assertEqual(self.hook(commit, project), 0)
+        self.assertEqual(self.hook(f'git -C "{wt}" push -u origin develop/feat/x', project), 0)
+        self.assertEqual(self.hook("git push origin HEAD", project, cwd=wt), 0)
+        self.assertEqual(self.hook(f'git -C "{other}" commit -m x', project), 2)  # another checkout
+        self.assertEqual(self.hook(f'git -C "{wt}" rebase main', project), 2)  # only commit/push
+        self.assertEqual(self.hook(f'git -C "{wt}" reset --hard', project), 2)
+        mygit.revoke(project, "T-1", "app")
+        self.assertEqual(self.hook(commit, project), 2)
+        self.assertFalse(mygit.approvals_file(project).exists())
+
+    def test_guard_rules_match_the_wrapper_policy(self) -> None:
+        import importlib.util
+        from harness import gitpolicy
+        spec = importlib.util.spec_from_file_location("kaneki_guard", GUARD)
+        guard = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(guard)  # type: ignore[union-attr]
+        self.assertEqual(guard.HISTORY, gitpolicy.HISTORY)
+        samples = [("reset", ["--hard"]), ("reset", ["--soft", "HEAD~1"]), ("clean", ["-fd"]), ("clean", ["-n"]),
+                   ("checkout", ["--", "a"]), ("checkout", ["-b", "x"]), ("restore", ["a"]), ("restore", ["--staged", "a"]),
+                   ("branch", ["-D", "x"]), ("branch", ["x"]), ("stash", ["drop"]), ("stash", ["push"]),
+                   ("worktree", ["remove", "--force", "x"]), ("worktree", ["remove", "x"]), ("update-ref", ["-d", "r"]),
+                   ("gc", ["--prune=now"]), ("gc", [])]
+        for sub, rest in samples:
+            self.assertEqual(guard.destructive(sub, rest), gitpolicy.destructive(sub, rest), (sub, rest))
 
 
 class ShipTests(Flow):
@@ -286,25 +327,51 @@ class ShipTests(Flow):
         os.environ["SDLC_GH"] = f"{Path(sys.executable).as_posix()} {fake.as_posix()}"
         self.addCleanup(os.environ.pop, "SDLC_GH", None)
 
-    def test_ship_commits_as_identity_pushes_and_opens_pr(self) -> None:
+    MESSAGE = "fix(app): print the fixed value\n\nThe old value was wrong. Refs SH-1.\n"
+
+    def my_git_commit(self, message_file: str, name: str = "Kaneki Dev") -> None:
+        """What /my-git:commit runs: commit exactly what is staged, identity pinned on the command."""
+        git(self.repo, "-c", f"user.name={name}", "-c", "user.email=dev@kaneki.test", "commit", "-q", "-F", message_file)
+
+    def ready(self, ticket: str) -> dict:
         (self.repo / "main.py").write_text("print('fixed')\n")
         (self.repo / "added.py").write_text("NEW = True\n")
-        run("init", "--ticket", "SH-1", "--kind", "bug", *self.p)
-        self.to("SH-1", "deliverable-ready")
-        code, req = run("ship-request", "--ticket", "SH-1", "--repo", "app", *self.p)
+        run("init", "--ticket", ticket, "--kind", "bug", *self.p)
+        self.to(ticket, "deliverable-ready")
+        (self.tdir(ticket) / "drafts" / "commit-msg.md").write_text(self.MESSAGE, encoding="utf-8")
+        code, req = run("ship-request", "--ticket", ticket, "--repo", "app", *self.p)
         self.assertEqual(code, 0, req)
+        return req
+
+    def test_ship_stages_for_my_git_then_records_the_approved_commit(self) -> None:
+        req = self.ready("SH-1")
         self.assertEqual(req["files"], ["added.py", "main.py"])
+        self.assertEqual((req["via"], req["pr"]), ("my-git", "my-git"))
         code, res = run("ship", "--ticket", "SH-1", "--repo", "app", "--approve", "0" * 64, *self.p)
         self.assertEqual(code, 2)
         self.assertIn("changed since it was approved", res["error"])
         code, res = run("ship", "--ticket", "SH-1", "--repo", "app", "--approve", req["requestDigest"], *self.p)
         self.assertEqual(code, 0, res)
+        self.assertEqual(sorted(res["staged"]), ["added.py", "main.py"])
+        self.assertTrue(res["next"][0].startswith("/my-git:commit"))
+        self.assertTrue(any(step.startswith("/my-git:push") for step in res["next"]))
+        self.assertTrue(any(step.startswith("/my-git:pr") for step in res["next"]))
+        self.assertTrue((self.tmp / ".claude" / "kaneki-ship-approvals.json").is_file())
+        self.assertEqual(git(self.repo, "log", "-1", "--format=%s").strip(), "init")  # ship itself commits nothing
+
+        code, res = run("ship-record", "--ticket", "SH-1", "--repo", "app", *self.p)
+        self.assertEqual(code, 2)
+        self.assertIn("no new commit", res["error"])
+        self.my_git_commit(str(self.tdir("SH-1") / "ship" / "app-commit-msg.txt"))
+        branch = git(self.repo, "rev-parse", "--abbrev-ref", "HEAD").strip()
+        git(self.repo, "push", "-q", "origin", f"HEAD:refs/heads/{branch}")
+        code, res = run("ship-record", "--ticket", "SH-1", "--repo", "app", "--pr",
+                        "https://github.com/acme/app/pull/7", *self.p)
+        self.assertEqual(code, 0, res)
         self.assertTrue(res["pushed"])
         self.assertEqual(res["pr"], "https://github.com/acme/app/pull/7")
-        author = git(self.repo, "log", "-1", "--format=%an <%ae> / %cn <%ce>").strip()
-        self.assertEqual(author, "Kaneki Dev <dev@kaneki.test> / Kaneki Dev <dev@kaneki.test>")
-        branch = git(self.repo, "rev-parse", "--abbrev-ref", "HEAD").strip()
         self.assertEqual(git(self.remote, "rev-parse", f"refs/heads/{branch}").strip(), res["commit"])
+        self.assertFalse((self.tmp / ".claude" / "kaneki-ship-approvals.json").exists())
 
         # review round: fetch the review, reopen coding; the shipped commit is not a "node commit"
         git(self.repo, "remote", "set-url", "origin", "git@github.com:acme/app.git")
@@ -315,6 +382,27 @@ class ShipTests(Flow):
         self.complete("SH-1", "triage-review", actor="user", extra=("--reopen", "coding"))
         (self.repo / "main.py").write_text("print('fixed and renamed')\n")
         self.complete("SH-1", "coding")
+
+    def test_ship_record_refuses_a_commit_that_is_not_the_approved_one(self) -> None:
+        req = self.ready("SH-2")
+        code, res = run("ship", "--ticket", "SH-2", "--repo", "app", "--approve", req["requestDigest"], *self.p)
+        self.assertEqual(code, 0, res)
+        other = self.tmp / "other-msg.txt"
+        other.write_text("fix(app): something else\n", encoding="utf-8")
+        self.my_git_commit(str(other))
+        code, res = run("ship-record", "--ticket", "SH-2", "--repo", "app", *self.p)
+        self.assertEqual(code, 2)
+        self.assertIn("commit message differs", res["error"])
+
+    def test_ship_request_refuses_a_message_my_git_rejects(self) -> None:
+        (self.repo / "main.py").write_text("print('fixed')\n")
+        run("init", "--ticket", "SH-3", "--kind", "bug", *self.p)
+        self.to("SH-3", "deliverable-ready")
+        (self.tdir("SH-3") / "drafts" / "commit-msg.md").write_text(
+            "fix(app): x\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n", encoding="utf-8")
+        code, res = run("ship-request", "--ticket", "SH-3", "--repo", "app", *self.p)
+        self.assertEqual(code, 2)
+        self.assertIn("my-git", res["error"])
 
 
 class InstallTests(unittest.TestCase):
@@ -337,6 +425,36 @@ class InstallTests(unittest.TestCase):
         code, res = run("install", "--target", str(target))
         self.assertIn("skills/kaneki-flow/SKILL.md", res["keptYourEdits"])
         self.assertIn("my note", card.read_text(encoding="utf-8"))
+
+    def test_install_registers_the_my_git_of_the_same_checkout(self) -> None:
+        from harness import mygit
+        root = mygit.find_root(HOME)
+        self.assertIsNotNone(root, "plugins/my-git next to the harness")
+        target = Path(tempfile.mkdtemp(prefix="sdlc-install-"))
+        self.addCleanup(lambda: __import__("shutil").rmtree(target, ignore_errors=True))
+        (target / ".claude").mkdir()
+        stale = {"extraKnownMarketplaces": {"my-git-local": {"source": {"source": "directory", "path": "/old/my-git"}}},
+                 "enabledPlugins": {"my-git@my-git-local": True}}
+        (target / ".claude" / "settings.local.json").write_text(json.dumps(stale), encoding="utf-8")
+        code, res = run("install", "--target", str(target))
+        self.assertEqual(code, 0, res)
+        self.assertEqual(res["myGit"]["version"], mygit.version(root))
+        for name in ("settings.json", "settings.local.json"):
+            s = json.loads((target / ".claude" / name).read_text(encoding="utf-8"))
+            self.assertEqual(Path(s["extraKnownMarketplaces"]["my-git-local"]["source"]["path"]).resolve(), root.resolve(), name)
+            self.assertTrue(s["enabledPlugins"]["my-git@my-git-local"], name)
+        manifest = json.loads((target / ".claude" / "kaneki-harness.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["myGit"]["version"], mygit.version(root))
+
+    def test_install_refuses_without_my_git(self) -> None:
+        target = Path(tempfile.mkdtemp(prefix="sdlc-install-"))
+        self.addCleanup(lambda: __import__("shutil").rmtree(target, ignore_errors=True))
+        os.environ["SDLC_MYGIT"] = str(target / "missing")
+        self.addCleanup(os.environ.pop, "SDLC_MYGIT", None)
+        code, res = run("install", "--target", str(target))
+        self.assertEqual(code, 2)
+        self.assertIn("my-git", res["error"])
+        self.assertFalse((target / ".claude" / "skills").exists())
 
 
 if __name__ == "__main__":

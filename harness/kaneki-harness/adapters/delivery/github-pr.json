@@ -25,13 +25,15 @@
     "requiresUserGo": true,
     "push": true,
     "pr": {
-      "cli": "gh"
+      "via": "my-git"
     },
     "steps": [
       "sdlc ship-request --ticket <id> --repo <repo>  (show the full request to the user)",
-      "sdlc ship --ticket <id> --repo <repo> --approve <requestDigest>  (only after the user approves that exact request)"
+      "sdlc ship --ticket <id> --repo <repo> --approve <requestDigest>  (only after the user approves that exact request; stages the files)",
+      "/my-git:commit, /my-git:push, /my-git:pr  (the `next` steps ship prints)",
+      "sdlc ship-record --ticket <id> --repo <repo> --pr <url>"
     ],
-    "note": "kaneki-ship stages exactly the reviewed files, commits as git.user, pushes with git.sshCommand and opens the PR with `gh` (check `gh auth status` shows the project's account)."
+    "note": "kaneki-ship stages exactly the reviewed files; my-git commits as the my-git profile identity (signed if set), pushes with the profile's credential and opens the PR (gh, or a prefilled browser link when pr_via is browser)."
   },
   "reship": {
     "requiresUserGo": true,

@@ -20,13 +20,15 @@
     "requiresUserGo": true,
     "push": true,
     "pr": {
-      "cli": "glab"
+      "via": "manual"
     },
     "steps": [
       "sdlc ship-request --ticket <id> --repo <repo>",
-      "sdlc ship --ticket <id> --repo <repo> --approve <requestDigest>"
+      "sdlc ship --ticket <id> --repo <repo> --approve <requestDigest>",
+      "/my-git:commit, /my-git:push; a person opens the MR from drafts/pr-body.md (my-git:pr is GitHub only)",
+      "sdlc ship-record --ticket <id> --repo <repo> --pr <url>"
     ],
-    "note": "Commits as git.user, pushes with git.sshCommand, opens the MR with `glab` (check `glab auth status` shows the project's account)."
+    "note": "my-git commits and pushes; the MR is opened by a person on GitLab with the approved PR body."
   },
   "reship": {
     "requiresUserGo": true,

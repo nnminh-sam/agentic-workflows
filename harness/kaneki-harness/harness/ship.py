@@ -1,9 +1,14 @@
 """kaneki-ship: the only path that commits and pushes (user decision: nodes never commit).
 
-Modelled on wms-ship: the user approves one exact request (repository, branch, file list, commit message, PR body,
-identity, reviewed tree), identified by its digest. `ship` rebuilds the request, refuses if anything changed since
-the approval, stages exactly the reviewed files, commits as the project identity, pushes with the project SSH
-command, and opens the PR/MR with the delivery adapter's CLI.
+The user approves one exact request (repository, branch, file list, commit message, PR body, identity, reviewed
+tree), identified by its digest. Git itself is done by the my-git plugin (user decision 2026-11-19):
+
+1. `ship` rebuilds the request, refuses if anything changed since the approval, stages exactly the reviewed files,
+   writes the approved commit message and PR body to `ship/`, and lets the kaneki-flow guard pass `commit`/`push`
+   in that checkout for a short while (mygit.grant).
+2. kaneki-ship runs /my-git:commit (what is staged, with that message), /my-git:push and /my-git:pr.
+3. `ship-record` checks the new commit is exactly the approved one (parent, staged tree, message, identity), records
+   it as shipped (so the commit gates accept it), whether the branch reached the remote, and the PR link.
 """
 
 from __future__ import annotations
@@ -16,7 +21,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from . import gitid
+from . import gitid, mygit
 from .errors import HarnessError
 from .state import check_receipts, now, sha256_text, worktree_snapshot
 
@@ -48,7 +53,22 @@ def _live(path: Path) -> str:
     return live_text(path).strip()
 
 
-def build_request(s: Any, repo_id: str, delivery: dict[str, Any]) -> dict[str, Any]:
+def _cli(name: str) -> list[str]:
+    override = os.environ.get(f"SDLC_{name.upper()}")
+    return shlex.split(override, posix=os.name != "nt") if override else [name]
+
+
+def _norm_message(text: str) -> str:
+    """git's `whitespace` cleanup (commit -F): trailing spaces off, blank-line runs collapsed, outer blanks dropped."""
+    lines = [ln.rstrip() for ln in text.replace("\r\n", "\n").split("\n")]
+    out: list[str] = []
+    for ln in lines:
+        if ln or (out and out[-1]):
+            out.append(ln)
+    return "\n".join(out).strip()
+
+
+def build_request(s: Any, repo_id: str, delivery: dict[str, Any], mygit_root: Path) -> dict[str, Any]:
     if s.state["nodes"].get("deliverable-ready", {}).get("status") != "done":
         raise HarnessError("G7: ship needs deliverable-ready closed (receipts checked, drafts approved by the user)")
     problems = check_receipts(s.state, s.profile["delivery"].get("minHoursLeft", 24), s.excludes)
@@ -74,83 +94,124 @@ def build_request(s: Any, repo_id: str, delivery: dict[str, Any]) -> dict[str, A
     paths = changed_paths(path, s.excludes)
     if not paths:
         raise HarnessError("G7: nothing to ship: the worktree has no changes")
+    problems = mygit.check_message(mygit_root, message)
+    if problems:
+        raise HarnessError("G7: drafts/commit-msg.md fails my-git's commit-message rules (fix it in delivery-drafts): "
+                           + "; ".join(problems[:5]))
+    paths = changed_paths(path, s.excludes)
+    if not paths:
+        raise HarnessError("G7: nothing to ship: the worktree has no changes")
     remote = gitid.run(path, ["remote", "get-url", "origin"], ident)
     ship = delivery.get("ship") or {}
     return {"ticket": s.ctx["ticket"], "repo": repo_id, "branch": branch, "base": repo.get("baseBranch", "main"),
             "remote": remote.stdout.strip() if remote.returncode == 0 else None,
             "headOid": _git(path, ["rev-parse", "HEAD"], ident).strip(),
             "subject": s.state["receipts"][repo_id]["subject"], "paths": paths,
-            "identity": {"name": ident["name"], "email": ident["email"]}, "sshCommand": bool(ident.get("sshCommand")),
+            "identity": {"name": ident["name"], "email": ident["email"]},
             "commitMessage": message, "prBodyDigest": sha256_text(body) if body else None,
-            "push": bool(ship.get("push", False)), "pr": (ship.get("pr") or {}).get("cli")}
+            "push": bool(ship.get("push", False)), "pr": pr_mode(delivery), "via": "my-git"}
+
+
+def pr_mode(delivery: dict[str, Any]) -> str | None:
+    """How the PR/MR is opened after the push: `my-git` (/my-git:pr: gh or a browser compare link, per the my-git
+    profile's pr_via), `manual` (a person opens it from drafts/pr-body.md, e.g. GitLab), or None (no push)."""
+    ship = delivery.get("ship") or {}
+    if not ship.get("push"):
+        return None
+    pr = ship.get("pr") or {}
+    via = pr.get("via") or ("my-git" if pr.get("cli") == "gh" else None)  # `cli: gh` = the pre-my-git spelling
+    return via if via in ("my-git", "manual") else "manual"
 
 
 def request_digest(request: dict[str, Any]) -> str:
     return sha256_text(_canon(request))
 
 
-def _cli(name: str) -> list[str]:
-    override = os.environ.get(f"SDLC_{name.upper()}")
-    return shlex.split(override, posix=os.name != "nt") if override else [name]
-
-
-def run_ship(s: Any, request: dict[str, Any], delivery: dict[str, Any], open_pr: bool) -> dict[str, Any]:
+def stage(s: Any, request: dict[str, Any], mygit_root: Path) -> dict[str, Any]:
+    """Stage exactly the approved files, write the approved message/body for my-git, and grant the guard approval."""
     repo = next(r for r in s.ctx["repositories"] if r["id"] == request["repo"])
     path = repo.get("worktree") or repo["path"]
     ident = gitid.identity(s.profile, request["repo"])
+    already = [p for p in _git(path, ["diff", "--cached", "--name-only", "-z"], ident).split("\0") if p]
+    stray = sorted(set(already) - set(request["paths"]))
+    if stray:
+        raise HarnessError(f"G7: files outside the approved list are already staged: {stray[:5]}; unstage them first")
     _git(path, ["add", "-A", "--", *request["paths"]], ident)
     staged = [p for p in _git(path, ["diff", "--cached", "--name-only", "-z"], ident).split("\0") if p]
     extra = sorted(set(staged) - set(request["paths"]))
     if extra:
         _git(path, ["reset", "-q"], ident)  # unstage only; the working tree is untouched
-        raise HarnessError(f"G7: staged files outside the approved list: {extra[:5]}; nothing was committed")
+        raise HarnessError(f"G7: staged files outside the approved list: {extra[:5]}; nothing was staged")
+    tree = _git(path, ["write-tree"], ident).strip()  # the tree the commit must have
     ship_dir = s.ticket.dir / "ship"
     ship_dir.mkdir(exist_ok=True)
     msg = ship_dir / f"{request['repo']}-commit-msg.txt"
     msg.write_text(request["commitMessage"] + "\n", encoding="utf-8")
-    _git(path, ["-c", f"user.name={ident['name']}", "-c", f"user.email={ident['email']}", "commit", "-q", "-F", str(msg)], ident)
-    sha = _git(path, ["rev-parse", "HEAD"], ident).strip()
-    result: dict[str, Any] = {"repo": request["repo"], "commit": sha, "branch": request["branch"], "pushed": False, "pr": None}
-    shipped = s.state.setdefault("shipped", {}).setdefault(request["repo"], {"commits": []})
-    shipped["commits"].append(sha)
-    shipped["branch"] = request["branch"]
-    if request["push"]:
-        res = gitid.run(path, ["push", "origin", f"HEAD:refs/heads/{request['branch']}"], ident)
-        if res.returncode != 0:
-            result["pushError"] = (res.stderr or res.stdout).strip()[:300]
-            return result
-        result["pushed"] = True
-        shipped["pushedAt"] = now()
-    if request["push"] and request["pr"] and open_pr and not shipped.get("pr"):
-        result["pr"] = shipped["pr"] = _open_pr(s, request, path)
-    elif shipped.get("pr"):
-        result["pr"] = shipped["pr"]  # a review round: pushing updated the existing PR
-    return result
-
-
-def _open_pr(s: Any, request: dict[str, Any], path: str) -> str | None:
-    body_file = s.ticket.dir / "ship" / f"{request['repo']}-pr-body.md"
     body_src = s.ticket.dir / "drafts" / "pr-body.md"
-    body = _live(body_src) if body_src.is_file() else ""
-    body_file.write_text(body + "\n", encoding="utf-8")
-    title = request["commitMessage"].splitlines()[0][:120]
-    cli = request["pr"]
-    if cli == "gh":
-        argv = _cli("gh") + ["pr", "create", "--base", request["base"], "--head", request["branch"], "--title", title,
-                             "--body-file", str(body_file)]
-    elif cli == "glab":
-        argv = _cli("glab") + ["mr", "create", "--source-branch", request["branch"], "--target-branch", request["base"],
-                               "--title", title, "--description", body, "--yes"]
-    else:
-        raise HarnessError(f"unknown PR cli {cli}")
-    try:
-        res = subprocess.run(argv, cwd=path, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        raise HarnessError(f"G7: pushed, but `{cli}` could not open the PR/MR: {exc}") from exc
-    if res.returncode != 0:
-        raise HarnessError(f"G7: pushed, but `{cli}` failed to open the PR/MR: {(res.stderr or res.stdout).strip()[:300]}")
-    urls = re.findall(r"https?://\S+", res.stdout)
-    return urls[-1] if urls else res.stdout.strip() or None
+    body_file = ship_dir / f"{request['repo']}-pr-body.md"
+    body_file.write_text((_live(body_src) if body_src.is_file() else "") + "\n", encoding="utf-8")
+    approval = mygit.grant(s.pdir, s.ctx["ticket"], request["repo"], path, request["branch"], request_digest(request))
+    pending = {"requestDigest": request_digest(request), "headOid": request["headOid"], "tree": tree,
+               "branch": request["branch"], "stagedAt": now()}
+    s.state.setdefault("shipPending", {})[request["repo"]] = pending
+    title = request["commitMessage"].splitlines()[0][:72]
+    steps = [f'/my-git:commit "{path}" commit exactly what is staged, with the message in "{msg}" (do not stage '
+             f"anything else, do not change the message)"]
+    if request["push"]:
+        steps.append(f'/my-git:push "{path}" --upstream')
+    if request["pr"] == "my-git":
+        steps.append(f'/my-git:pr "{path}" title "{title}", body from "{body_file}" (base {request["base"]})')
+    elif request["pr"] == "manual":
+        steps.append(f"open the PR/MR {request['branch']} -> {request['base']} by hand with the body in {body_file}")
+    steps.append(f"sdlc ship-record --ticket {s.ctx['ticket']} --repo {request['repo']} [--pr <url>]")
+    return {"repo": request["repo"], "staged": staged, "tree": tree, "branch": request["branch"],
+            "commitMessageFile": str(msg), "prBodyFile": str(body_file), "pr": request["pr"],
+            "myGit": {"root": str(mygit_root), "version": mygit.version(mygit_root)},
+            "guardApprovalExpiresAt": approval["expiresAt"], "next": steps}
+
+
+def record_ship(s: Any, repo_id: str, pr: str | None) -> dict[str, Any]:
+    """After /my-git:commit (and push/pr): check the commit is the approved one, then record it as shipped."""
+    pending = (s.state.get("shipPending") or {}).get(repo_id)
+    if not pending:
+        raise HarnessError(f"G7: nothing staged for {repo_id}: run ship-request, approval and ship first")
+    repo = next(r for r in s.ctx["repositories"] if r["id"] == repo_id)
+    path = repo.get("worktree") or repo["path"]
+    ident = gitid.identity(s.profile, repo_id)
+    sha = _git(path, ["rev-parse", "HEAD"], ident).strip()
+    if sha == pending["headOid"]:
+        raise HarnessError("G7: no new commit yet: run /my-git:commit on the staged files first")
+    meta = _git(path, ["log", "-1", "--format=%P%x00%T%x00%an%x00%ae%x00%cn%x00%ce%x00%B"], ident).split("\0")
+    parents, tree, an, ae, cn, ce, body = (meta + [""] * 7)[:7]
+    problems = []
+    if parents.split() != [pending["headOid"]]:
+        problems.append(f"HEAD {sha[:10]} is not one commit on top of the approved {pending['headOid'][:10]}")
+    if tree != pending["tree"]:
+        problems.append("the committed files differ from the approved staged files")
+    if not (gitid.same_name(an, ident["name"]) and gitid.same_email(ae, ident["email"]) and gitid.same_email(ce, ident["email"])):
+        problems.append(f"author {an} <{ae}> / committer {cn} <{ce}> is not the project identity")
+    approved = (s.ticket.dir / "ship" / f"{repo_id}-commit-msg.txt").read_text(encoding="utf-8")
+    if _norm_message(body) != _norm_message(approved):
+        problems.append("the commit message differs from the approved drafts/commit-msg.md")
+    if problems:
+        raise HarnessError("G7: the commit is not the approved request (nothing recorded; fix it with "
+                           "`sdlc git ... -- reset --soft <approved head>` and commit again): " + "; ".join(problems))
+    shipped = s.state.setdefault("shipped", {}).setdefault(repo_id, {"commits": []})
+    if sha not in shipped["commits"]:
+        shipped["commits"].append(sha)
+    shipped["branch"] = pending["branch"]
+    remote = gitid.run(path, ["ls-remote", "origin", f"refs/heads/{pending['branch']}"], ident)
+    pushed = remote.returncode == 0 and remote.stdout.split()[:1] == [sha]
+    if pushed:
+        shipped["pushedAt"] = now()
+    if pr:
+        shipped["pr"] = pr
+    s.state["shipPending"].pop(repo_id, None)
+    if not s.state["shipPending"]:
+        s.state.pop("shipPending")
+    mygit.revoke(s.pdir, s.ctx["ticket"], repo_id)
+    return {"repo": repo_id, "commit": sha, "branch": pending["branch"], "pushed": pushed, "pr": shipped.get("pr"),
+            "approval": pending["requestDigest"]}
 
 
 def fetch_review(s: Any, repo_id: str, pr: str | None) -> Path:
