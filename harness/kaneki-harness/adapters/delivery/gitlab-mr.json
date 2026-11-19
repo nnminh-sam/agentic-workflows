@@ -1,0 +1,39 @@
+{
+  "kind": "delivery",
+  "id": "gitlab-mr",
+  "description": "Deliver as a GitLab merge request per repository (glab CLI).",
+  "drafts": {
+    "commit-msg": {
+      "template": "templates/commit-msg.md"
+    },
+    "pr-body": {
+      "template": "templates/pr-body.md"
+    },
+    "tracker-reply": {
+      "template": "templates/tracker-reply.md"
+    }
+  },
+  "review": {
+    "instructions": "Export the MR discussion (`glab mr view <n> --comments`) to a markdown file and pass it to `sdlc handback`."
+  },
+  "ship": {
+    "requiresUserGo": true,
+    "push": true,
+    "pr": {
+      "via": "manual"
+    },
+    "steps": [
+      "sdlc ship-request --ticket <id> --repo <repo>",
+      "sdlc ship --ticket <id> --repo <repo> --approve <requestDigest>",
+      "/my-git:commit, /my-git:push; a person opens the MR from drafts/pr-body.md (my-git:pr is GitHub only)",
+      "sdlc ship-record --ticket <id> --repo <repo> --pr <url>"
+    ],
+    "note": "my-git commits and pushes; the MR is opened by a person on GitLab with the approved PR body."
+  },
+  "reship": {
+    "requiresUserGo": true,
+    "steps": [
+      "ship again on the same branch; the push updates the open MR"
+    ]
+  }
+}
