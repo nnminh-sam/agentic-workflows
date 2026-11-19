@@ -1,0 +1,1226 @@
+<!doctype html>
+<html lang="en" data-haise="doc" data-haise-version="3.1.1">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kaneki desktop app: build plan</title>
+<script>
+/* haise: apply the saved theme before first paint (no flash) */
+(function(){try{var t=localStorage.getItem('haise.theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
+<style id="haise-shell-css">
+/* ===== haise-doc shell v3.1.1 — do not edit per document ===== */
+:root{
+  --bg:#f7f7f5; --panel:#ffffff; --panel-2:#f0efeb; --ink:#1d1d1b; --muted:#6b6a66; --line:#e2e0da;
+  --accent:#3b5bdb; --accent-soft:#e9edff; --ok:#2b8a3e; --ok-soft:#e7f5ea;
+  --bad:#c92a2a; --bad-soft:#ffebeb; --warn:#d9480f; --warn-soft:#fff0e6;
+  --info:#7048e8; --info-soft:#f0ebff;
+  --code:#f3f2ee; --hit:#ffe58a; --hit-cur:#ffb84d;
+  --c1:#3b5bdb; --c2:#d9480f; --c3:#2b8a3e; --c4:#7048e8; --c5:#0c8599;
+  --p1:#3b5bdb; --p1-soft:#e9edff; --p2:#0c8599; --p2-soft:#e3f6f8; --p3:#7048e8; --p3-soft:#f0ebff;
+  --p4:#d9480f; --p4-soft:#fff0e6; --p5:#2b8a3e; --p5-soft:#e7f5ea; --p6:#c2255c; --p6-soft:#fdebf1;
+  --sans:system-ui,-apple-system,"Segoe UI","Hiragino Sans","Noto Sans JP",Roboto,"Noto Sans",sans-serif;
+  --mono:ui-monospace,"Cascadia Code","JetBrains Mono",Consolas,Menlo,monospace;
+  --radius:10px; --topbar-h:52px; --nav-w:280px;
+  --fig-label:"Figure"; --tbl-label:"Table";
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#141413; --panel:#1d1d1b; --panel-2:#262624; --ink:#ecebe6; --muted:#a3a29c; --line:#34342f;
+    --accent:#91a7ff; --accent-soft:#1f2547; --ok:#69db7c; --ok-soft:#1b2e20;
+    --bad:#ff8787; --bad-soft:#3a1c1c; --warn:#ffa94d; --warn-soft:#3a2412;
+    --info:#b197fc; --info-soft:#271f45;
+    --code:#232321; --hit:#6b5a12; --hit-cur:#a8671a;
+    --c1:#91a7ff; --c2:#ffa94d; --c3:#69db7c; --c4:#b197fc; --c5:#66d9e8;
+    --p1:#91a7ff; --p1-soft:#1f2547; --p2:#66d9e8; --p2-soft:#10303a; --p3:#b197fc; --p3-soft:#271f45;
+    --p4:#ffa94d; --p4-soft:#3a2412; --p5:#69db7c; --p5-soft:#1b2e20; --p6:#f783ac; --p6-soft:#3a1825;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#141413; --panel:#1d1d1b; --panel-2:#262624; --ink:#ecebe6; --muted:#a3a29c; --line:#34342f;
+  --accent:#91a7ff; --accent-soft:#1f2547; --ok:#69db7c; --ok-soft:#1b2e20;
+  --bad:#ff8787; --bad-soft:#3a1c1c; --warn:#ffa94d; --warn-soft:#3a2412;
+  --info:#b197fc; --info-soft:#271f45;
+  --code:#232321; --hit:#6b5a12; --hit-cur:#a8671a;
+  --c1:#91a7ff; --c2:#ffa94d; --c3:#69db7c; --c4:#b197fc; --c5:#66d9e8;
+  --p1:#91a7ff; --p1-soft:#1f2547; --p2:#66d9e8; --p2-soft:#10303a; --p3:#b197fc; --p3-soft:#271f45;
+  --p4:#ffa94d; --p4-soft:#3a2412; --p5:#69db7c; --p5-soft:#1b2e20; --p6:#f783ac; --p6-soft:#3a1825;
+}
+:root:lang(vi){ --fig-label:"Hình"; --tbl-label:"Bảng"; }
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.65 var(--sans)}
+a{color:var(--accent)}
+[id]{scroll-margin-top:calc(var(--topbar-h) + 14px)}
+/* phase / series colour sets: add .p1 … .p6 to a step, chip, card or callout */
+.p1{--pc:var(--p1);--ps:var(--p1-soft)} .p2{--pc:var(--p2);--ps:var(--p2-soft)} .p3{--pc:var(--p3);--ps:var(--p3-soft)}
+.p4{--pc:var(--p4);--ps:var(--p4-soft)} .p5{--pc:var(--p5);--ps:var(--p5-soft)} .p6{--pc:var(--p6);--ps:var(--p6-soft)}
+
+/* --- progress + top bar --- */
+.progress{position:fixed;top:0;left:0;height:3px;width:0;background:var(--accent);z-index:60}
+.topbar{position:sticky;top:0;z-index:50;height:var(--topbar-h);display:flex;align-items:center;gap:8px;
+  padding:0 12px;background:var(--panel);border-bottom:1px solid var(--line)}
+.topbar .doc-title{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1 1 auto}
+.iconbtn{flex:none;display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:8px;
+  border:1px solid var(--line);background:var(--panel-2);color:var(--ink);cursor:pointer;font-size:15px;line-height:1}
+.iconbtn:hover{border-color:var(--muted)}
+.iconbtn svg{width:17px;height:17px;margin:0}
+.search{flex:0 1 400px;display:flex;align-items:center;gap:6px;min-width:0}
+.search .box{position:relative;flex:1;min-width:0}
+.search input{width:100%;height:34px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);
+  padding:0 10px 0 32px;font:inherit;font-size:.88rem}
+.search input:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.search .box svg{position:absolute;left:9px;top:9px;width:16px;height:16px;margin:0;color:var(--muted)}
+.search .count{font-size:.78rem;color:var(--muted);min-width:60px;text-align:center;white-space:nowrap}
+.search .iconbtn{width:28px;height:28px;font-size:12px}
+
+/* --- sidebar (table of contents) --- */
+.sidebar{position:fixed;top:var(--topbar-h);bottom:0;left:0;width:var(--nav-w);overflow-y:auto;z-index:40;
+  background:var(--bg);border-right:1px solid var(--line);padding:22px 12px 48px;transition:transform .2s ease}
+.sidebar h2{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 8px 10px}
+.toc ol{list-style:none;margin:0;padding:0}
+.toc ol ol{padding-left:10px;margin:2px 0 8px 14px;border-left:1px solid var(--line)}
+.toc a{display:flex;gap:6px;align-items:baseline;padding:4px 8px;border-radius:6px;color:var(--muted);
+  text-decoration:none;font-size:.87rem;line-height:1.45}
+.toc > ol > li > a{font-weight:500}
+.toc ol ol a{font-size:.82rem}
+.toc a:hover{background:var(--panel-2);color:var(--ink)}
+.toc a.active{background:var(--panel-2);color:var(--ink);font-weight:600}
+.toc .num{opacity:.75;font-variant-numeric:tabular-nums;flex:none}
+.toc .badge{margin-left:auto;flex:none;font-size:.7rem;font-weight:700;padding:0 6px;border-radius:999px;
+  background:var(--hit);color:var(--ink)}
+.toc .badge:empty{display:none}
+.backdrop{display:none}
+.page{margin-left:var(--nav-w);transition:margin .2s ease}
+body.nav-collapsed .sidebar{transform:translateX(-100%)}
+body.nav-collapsed .page{margin-left:0}
+@media (max-width:960px){
+  .page{margin-left:0}
+  .sidebar{transform:translateX(-100%);background:var(--panel);box-shadow:4px 0 24px rgba(0,0,0,.18)}
+  body.nav-open .sidebar{transform:none}
+  body.nav-open .backdrop{display:block;position:fixed;inset:var(--topbar-h) 0 0 0;background:rgba(0,0,0,.35);z-index:35}
+  .topbar .doc-title{display:none}
+  .search{flex:1 1 auto}
+}
+
+/* --- document body --- */
+.wrap{max-width:860px;margin:0 auto;padding:32px 24px 96px}
+.doc-head{margin:0 0 8px}
+.doc-head .eyebrow{margin:0 0 6px;font-size:.76rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.doc-head h1{font-size:1.9rem;line-height:1.25;margin:0 0 6px}
+.doc-head .sub{color:var(--muted);margin:0 0 14px}
+.meta{display:flex;flex-wrap:wrap;gap:6px;margin:0;padding:0;list-style:none}
+.meta li{background:var(--panel-2);border-radius:999px;padding:2px 11px;font-size:.8rem;color:var(--ink);min-width:0}
+.meta li b{color:var(--muted);font-weight:600;margin-right:5px}
+section{margin:40px 0 0}
+section > h2{font-size:1.4rem;line-height:1.3;margin:0 0 14px;padding-top:20px;border-top:1px solid var(--line)}
+h3{font-size:1.15rem;line-height:1.35;margin:32px 0 8px}
+h4{font-size:1rem;margin:20px 0 6px}
+h2 .num,h3 .num{color:var(--muted);font-weight:600;margin-right:.45em;font-variant-numeric:tabular-nums}
+p{margin:0 0 14px}
+ul,ol{margin:0 0 14px;padding-left:24px}
+li{margin:4px 0}
+li > ul,li > ol{margin-bottom:4px}
+code,.mono{font-family:var(--mono);font-size:.86em;background:var(--code);padding:1px 5px;border-radius:5px}
+pre{background:var(--code);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;overflow-x:auto;
+  font-size:.84rem;line-height:1.5;margin:0 0 14px}
+pre code{background:none;padding:0;font-size:inherit}
+p code,li code,td code,.card code{overflow-wrap:anywhere}
+blockquote{margin:0 0 16px;padding:2px 16px;border-left:3px solid var(--line);color:var(--muted)}
+.tbl{overflow-x:auto;margin:0 0 18px}
+table{width:100%;border-collapse:separate;border-spacing:0;font-size:.92rem;background:var(--panel);
+  border:1px solid var(--line);border-radius:var(--radius)}
+th,td{padding:8px 12px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}
+tr:last-child > td,tr:last-child > th{border-bottom:0}
+th{background:var(--panel-2);font-weight:600}
+tr:first-child > :first-child{border-top-left-radius:calc(var(--radius) - 1px)}
+tr:first-child > :last-child{border-top-right-radius:calc(var(--radius) - 1px)}
+tr:last-child > :first-child{border-bottom-left-radius:calc(var(--radius) - 1px)}
+tr:last-child > :last-child{border-bottom-right-radius:calc(var(--radius) - 1px)}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+tr.hl td{background:var(--warn-soft)}
+.small{font-size:.86rem;color:var(--muted)}
+.good{color:var(--ok);font-weight:600} .badv{color:var(--bad);font-weight:600}
+hr{border:none;border-top:1px solid var(--line);margin:28px 0}
+
+/* translated keyword + original */
+strong.kw{font-weight:700}
+.orig{color:var(--muted);font-size:.94em;white-space:normal;overflow-wrap:anywhere}
+
+/* lead answer / callouts / tags / chips */
+.verdict{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;margin:0 0 18px;
+  box-shadow:0 1px 2px rgb(0 0 0 / .04)}
+.verdict .label{display:block;font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);margin-bottom:6px}
+.verdict p{margin:0 0 8px;font-size:1.05rem} .verdict > :last-child{margin-bottom:0}
+.callout{--cc:var(--pc,var(--accent));margin:0 0 18px;padding:12px 16px;border-radius:var(--radius);background:var(--panel);
+  border:1px solid var(--line);border-left:4px solid var(--cc)}
+.callout.ok,.callout.tip{--cc:var(--ok)} .callout.bad,.callout.myth{--cc:var(--bad)} .callout.warn{--cc:var(--warn)}
+.callout.info,.callout.interview{--cc:var(--info)} .callout.example{--cc:var(--p2)} .callout.tldr{--cc:var(--muted)}
+.callout > :first-child{margin-top:0} .callout > :last-child{margin-bottom:0}
+.kind{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--cc,var(--pc,var(--accent)));margin-right:6px}
+.callout .ct{font-weight:600;margin:0 0 6px}
+.tag{display:inline-block;font-size:.7rem;font-weight:700;padding:0 7px;border-radius:999px;border:1px solid currentColor;
+  margin-left:4px;vertical-align:1px;white-space:nowrap;line-height:1.6}
+.tag.sure{color:var(--ok)} .tag.infer{color:var(--warn)} .tag.open{color:var(--bad)}
+.sev{display:inline-block;font-size:.72rem;font-weight:700;padding:0 7px;border-radius:4px;white-space:nowrap}
+.sev.high{background:var(--bad-soft);color:var(--bad)} .sev.med{background:var(--warn-soft);color:var(--warn)} .sev.low{background:var(--panel-2);color:var(--muted)}
+.chip{display:inline-block;font-size:.75rem;font-weight:600;line-height:1.5;padding:1px 9px;border-radius:999px;margin-left:6px;
+  vertical-align:1px;white-space:nowrap;background:var(--ps,var(--panel-2));color:var(--pc,var(--muted))}
+.ex{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;margin:6px 0 8px;font-size:.88rem}
+.ex > .k{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.ex code{white-space:pre-wrap;word-break:break-word}
+
+/* findings list */
+ol.findings{counter-reset:f;list-style:none;padding:0;margin:0 0 18px}
+ol.findings > li{counter-increment:f;position:relative;padding:10px 4px 10px 48px;margin:0;border-bottom:1px solid var(--line)}
+ol.findings > li:last-child{border-bottom:none}
+ol.findings > li::before{content:counter(f);position:absolute;left:4px;top:9px;width:30px;height:30px;border-radius:50%;
+  background:var(--accent-soft);color:var(--accent);border:2px solid var(--accent);font-weight:700;font-size:.85rem;
+  display:flex;align-items:center;justify-content:center}
+
+/* cards, grids, stat tiles, step cards */
+.grid2,.grid3{display:grid;gap:14px;margin:0 0 18px}
+.grid2{grid-template-columns:1fr 1fr} .grid3{grid-template-columns:repeat(3,1fr)}
+.grid2>*,.grid3>*{min-width:0}
+.card{border:1px solid var(--line);border-top:3px solid var(--pc,var(--line));border-radius:var(--radius);padding:12px 14px;background:var(--panel)}
+.card h4{margin:0 0 6px}
+.card > :last-child{margin-bottom:0}
+.card.ok{--pc:var(--ok)} .card.bad{--pc:var(--bad)} .card.warn{--pc:var(--warn)} .card.info{--pc:var(--info)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:0 0 18px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px}
+.stat .v{display:block;font-size:1.6rem;font-weight:700;line-height:1.2;font-variant-numeric:tabular-nums}
+.stat .k{display:block;font-size:.82rem;color:var(--muted)}
+.stat.ok .v{color:var(--ok)} .stat.bad .v{color:var(--bad)} .stat.warn .v{color:var(--warn)}
+ol.steps{list-style:none;padding:0;margin:0 0 18px;counter-reset:s;position:relative}
+ol.steps::before{content:"";position:absolute;left:17px;top:10px;bottom:10px;width:2px;background:var(--line)}
+ol.steps > li{counter-increment:s;position:relative;margin:0 0 12px 52px;padding:10px 14px;background:var(--panel);
+  border:1px solid var(--line);border-top:3px solid var(--pc,var(--accent));border-radius:var(--radius);font-size:.96rem}
+ol.steps > li::before{content:counter(s);position:absolute;left:-52px;top:-3px;width:36px;height:36px;border-radius:50%;
+  background:var(--ps,var(--accent-soft));color:var(--pc,var(--accent));border:2px solid var(--pc,var(--accent));
+  font-weight:700;font-size:.92rem;display:flex;align-items:center;justify-content:center;z-index:1}
+ol.steps > li.ok{--pc:var(--ok);--ps:var(--ok-soft)} ol.steps > li.bad{--pc:var(--bad);--ps:var(--bad-soft)}
+ol.steps > li.warn{--pc:var(--warn);--ps:var(--warn-soft)}
+ol.steps > li > :last-child{margin-bottom:0}
+
+/* phase focus: hover (or tap to pin) anything with data-phase="…" to light up that phase in every step card and diagram */
+[data-phase]{transition:opacity .15s,box-shadow .15s}
+body.focus-on main [data-phase]:not(.on){opacity:.22}
+main :not(svg *)[data-phase]{cursor:pointer}
+ol.steps > li.on,.card.on{box-shadow:0 0 0 2px var(--pc,var(--accent))}
+.phase-key{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 16px;font-size:.82rem;color:var(--muted)}
+.phase-key .chip{margin-left:0}
+
+/* collapsible deep dives */
+details.more{border:1px solid var(--line);border-radius:var(--radius);margin:0 0 18px;background:var(--panel)}
+details.more > summary{cursor:pointer;padding:10px 14px;font-weight:600;list-style:none}
+details.more > summary::-webkit-details-marker{display:none}
+details.more > summary::before{content:"▸";display:inline-block;width:1.1em;color:var(--muted);transition:transform .15s}
+details.more[open] > summary::before{transform:rotate(90deg)}
+details.more > .body{padding:2px 16px 14px}
+details.more > .body > :last-child{margin-bottom:0}
+
+/* figures (diagrams, charts) */
+figure.fig{margin:4px 0 24px;padding:14px 14px 10px;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel)}
+figure.fig svg{max-width:100%;height:auto;display:block;margin:4px auto}
+figure.fig svg text{font-family:var(--sans)}
+figure.fig .grid2,figure.fig .grid3{margin-bottom:8px}
+main{counter-reset:fig tbl}
+figure.fig > figcaption{font-size:.86rem;color:var(--muted);margin-top:8px}
+figure.fig > figcaption::before{counter-increment:fig;content:var(--fig-label) " " counter(fig) " — ";font-weight:700;color:var(--ink)}
+.tbl > .cap{font-size:.86rem;color:var(--muted);margin:0 0 6px}
+.tbl > .cap::before{counter-increment:tbl;content:var(--tbl-label) " " counter(tbl) " — ";font-weight:700;color:var(--ink)}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:.82rem;color:var(--muted);margin:4px 0 0}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+figure.fig img{max-width:100%;height:auto;display:block}
+
+/* zoom viewer: click a figure image or diagram to open it full screen */
+.zoomable{cursor:zoom-in;transition:outline-color .15s}
+.zoomable:hover,.zoomable:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:6px}
+.zoom-ov{position:fixed;inset:0;z-index:100;display:none;overflow:hidden;touch-action:none;cursor:grab;
+  background:color-mix(in srgb,var(--bg) 94%,transparent);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.zoom-ov.on{display:block}
+.zoom-ov.drag{cursor:grabbing}
+.zoom-ov .zoom-item{position:absolute;left:0;top:0;max-width:none!important;max-height:none!important;margin:0!important;
+  border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);box-shadow:0 10px 40px rgb(0 0 0 / .3);
+  user-select:none;-webkit-user-drag:none;cursor:inherit}
+.zoom-bar{position:absolute;top:12px;right:12px;z-index:1;display:flex;align-items:center;gap:6px;padding:4px;
+  border:1px solid var(--line);border-radius:var(--radius);background:var(--panel)}
+.zoom-bar .iconbtn{min-width:34px;height:34px;font-size:.95rem}
+.zoom-pct{min-width:52px;text-align:center;font-size:.82rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.zoom-cap{position:absolute;left:50%;bottom:12px;z-index:1;transform:translateX(-50%);width:max-content;max-width:min(920px,calc(100vw - 32px));
+  padding:8px 14px;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);color:var(--muted);font-size:.85rem;
+  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.zoom-cap:empty{display:none}
+.zoom-cap b{color:var(--ink)}
+
+/* citations */
+a.cite{display:inline-block;font:600 .66rem/1 var(--mono);vertical-align:2px;padding:3px 5px;margin-left:3px;border-radius:5px;
+  background:var(--panel-2);color:var(--muted);text-decoration:none;white-space:nowrap}
+a.cite + a.cite{margin-left:2px}
+a.cite:hover{color:var(--accent)}
+a.cite.broken{background:var(--bad-soft);color:var(--bad)}
+a.cite:target{outline:2px solid var(--accent)}
+ol.sources{list-style:none;padding:0;margin:0 0 14px}
+ol.sources > li{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px 16px;margin:0 0 10px}
+ol.sources > li:target{outline:2px solid var(--accent)}
+.src-head{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline}
+.src-id{font:700 .8rem var(--mono);color:var(--accent);font-variant-numeric:tabular-nums}
+.src-title{font-weight:600}
+.src-type{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:1px 7px;border-radius:999px;
+  background:var(--panel-2);color:var(--muted)}
+.src-loc{font-size:.84rem;margin:6px 0;color:var(--muted);overflow-wrap:anywhere}
+blockquote.src-quote{margin:8px 0;padding:6px 12px;border-left:3px solid var(--line);background:var(--bg);color:var(--ink);font-size:.88rem;border-radius:0 6px 6px 0}
+blockquote.src-quote .tr{display:block;color:var(--muted);margin-top:4px}
+.src-note{font-size:.84rem;color:var(--muted)}
+.backrefs{font-size:.8rem;color:var(--muted);margin-top:4px}
+.backrefs a{margin-right:6px}
+
+/* search hits */
+mark.hit{background:var(--hit);color:inherit;border-radius:2px;padding:0 1px}
+mark.hit.cur{background:var(--hit-cur);outline:2px solid var(--warn)}
+
+footer.doc-foot{color:var(--muted);font-size:.8rem;margin-top:56px;padding-top:14px;border-top:1px solid var(--line)}
+@media (max-width:700px){
+  body{font-size:16px}
+  .wrap{padding:24px 16px 80px}
+  .grid2,.grid3{grid-template-columns:1fr}
+  .doc-head h1{font-size:1.55rem}
+  ol.steps > li{margin-left:46px} ol.steps > li::before{left:-46px}
+}
+@media print{
+  .topbar,.sidebar,.backdrop,.progress,.zoom-ov{display:none!important}
+  .page{margin:0!important}
+  figure.fig,ol.steps > li,.callout{break-inside:avoid-page}
+  details.more{border:none} details.more > .body{display:block}
+  mark.hit{background:none}
+}
+</style>
+</head>
+<body>
+<div class="progress" id="haise-progress"></div>
+
+<header class="topbar no-search">
+  <button class="iconbtn" id="haise-nav-btn" type="button" aria-controls="haise-sidebar">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+  </button>
+  <div class="doc-title">Kaneki desktop app: build plan</div>
+  <div class="search" role="search">
+    <div class="box">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <input id="haise-q" type="search" autocomplete="off" spellcheck="false">
+    </div>
+    <span class="count" id="haise-count" aria-live="polite"></span>
+    <button class="iconbtn" id="haise-prev" type="button">▲</button>
+    <button class="iconbtn" id="haise-next" type="button">▼</button>
+  </div>
+  <button class="iconbtn" id="haise-reload" type="button">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg>
+  </button>
+  <button class="iconbtn" id="haise-theme" type="button"></button>
+</header>
+
+<aside class="sidebar no-search" id="haise-sidebar">
+  <h2 id="haise-toc-label"></h2>
+  <nav class="toc" id="haise-toc"></nav>
+</aside>
+<div class="backdrop" id="haise-backdrop"></div>
+
+<div class="page">
+<main id="content" class="wrap">
+<!-- ===================== DOCUMENT CONTENT START ===================== -->
+<header class="doc-head">
+  <p class="eyebrow">Plan · kaneki-harness-app</p>
+  <h1>Kaneki desktop app: build plan</h1>
+  <p class="sub">What gets built, in which order, who owns which piece, and the decisions behind it: eight part plans written by sub-agents, reviewed against the code and merged into one.</p>
+  <ul class="meta">
+    <li><b>Updated</b>2026-11-18</li>
+    <li><b>Status</b>decided (12 of 13 decisions accepted)</li>
+    <li><b>Owner</b>nnminh-sam</li>
+    <li><b>Scope</b><code>kaneki-harness</code> @ <code>8dcc35b</code> + <code>kaneki-harness-app/</code></li>
+    <li><b>Source of truth</b><code>doc/build-plan/00-build-plan.md</code></li>
+  </ul>
+</header>
+
+<!-- The outline is chosen per document (references/writing-guide.md §1).
+     One top-level <section id="..."><h2>…</h2>…</section> per part, in reading order.
+     If the doc cites anything, the last section is <section id="sources"> with <ol class="sources">. -->
+<section id="answer">
+  <h2>The plan in one screen</h2>
+  <div class="verdict">
+    <span class="label">In short</span>
+    <p>Build the app in <strong>eight parts across milestones M0–M5</strong>, about <strong>69 working days</strong> for one person, of which about 37 reach M2, the point where gates are decided in the app instead of in Zed panes. <strong>The Python harness computes everything; the native Host only carries data; the UI only renders.</strong> Three tracks can start today with nothing to install. The Host stack is decided: <strong>Go + Wails only</strong> (owner, 2026-11-18). All twelve recommended decisions were accepted on 2026-11-18. <a class="cite" href="#src-1">S1</a><a class="cite" href="#src-2">S2</a></p>
+  </div>
+  <div class="stats">
+    <div class="stat"><span class="v">8</span><span class="k">part plans (P1–P8)</span></div>
+    <div class="stat"><span class="v">~37 d</span><span class="k">to M2: watch every ticket, decide gates</span></div>
+    <div class="stat"><span class="v">~69 d</span><span class="k">to M5: sessions, cost, installer</span></div>
+    <div class="stat ok"><span class="v">12 / 13</span><span class="k">decisions accepted (macOS open)</span></div>
+    <div class="stat bad"><span class="v">~29×</span><span class="k">real tokens vs the harness count</span></div>
+  </div>
+  <ol class="findings">
+    <li><strong>Logic lives in the harness.</strong> Four new read-only <code>sdlc</code> commands (<code>contract</code>, <code>ticket-detail</code>, <code>gate-request</code>, <code>cost</code>) replace the logic three parts wanted to copy into the Go Host. <a class="cite" href="#src-3">S3</a></li>
+    <li><strong>Start now, no installs:</strong> the harness commands (P1), the UI against fixture files in Edge (P4) and the cost engine (P7). P2 (Go + Wails setup and spike) waits for your install approval. <a class="cite" href="#src-2">S2</a></li>
+    <li><strong>The mock's "reject and reopen" does nothing.</strong> <code>gate --status rejected</code> only sets the verdict and drops <code>--reopen</code>; the real runs needed a second <code>invalidate</code> command. Decision: make it one atomic harness command. <a class="cite" href="#src-4">S4</a><a class="cite" href="#src-5">S5</a></li>
+    <li><strong>A spawned session could ship by itself.</strong> The git guard checks shell <code>git</code> only, not <code>sdlc ship</code>; the app adds its own deny layer. <a class="cite" href="#src-6">S6</a><a class="cite" href="#src-7">S7</a></li>
+    <li><strong>Real cost is about 29× the harness count</strong> on both test tickets, measured from the Claude Code session logs. <a class="cite" href="#src-8">S8</a><a class="cite" href="#src-9">S9</a></li>
+    <li><strong>macOS is possible</strong> with Wails, but the plan is Windows-first in about ten places; recommended as a later milestone M6. <span class="tag open">OPEN</span></li>
+  </ol>
+</section>
+
+<section id="architecture">
+  <h2>How the app is built: UI, Host, harness</h2>
+  <p>Three layers, each with one job. The UI draws what it is given. The Host (a small Go program built with Wails) runs commands, watches files and starts Claude sessions. The harness, the Python CLI that already exists, is the only thing that computes ticket state and the only thing that writes ticket files. <a class="cite" href="#src-10">S10</a></p>
+  <figure class="fig">
+  <svg viewBox="0 0 900 380" role="img" aria-label="Three layers: UI, Host, harness, plus Claude sessions and session logs">
+    <defs><marker id="arr-arch" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker></defs>
+    <g font-size="13">
+      <rect x="40" y="20" width="560" height="84" rx="12" fill="var(--p1-soft)" stroke="var(--p1)"/>
+      <text x="320" y="48" text-anchor="middle" font-weight="700" fill="var(--ink)">UI · WebView2 · HTML/CSS + Preact/htm</text>
+      <text x="320" y="70" text-anchor="middle" fill="var(--muted)">design system .k-* classes · renders, never derives</text>
+      <text x="320" y="91" text-anchor="middle" font-size="12" fill="var(--muted)">only ui/host-bridge.js knows the stack</text>
+
+      <line x1="320" y1="106" x2="320" y2="146" stroke="var(--muted)" stroke-width="2" marker-start="url(#arr-arch)" marker-end="url(#arr-arch)"/>
+      <text x="332" y="131" font-size="12" fill="var(--muted)">invoke(name, args) · on(event, payload)</text>
+
+      <rect x="40" y="148" width="560" height="84" rx="12" fill="var(--p2-soft)" stroke="var(--p2)"/>
+      <text x="320" y="176" text-anchor="middle" font-weight="700" fill="var(--ink)">Host · Go + Wails</text>
+      <text x="320" y="198" text-anchor="middle" fill="var(--muted)">allow-listed runner · file watcher · cache · ConPTY</text>
+      <text x="320" y="219" text-anchor="middle" font-size="12" fill="var(--muted)">thin: transports JSON, holds no ticket rules</text>
+
+      <line x1="320" y1="234" x2="320" y2="274" stroke="var(--muted)" stroke-width="2" marker-start="url(#arr-arch)" marker-end="url(#arr-arch)"/>
+      <text x="332" y="259" font-size="12" fill="var(--muted)">argv (no shell) · watch + tail decisions.jsonl</text>
+
+      <rect x="40" y="276" width="560" height="84" rx="12" fill="var(--p3-soft)" stroke="var(--p3)"/>
+      <text x="320" y="304" text-anchor="middle" font-weight="700" fill="var(--ink)">Harness · Python sdlc CLI (stdlib, 3.9+)</text>
+      <text x="320" y="326" text-anchor="middle" fill="var(--muted)">computes waitingOn, gate requests, stale previews, cost</text>
+      <text x="320" y="347" text-anchor="middle" font-size="12" fill="var(--muted)">only writer of .sdlc/tickets/*</text>
+
+      <rect x="660" y="148" width="210" height="84" rx="12" fill="var(--panel)" stroke="var(--line)"/>
+      <text x="765" y="180" text-anchor="middle" font-weight="700" fill="var(--ink)">claude sessions</text>
+      <text x="765" y="202" text-anchor="middle" font-size="12" fill="var(--muted)">one per node, run /kaneki-flow</text>
+      <line x1="602" y1="190" x2="656" y2="190" stroke="var(--muted)" stroke-width="2" marker-end="url(#arr-arch)"/>
+      <text x="629" y="182" text-anchor="middle" font-size="12" fill="var(--muted)">spawn</text>
+      <line x1="765" y1="234" x2="602" y2="300" stroke="var(--muted)" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arr-arch)"/>
+      <text x="715" y="282" text-anchor="middle" font-size="12" fill="var(--muted)">sdlc record / gate</text>
+
+      <rect x="660" y="20" width="210" height="84" rx="12" fill="var(--panel)" stroke="var(--line)"/>
+      <text x="765" y="52" text-anchor="middle" font-weight="700" fill="var(--ink)">session logs</text>
+      <text x="765" y="74" text-anchor="middle" font-size="12" fill="var(--muted)">~/.claude/projects/**.jsonl</text>
+      <text x="765" y="92" text-anchor="middle" font-size="12" fill="var(--muted)">read by sdlc cost</text>
+      <line x1="765" y1="146" x2="765" y2="106" stroke="var(--muted)" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arr-arch)"/>
+    </g>
+  </svg>
+  <figcaption>Arrows between layers are the only paths data takes. Sessions write ticket state through the harness, never directly; the app reads their logs only to count cost. <a class="cite" href="#src-2">S2</a></figcaption>
+  </figure>
+
+  <div class="callout ok"><span class="kind">The rule in one sentence</span>If a value needs ticket rules to compute (who it is waiting on, which nodes go stale, whether a gate may close), the harness computes it; the Host and UI only pass it on.</div>
+  <p>That rule settled most conflicts between the part plans. P5 wanted the Host to work out "waiting on user" and the stale preview, P3 refreshed through <code>status-of --path</code>, P7 debated a native log parser. All three now call a harness command instead. <a class="cite" href="#src-3">S3</a></p>
+
+  <div class="tbl">
+    <p class="cap">Harness changes the app depends on (all in <code>kaneki-harness</code>)</p>
+    <table>
+      <tr><th>Command or change</th><th>Gives the app</th><th>Kind</th><th>Part</th></tr>
+      <tr><td><code>sdlc contract</code></td><td><code>contractVersion</code>, harness version, command list; checked at start-up</td><td>read</td><td>P1</td></tr>
+      <tr><td><code>sdlc tickets</code> (extended)</td><td><code>title</code>, <code>waitingOn</code> / <code>waitingNode</code> / <code>waitingReason</code>, per-node generation and boundary</td><td>read</td><td>P1</td></tr>
+      <tr><td><code>sdlc ticket-detail</code></td><td>node cards, unit records, loop-backs, trace</td><td>read</td><td>P1</td></tr>
+      <tr><td><code>sdlc gate-request</code></td><td>everything the gate dialog shows: readiness dry run, evidence, choices with exact argv and stale preview</td><td>read</td><td>P1</td></tr>
+      <tr><td><code>sdlc cost</code></td><td>real tokens and cost from session logs, per ticket / node / model / day</td><td>read</td><td>P7</td></tr>
+      <tr><td>N4 fix</td><td><code>status --accept-current-state</code> takes the ticket lock</td><td>write fix</td><td>P1</td></tr>
+      <tr><td>Atomic reject (new H10)</td><td><code>gate --status rejected --reopen X</code> also invalidates X</td><td>write change</td><td>P1</td></tr>
+    </table>
+  </div>
+  <p>Each harness call costs about half a second of Python start-up. The Host hides it with a cache: one call per changed ticket when a file changes, none when the UI re-renders. <a class="cite" href="#src-11">S11</a></p>
+</section>
+
+<section id="order">
+  <h2>What gets built when</h2>
+  <p>Data contract first, then the UI and the Host in parallel, then one milestone per feature. The UI can be built against fixture files before the Host exists, so the stack choice does not hold it up.</p>
+  <figure class="fig">
+  <svg viewBox="0 0 900 430" role="img" aria-label="Timeline of the eight parts over about fourteen weeks">
+    <g font-size="12" fill="var(--ink)">
+      <!-- axis: x = 180 + 50 * week -->
+      <line x1="180" y1="30" x2="880" y2="30" stroke="var(--line)"/>
+      <text x="180" y="22" text-anchor="middle" fill="var(--muted)">wk 0</text>
+      <text x="280" y="22" text-anchor="middle" fill="var(--muted)">2</text>
+      <text x="380" y="22" text-anchor="middle" fill="var(--muted)">4</text>
+      <text x="480" y="22" text-anchor="middle" fill="var(--muted)">6</text>
+      <text x="580" y="22" text-anchor="middle" fill="var(--muted)">8</text>
+      <text x="680" y="22" text-anchor="middle" fill="var(--muted)">10</text>
+      <text x="780" y="22" text-anchor="middle" fill="var(--muted)">12</text>
+      <text x="880" y="22" text-anchor="middle" fill="var(--muted)">14</text>
+
+      <text x="170" y="58" text-anchor="end">P1 contract + harness</text>
+      <rect x="180" y="44" width="125" height="20" rx="4" fill="var(--c1)"/>
+      <text x="170" y="94" text-anchor="end">P4 UI (fixtures → live)</text>
+      <rect x="205" y="80" width="200" height="20" rx="4" fill="var(--c2)"/>
+      <text x="170" y="130" text-anchor="end">P2 Wails setup + scaffold</text>
+      <rect x="205" y="116" width="100" height="20" rx="4" fill="var(--c4)"/>
+      <rect x="307" y="116" width="25" height="20" rx="4" fill="var(--c4)" opacity="0.6"/>
+      <text x="170" y="166" text-anchor="end">P3 Host core</text>
+      <rect x="330" y="152" width="150" height="20" rx="4" fill="var(--c5)"/>
+      <text x="170" y="202" text-anchor="end">P5 gate + writes</text>
+      <rect x="480" y="188" width="100" height="20" rx="4" fill="var(--c3)"/>
+      <text x="170" y="238" text-anchor="end">P6 sessions</text>
+      <rect x="230" y="224" width="25" height="20" rx="4" fill="var(--warn)"/>
+      <text x="260" y="239" font-size="11" fill="var(--muted)">S0a spike (you)</text>
+      <rect x="580" y="224" width="150" height="20" rx="4" fill="var(--warn)"/>
+      <text x="170" y="274" text-anchor="end">P7 cost</text>
+      <rect x="255" y="260" width="100" height="20" rx="4" fill="var(--c1)" opacity="0.55"/>
+      <text x="360" y="275" font-size="11" fill="var(--muted)">cost.py (Python)</text>
+      <rect x="730" y="260" width="50" height="20" rx="4" fill="var(--c1)"/>
+      <text x="170" y="310" text-anchor="end">P8 quality → setup</text>
+      <rect x="180" y="300" width="600" height="6" rx="3" fill="var(--line)"/>
+      <rect x="780" y="296" width="100" height="20" rx="4" fill="var(--c2)" opacity="0.8"/>
+
+      <!-- milestones -->
+      <g fill="var(--accent)">
+        <line x1="480" y1="34" x2="480" y2="340" stroke="var(--accent)" stroke-dasharray="4 4"/>
+        <text x="480" y="358" text-anchor="middle" font-weight="700">M1</text>
+        <line x1="580" y1="34" x2="580" y2="340" stroke="var(--accent)" stroke-dasharray="4 4"/>
+        <text x="580" y="358" text-anchor="middle" font-weight="700">M2</text>
+        <line x1="730" y1="34" x2="730" y2="340" stroke="var(--accent)" stroke-dasharray="4 4"/>
+        <text x="730" y="358" text-anchor="middle" font-weight="700">M3</text>
+        <line x1="780" y1="34" x2="780" y2="340" stroke="var(--accent)" stroke-dasharray="4 4"/>
+        <text x="780" y="376" text-anchor="middle" font-weight="700">M4</text>
+        <line x1="880" y1="34" x2="880" y2="340" stroke="var(--accent)" stroke-dasharray="4 4"/>
+        <text x="880" y="358" text-anchor="middle" font-weight="700">M5</text>
+      </g>
+      <text x="180" y="410" fill="var(--muted)">M1 parity with sdlc web · M2 gates decided in the app · M3 sessions run node by node · M4 real cost · M5 installer</text>
+    </g>
+  </svg>
+  <figcaption>Week positions are a schedule estimate for one person at the realistic effort (~69 working days ≈ 14 weeks), not measured. Light bars are work that can start before its milestone. <span class="tag infer">INFERRED</span> <a class="cite" href="#src-2">S2</a></figcaption>
+  </figure>
+
+  <ol class="steps">
+    <li class="p1"><strong>Now, no installs</strong> <span class="chip p1">P1 · P4 · P7</span><p>Harness commands with tests, schemas and fixtures; UI shell running on fixtures in Edge (<code>?source=fixture</code>); <code>cost.py</code>; and you run the one hook-capture session (P6-S0a).</p></li>
+    <li class="p2"><strong>Wails setup</strong> <span class="chip p2">P2</span><p>Install Go + Wails on <code>D:\toolchains</code>, build the small spike slice, measure it, record D10 (closed: Go/Wails), scaffold the app.</p></li>
+    <li class="p3"><strong>M1 · read-only app</strong> <span class="chip p3">P3 + P4</span><p>Host core wired to the UI. Done when <code>parity.mjs</code> shows zero differences from <code>sdlc web</code> for both real tickets.</p></li>
+    <li class="p4"><strong>M2 · gates in the app</strong> <span class="chip p4">P5</span><p>Gate dialog, command preview and confirm, invalidate, lane, toasts. Proven on a throwaway ticket, never on the real ones.</p></li>
+    <li class="p5"><strong>M3 · M4 · M5</strong> <span class="chip p5">P6 · P7 · P8</span><p>Sessions run node by node under a policy; the cost tab; first run, new ticket, worktree cleanup, installer, CI.</p></li>
+  </ol>
+
+  <div class="tbl">
+    <p class="cap">Effort: the sum of each part's task ceilings (S ≤ 2 h, M ≤ 1 day, L ≤ 3 days) <a class="cite" href="#src-2">S2</a></p>
+    <table>
+      <tr><th>Scope</th><th class="num">Ceiling</th><th class="num">Realistic (~60 %)</th></tr>
+      <tr><td>M0–M2 (P1–P5): watch every ticket, decide gates</td><td class="num">~61 days</td><td class="num">~37 days</td></tr>
+      <tr><td>M3–M5 (P6–P8): sessions, cost, setup, installer</td><td class="num">~54 days</td><td class="num">~32 days</td></tr>
+      <tr class="hl"><td>Total (117 tasks: 43 S · 59 M · 15 L)</td><td class="num">~115 days</td><td class="num">~69 days</td></tr>
+    </table>
+  </div>
+  <p>The 60 % factor is a planning judgement, not a measurement: the ceilings count some shared work twice (fixtures, discovery, process handling), which the review merged. <span class="tag infer">INFERRED</span></p>
+</section>
+
+<section id="parts">
+  <h2>The eight parts and what each delivers</h2>
+  <p>Each part was planned by a Sonnet sub-agent from a written spec, then reviewed here. The part plans keep the detail (design, tasks, tests, risks); where they disagree with this page, this page wins.</p>
+  <div class="tbl">
+    <p class="cap">Parts, milestone, deliverable and size (task counts S / M / L, ceiling in working days)</p>
+    <table>
+      <tr><th>Part</th><th>Milestone</th><th>Delivers</th><th class="num">Tasks</th><th class="num">Ceiling</th></tr>
+      <tr><td><a href="build-plan/parts/P1-data-contract.plan.md">P1 Data contract</a></td><td>M0 (first)</td><td>harness commands, JSON schemas, IPC catalogue <code>ipc.json</code>, generated fixtures <a class="cite" href="#src-3">S3</a></td><td class="num">9 / 2 / 3</td><td class="num">13</td></tr>
+      <tr><td><a href="build-plan/parts/P2-stack-spike-scaffold.plan.md">P2 Wails setup</a></td><td>M0</td><td>Go + Wails installed, spike slice measured on this machine, decision record, scaffold <a class="cite" href="#src-12">S12</a></td><td class="num">7 / 2 / 0</td><td class="num">4</td></tr>
+      <tr><td><a href="build-plan/parts/P3-host-core.plan.md">P3 Host core</a></td><td>M1</td><td>discovery, allow-listed runner, watcher and tail, cache, error envelope <a class="cite" href="#src-11">S11</a></td><td class="num">3 / 8 / 2</td><td class="num">15</td></tr>
+      <tr><td><a href="build-plan/parts/P4-ui-shell-readonly.plan.md">P4 UI shell</a></td><td>M1</td><td>Preact + htm UI, fixture and host data sources, seven read-only screens, parity script <a class="cite" href="#src-13">S13</a></td><td class="num">6 / 13 / 0</td><td class="num">15</td></tr>
+      <tr><td><a href="build-plan/parts/P5-gate-and-writes.plan.md">P5 Gate + writes</a></td><td>M2</td><td>gate dialog, command preview and confirm, invalidate, lane, toasts <a class="cite" href="#src-14">S14</a></td><td class="num">3 / 8 / 2</td><td class="num">15</td></tr>
+      <tr><td><a href="build-plan/parts/P6-session-supervision.plan.md">P6 Sessions</a></td><td>M3</td><td>spawn <code>claude</code> in an embedded terminal, hooks to a file drop, run policy, safety layer <a class="cite" href="#src-7">S7</a></td><td class="num">5 / 7 / 3</td><td class="num">17</td></tr>
+      <tr><td><a href="build-plan/parts/P7-cost-panel.plan.md">P7 Real cost</a></td><td>M4</td><td><code>sdlc cost</code>, attribution, prices, waste flags F1–F4, compare runs <a class="cite" href="#src-8">S8</a></td><td class="num">6 / 7 / 1</td><td class="num">12</td></tr>
+      <tr><td><a href="build-plan/parts/P8-setup-packaging-quality.plan.md">P8 Setup + quality</a></td><td>M5 + all</td><td>first run, new ticket, worktrees, installer, test pyramid, CI <a class="cite" href="#src-15">S15</a></td><td class="num">4 / 12 / 4</td><td class="num">25</td></tr>
+    </table>
+  </div>
+  <div class="callout warn"><span class="kind">Riskiest part</span><strong>P6, sessions.</strong> It depends on how Claude Code hooks, permission prompts and questions behave inside a terminal the app owns. Three small spikes (S0a–S0c) run before any M3 code, and M0–M2 deliver value without P6. <a class="cite" href="#src-7">S7</a></div>
+</section>
+
+<section id="conventions">
+  <h2>Shared rules every part follows</h2>
+  <p>The parts were planned in parallel, so names, folders and tools drifted. These are the fixed choices.</p>
+  <div class="tbl">
+    <p class="cap">Cross-part conventions <a class="cite" href="#src-2">S2</a></p>
+    <table>
+      <tr><th>Topic</th><th>Decision</th><th>Replaces</th></tr>
+      <tr><td>IPC names</td><td>P1's catalogue: <code>snake_case</code> calls, <code>kebab-case</code> events, camelCase JSON; a test fails on any name missing from <code>contracts/ipc.json</code></td><td>four naming styles across P2, P3, P5, P8</td></tr>
+      <tr><td>Writes</td><td>always <code>preview_command</code> → <code>run_command{previewId}</code>; the Host rebuilds argv from the allowlist and refuses if the ticket changed (<code>ticketFingerprint</code>)</td><td>P5's <code>write.preview/run</code> and <code>stateToken</code></td></tr>
+      <tr><td>Stack seam</td><td><code>ui/host-bridge.js</code> is the only stack-specific UI file</td><td><code>ui/src/host.js</code></td></tr>
+      <tr><td>UI tech</td><td>Preact 10 + htm, vendored, plain ES modules, no bundler <a class="cite" href="#src-13">S13</a></td><td>–</td></tr>
+      <tr><td>Design system</td><td><code>scripts/sync-ds.mjs</code> copies tokens, components and icons into <code>ui/ds/</code> after <code>build_tokens.py --check</code>; new classes go into the gallery first</td><td>links to <code>../design-system/</code> (break in a release build)</td></tr>
+      <tr><td>Tests</td><td>Python <code>unittest</code>; <code>go test</code>; <code>node:test</code> + <code>linkedom</code> + <code>ajv</code>; headless Edge screenshots; a few nightly end-to-end runs</td><td>Vitest + jsdom</td></tr>
+      <tr><td>App folders</td><td>config <code>%APPDATA%\kaneki-harness-app\config.json</code>; runtime data <code>%LOCALAPPDATA%\kaneki-harness-app\</code> (<code>logs</code>, <code>runs</code>, <code>policy</code>, <code>cost-cache</code>); <strong>nothing written inside a workspace or ticket folder</strong></td><td>four folder names; a ledger inside the ticket folder</td></tr>
+      <tr><td>Python</td><td>3.9 or newer, auto-detected (<code>py -3</code> → <code>python</code> → <code>python3</code>), overridable <a class="cite" href="#src-16">S16</a></td><td>P3's "3.10+"</td></tr>
+      <tr><td>Session identity</td><td><code>claude -n kaneki:&lt;ticket&gt;:&lt;node&gt;:&lt;runId&gt; --session-id &lt;uuid&gt;</code>, both recorded in <code>runs/&lt;runId&gt;/run.json</code></td><td>two naming schemes</td></tr>
+      <tr><td>Fixtures</td><td>one generator, P1's <code>make_synthetic.py</code>, drives real <code>sdlc</code> in a temp workspace</td><td>three separate fixture builders</td></tr>
+    </table>
+  </div>
+
+  <h3 id="allowlist">What the app may run</h3>
+  <p>The Host refuses any command not on this list before starting a process, and never builds a shell string. <a class="cite" href="#src-11">S11</a></p>
+  <div class="tbl">
+    <p class="cap">Host allowlist, v1</p>
+    <table>
+      <tr><th>Class</th><th>Commands</th></tr>
+      <tr><td>read</td><td><code>contract</code>, <code>tickets</code>, <code>ticket-detail</code>, <code>gate-request</code>, <code>status</code>, <code>plan</code>, <code>validate</code>, <code>digest</code>, <code>status-of</code>, <code>cost</code>, <code>lang</code> (no <code>--set</code>), <code>receipts</code> (no <code>--reissue</code>)</td></tr>
+      <tr><td>write, M2</td><td><code>gate</code> (always <code>--actor user</code>), <code>invalidate</code> (reason required), <code>lane --set full</code></td></tr>
+      <tr><td>write, M5</td><td><code>init</code> (never <code>--force</code>), <code>onboard-scan</code>, <code>onboard-verify</code> (no tests), <code>onboard-write</code> (first run only)</td></tr>
+      <tr class="hl"><td>never</td><td><code>ship</code>, <code>ship-request</code>, <code>review-fetch</code>, <code>git</code>, <code>install</code>, <code>zed-setup</code>, <code>web</code>, <code>record</code>, <code>handback</code>, <code>receipts --reissue</code>, <code>status --accept-current-state</code></td></tr>
+      <tr><td>git (separate list)</td><td><code>worktree list --porcelain</code>, <code>worktree remove &lt;path&gt;</code> (no <code>--force</code>), <code>status --porcelain</code>, <code>rev-parse</code>, <code>log</code>; no <code>branch</code>, <code>push</code>, <code>commit</code>, <code>reset</code>, <code>clean</code>, <code>prune</code></td></tr>
+    </table>
+  </div>
+  <p>Note: <code>install</code>, <code>onboard-write</code>, <code>zed-setup</code> and <code>web</code> sit in the harness's <code>READ_ONLY</code> set (so they take no ticket lock) even though they write files or open a port. That is why they are listed explicitly rather than allowed by class. <a class="cite" href="#src-17">S17</a></p>
+</section>
+
+<section id="review">
+  <h2>What the review checked against the code</h2>
+  <p>Every claim a part plan built on was re-opened in the code or data before it went into the plan. Most held; one was wrong.</p>
+  <div class="tbl">
+    <p class="cap">Claims checked</p>
+    <table>
+      <tr><th>Claim</th><th>Result</th></tr>
+      <tr><td><code>gate --status rejected --reopen X</code> drops <code>--reopen</code>, so the mock's reject stales nothing <a class="cite" href="#src-4">S4</a></td><td class="good">✓ confirmed</td></tr>
+      <tr><td>Real rejects took two commands: <code>gate rejected</code>, then <code>invalidate --reason</code> one second later <a class="cite" href="#src-5">S5</a></td><td class="good">✓ confirmed</td></tr>
+      <tr><td>The git guard does not stop <code>sdlc ship-request</code> + <code>ship</code> from inside a session <a class="cite" href="#src-6">S6</a></td><td class="good">✓ confirmed: the app adds a deny hook</td></tr>
+      <tr><td>No harness field says "waiting on you"; only the <code>next</code> sentence does <a class="cite" href="#src-18">S18</a></td><td class="good">✓ confirmed: P1 adds <code>waitingOn</code></td></tr>
+      <tr><td>Extra keys on <code>strip</code> are safe for the board page; one test needs updating <a class="cite" href="#src-19">S19</a></td><td class="good">✓ confirmed</td></tr>
+      <tr><td>A harness version exists for the About screen <a class="cite" href="#src-20">S20</a></td><td class="good">✓ <code>__version__ = "0.1.0"</code></td></tr>
+      <tr><td>Both real tickets are finished, so no real data shows a pending gate <a class="cite" href="#src-3">S3</a></td><td class="good">✓ confirmed: M1/M2 use generated fixtures</td></tr>
+      <tr><td>Python 3.10 is required <a class="cite" href="#src-11">S11</a></td><td class="badv">✗ wrong: 3.9 works <a class="cite" href="#src-16">S16</a></td></tr>
+      <tr><td>D: has 14.4 GB free, C: 9.9 GB <a class="cite" href="#src-12">S12</a></td><td>reported; Go + Wails (about 0.5 GB) fits on D:</td></tr>
+    </table>
+  </div>
+
+  <h3 id="cost-gap">Real cost against the harness count</h3>
+  <p>The harness counts only what agents report about themselves. The session logs also contain the driver session, retries and every cache re-read, so the real number is about 29 times larger on both tickets. The design plan's "~1.4M vs ~20M+" figure was an early snapshot and is out of date. <a class="cite" href="#src-8">S8</a><a class="cite" href="#src-9">S9</a><a class="cite" href="#src-10">S10</a></p>
+  <figure class="fig">
+  <svg viewBox="0 0 900 220" role="img" aria-label="Tokens: real from session logs vs harness count, for TODO-1 and TODO-1-2">
+    <g font-size="13" fill="var(--ink)">
+      <!-- plot x=220..820 (600 wide); max 60M -->
+      <text x="210" y="44" text-anchor="end">TODO-1 · real</text>
+      <rect x="220" y="28" width="509" height="24" rx="4" fill="var(--c1)"/>
+      <text x="736" y="45" font-weight="600">50.86M</text>
+      <text x="210" y="80" text-anchor="end">TODO-1 · harness</text>
+      <rect x="220" y="64" width="18" height="24" rx="4" fill="var(--c2)"/>
+      <text x="245" y="81" font-weight="600">1.76M</text>
+      <text x="210" y="136" text-anchor="end">TODO-1-2 · real (net)</text>
+      <rect x="220" y="120" width="595" height="24" rx="4" fill="var(--c1)"/>
+      <text x="810" y="160" text-anchor="end" font-weight="600">59.45M</text>
+      <text x="210" y="190" text-anchor="end">TODO-1-2 · harness</text>
+      <rect x="220" y="174" width="21" height="24" rx="4" fill="var(--c2)"/>
+      <text x="248" y="191" font-weight="600">2.07M</text>
+    </g>
+  </svg>
+  <div class="legend"><span><i style="background:var(--c1)"></i>real, deduplicated by message id, subagents included</span><span><i style="background:var(--c2)"></i>harness <code>token-usage.md</code> total</span></div>
+  <figcaption>About 29× on both runs; real TODO-1-2 excludes the leftover context of the earlier session ("net"). Measured read-only on 2026-11-18; TODO-1 matches the earlier comparison report exactly, TODO-1-2 within 0.3 %. <a class="cite" href="#src-8">S8</a><a class="cite" href="#src-9">S9</a></figcaption>
+  </figure>
+
+  <details class="more">
+    <summary>Corrections applied to each part plan</summary>
+    <div class="body">
+    <div class="tbl"><table>
+      <tr><th>Part</th><th>Correction</th></tr>
+      <tr><td>P2</td><td>Commit the decision record only when asked; <code>measure.ps1</code> needs <code>Sort-Object -Unique</code> (not <code>Get-Unique</code> on unsorted ids); spike IPC names are spike-only; seam file is <code>ui/host-bridge.js</code>. After D10 the tasks were renumbered: T08 (Telex) became T07, T09 became T08, T10 became T09; T07 (Rust + Tauri slice) and T11 (uninstall the loser) were removed.</td></tr>
+      <tr><td>P3</td><td>Python 3.9+; refresh via <code>sdlc ticket-detail</code>; <code>record</code> off the allowlist; <code>init</code> / <code>onboard-*</code> allowed from M5; process-tree helpers become a shared <code>platform</code> module P6 reuses.</td></tr>
+      <tr><td>P4</td><td>Design system copied by <code>sync-ds.mjs</code>; <code>waitingOn</code> from P1 (the parse-the-sentence fallback is fixture-only and goes before M1); IPC names from P1.</td></tr>
+      <tr><td>P5</td><td>No Host-side <code>waiting()</code> / <code>staleOf()</code> / gate request: use <code>sdlc gate-request</code>; names <code>preview_command</code> / <code>run_command</code>, <code>ticketFingerprint</code>; watcher is P3's; the "NG &gt; 0 on a controller node" heuristic is not adopted; fixtures from P1.</td></tr>
+      <tr><td>P6</td><td>Watcher is P3's; <code>Stop</code>, <code>SessionStart</code>, <code>SessionEnd</code>, <code>PostToolUse</code> are standard hook events (S0a still captures payloads); run data under <code>%LOCALAPPDATA%</code>; emits session states only.</td></tr>
+      <tr><td>P7</td><td>No ledger inside the ticket folder; attribution reads <code>runs/&lt;runId&gt;/run.json</code>; keep the log-format canary; refresh the design plan's cost figure.</td></tr>
+      <tr><td>P8</td><td>Part references fixed (spawn is P6, gaps go to P4, run policy is P6, runner is P3); no Vitest; harness version = <code>__version__</code> + <code>contractVersion</code>; config folder as above.</td></tr>
+    </table></div>
+    </div>
+  </details>
+</section>
+
+<section id="decisions">
+  <h2>Decisions taken</h2>
+  <p>You accepted all twelve recommendations on 2026-11-18. They are recorded here as the reference for the build; each points to the part plan that holds the detail. <a class="cite" href="#src-1">S1</a></p>
+  <div class="tbl">
+    <p class="cap">Decision record</p>
+    <table>
+      <tr><th>#</th><th>Decision</th><th>Needed by</th><th>Status</th></tr>
+      <tr><td>1</td><td>The harness emits the contract: new read-only <code>contract</code>, <code>ticket-detail</code>, <code>gate-request</code> (later <code>cost</code>), extended <code>tickets</code>; fix N4 and N5</td><td>start</td><td class="good">accepted</td></tr>
+      <tr><td>2</td><td>Reject-and-reopen becomes one atomic harness command (no half-applied state)</td><td>start</td><td class="good">accepted</td></tr>
+      <tr><td>3</td><td>Host stack: Go + Wails only (owner, 2026-11-18; no Rust, Tauri or ImGui, no two-stack spike); toolchains under <code>D:\toolchains</code>; memory &lt; 80 MB is a goal, Telex / toasts / cold start &lt; 1 s are hard gates</td><td>start</td><td class="good">decided</td></tr>
+      <tr><td>4</td><td>UI on Preact + htm without a bundler; dev-only <code>linkedom</code> and <code>ajv</code></td><td>start</td><td class="good">accepted</td></tr>
+      <tr><td>5</td><td>Fixtures committed (scrubbed real captures + generated ones, reviewed before commit)</td><td>start</td><td class="good">accepted</td></tr>
+      <tr><td>6</td><td>"Needs you" = harness <code>waitingOn == user</code>; questions the driver asks in chat show as a session state, not a gate</td><td>M2</td><td class="good">accepted</td></tr>
+      <tr><td>7</td><td>Gate defaults: label <code>G0</code> (auto <code>G4</code> at the loop cap), note pre-fills the reason, <code>needs-changes</code> as a secondary action, last 200 decisions with "load older", plain-text inspector</td><td>M2</td><td class="good">accepted</td></tr>
+      <tr><td>8</td><td>Hooks append to <code>runs/&lt;runId&gt;/events.jsonl</code>; task in by brief file, report = the harness trail; run policy in app data with ship / commit / push / branch-delete locked off</td><td>M3</td><td class="good">accepted</td></tr>
+      <tr><td>9</td><td>Interactive sessions in an embedded terminal; the Host passes only your keystrokes; default permission mode <code>acceptEdits</code>, never bypass</td><td>M3</td><td class="good">accepted</td></tr>
+      <tr><td>10</td><td>You run spike S0a (one <code>claude</code> session with a logging hook in a scratch folder)</td><td>M3</td><td class="good">accepted</td></tr>
+      <tr><td>11</td><td>Prices ship empty, you enter them; headline is net; "list-price equivalent"; local day boundary</td><td>M4</td><td class="good">accepted</td></tr>
+      <tr><td>12</td><td>One window per workspace; no signing, no auto-update in v1; onboarding partly in-app; the app may run <code>git worktree remove</code> (clean, delivered tickets, branches always kept); harness checkout required; add a <code>kaneki-harness</code> CI job</td><td>M5</td><td class="good">accepted</td></tr>
+      <tr class="hl"><td>13</td><td>macOS build: Windows first, portable code from day one, Mac as milestone M6 (next section)</td><td>M5 / M6</td><td><span class="tag open">OPEN</span></td></tr>
+    </table>
+  </div>
+</section>
+
+<section id="macos">
+  <h2>Can it be installed on a Mac?</h2>
+  <div class="verdict">
+    <span class="label">Answer</span>
+    <p><strong>Yes, it can be, but not as the plan stands today.</strong> Wails builds macOS apps, and the harness, Claude Code and Zed all run on a Mac. The plan is Windows-first in about ten places, and a Mac build has to be made and signed on a Mac. Recommended: ship Windows first, keep the code portable from the start, add the Mac build as milestone M6. <span class="tag infer">INFERRED</span></p>
+  </div>
+  <p>Why inferred: the framework facts (Wails targets macOS, uses the system WebKit view there, and needs a Mac to build a Mac app) come from knowledge of the frameworks, not from re-reading their current docs. Task P2-T01 checks them before the spike slice. The Windows-specific items below are verified in the part plans. <a class="cite" href="#src-12">S12</a><a class="cite" href="#src-7">S7</a><a class="cite" href="#src-15">S15</a></p>
+
+  <div class="tbl">
+    <p class="cap">Windows-specific pieces in the plan and their Mac counterpart</p>
+    <table>
+      <tr><th>In the plan (Windows)</th><th>On macOS</th><th>Part</th></tr>
+      <tr><td>WebView2 (Chromium engine)</td><td>WKWebView (Safari engine): test the UI and Vietnamese Telex in both</td><td>P2, P4</td></tr>
+      <tr><td>ConPTY for the embedded terminal</td><td>Unix pseudo-terminal (<code>creack/pty</code> in Go)</td><td>P6</td></tr>
+      <tr><td>Job Objects end the whole session tree</td><td>process groups (<code>setpgid</code>, signal the group)</td><td>P3, P6</td></tr>
+      <tr><td><code>CREATE_NO_WINDOW</code> for child processes</td><td>not needed</td><td>P3</td></tr>
+      <tr><td><code>%APPDATA%</code>, <code>%LOCALAPPDATA%</code></td><td><code>~/Library/Application Support/kaneki-harness-app/</code>, <code>~/Library/Logs/</code></td><td>P3, P8</td></tr>
+      <tr><td>Python found via <code>py -3</code></td><td><code>python3</code> (Homebrew or Xcode command-line tools)</td><td>P3, P8</td></tr>
+      <tr><td>Windows toasts</td><td>macOS notifications (tied to the app's bundle id; may not appear from dev builds)</td><td>P5</td></tr>
+      <tr><td>NSIS installer, unsigned</td><td><code>.app</code> inside a <code>.dmg</code>; Gatekeeper blocks unsigned apps until you allow them; proper fix is an Apple Developer ID plus notarization (paid yearly)</td><td>P8</td></tr>
+      <tr><td><code>measure.ps1</code></td><td>a shell or Node version</td><td>P2</td></tr>
+      <tr><td>CI on <code>windows-latest</code></td><td>add a <code>macos-latest</code> build job (unsigned) once M1 runs</td><td>P8</td></tr>
+    </table>
+  </div>
+
+  <div class="grid2">
+    <div class="card ok"><h4>Do now (cheap)</h4>Everything OS-specific behind P3's <code>platform</code> module; folders from the stack's path API, never hard-coded; build scripts in Node, not PowerShell; UI tested in a WebKit browser once.</div>
+    <div class="card warn"><h4>Do at M6</h4>Mac PTY and process groups, <code>.dmg</code> packaging, the macOS CI job, notifications, Telex check on the Mac, and the signing decision if the app goes beyond your own machine.</div>
+  </div>
+  <div class="callout info"><span class="kind">Effect on the stack choice</span>None: D10 is decided (Go + Wails). Notifications, single instance and the updater come from Go libraries on both platforms; P2-T01 checks them. <span class="tag infer">INFERRED</span></div>
+  <div class="callout tldr"><span class="kind">Question for you</span>Do you have a Mac to test on? Without one, M6 can still produce an unsigned build from a <code>macos-latest</code> CI runner, but nobody can check Telex input or the terminal on real hardware.</div>
+</section>
+
+<section id="risks">
+  <h2>Risks to watch</h2>
+  <div class="tbl">
+    <p class="cap">Top risks across the build <a class="cite" href="#src-2">S2</a></p>
+    <table>
+      <tr><th>Risk</th><th>Severity</th><th>Mitigation</th></tr>
+      <tr><td>Session supervision does not behave as hoped (hooks, permission prompts, questions inside a terminal the app owns)</td><td><span class="sev high">High</span></td><td>Spikes S0a–S0c before any M3 code; M0–M2 stand on their own</td></tr>
+      <tr><td>A spawned session ships, commits, pushes or deletes a branch</td><td><span class="sev high">High</span></td><td>Policy locked in code, <code>--disallowedTools</code>, an app-injected deny hook, the Host never runs those commands, a post-node <code>git log</code> check, tests for every deny case</td></tr>
+      <tr><td>Harness changes break CLI users or <code>sdlc web</code></td><td><span class="sev med">Medium</span></td><td>Additive keys only, <code>contractVersion</code>, the existing 72 tests plus new ones, one assertion update</td></tr>
+      <tr><td>Real data has no pending gate to test against</td><td><span class="sev med">Medium</span></td><td>Fixtures generated by the harness itself; one throwaway ticket for M2</td></tr>
+      <tr><td>Disk space on D: (14.4 GB free)</td><td><span class="sev low">Low</span></td><td>Go + Wails is about 0.5 GB under <code>D:	oolchains</code>; check free space before the install</td></tr>
+      <tr><td>Claude Code changes its log format and breaks cost</td><td><span class="sev low">Low</span></td><td>Defensive parsing, a cache schema version, a canary check at start-up</td></tr>
+    </table>
+  </div>
+</section>
+
+<section id="next">
+  <h2>Next steps</h2>
+  <ol class="steps">
+    <li class="ok"><strong>Decisions 1–12</strong> <span class="chip">done 2026-11-18</span><p>Accepted as recommended.</p></li>
+    <li class="p1"><strong>Start the no-install tracks</strong><p>P1-T01…T06 (harness commands, tests), P4-T01…T05 (UI on fixtures), P7-T01 (<code>cost.py</code>).</p></li>
+    <li class="p2"><strong>Approve the installs, run the spike</strong><p>P2-T01…T09 for Go + Wails only; record D10 (closed) in the design plan.</p></li>
+    <li class="p3"><strong>Tidy the design plan</strong><p>D11 → <code>kaneki-harness-app/</code>; update the cost figure in §2; link this build plan from §6.</p></li>
+    <li class="warn"><strong>Answer decision 13</strong><p>When the Mac build happens, and whether there is a Mac to test on.</p></li>
+  </ol>
+</section>
+
+<section id="sources">
+  <h2>Sources</h2>
+  <ol class="sources">
+    <li id="src-1">
+      <div class="src-head"><span class="src-id">S1</span><span class="src-type">Decision</span><span class="src-title">Owner accepts every recommendation of the build plan</span></div>
+      <div class="src-loc">nnminh-sam, in this Claude Code session, 2026-11-18, after reviewing <code>00-build-plan.md</code> §5</div>
+      <blockquote class="src-quote">build me html, and i agree for all your suggestion, one thing to ask does this app installable for mac?</blockquote>
+      <div class="src-note">Covers decisions 1–12. Decision 13 (macOS) was raised by this question and is still open.</div>
+    </li>
+    <li id="src-2">
+      <div class="src-head"><span class="src-id">S2</span><span class="src-type">Doc</span><span class="src-title">Build plan (aggregate), the Markdown source of this page</span></div>
+      <div class="src-loc"><code>kaneki-harness-app/doc/build-plan/00-build-plan.md</code> · §1 architecture, §2 order and effort, §3 conventions, §7 risks · 2026-11-18</div>
+      <blockquote class="src-quote">**The one rule that settled most conflicts: logic lives in the harness.**</blockquote>
+    </li>
+    <li id="src-3">
+      <div class="src-head"><span class="src-id">S3</span><span class="src-type">Doc</span><span class="src-title">P1 data contract plan</span></div>
+      <div class="src-loc"><code>kaneki-harness-app/doc/build-plan/parts/P1-data-contract.plan.md</code> · §4.1 lines 45–47, §4.5 harness changes, §4.6 fixtures lines 312–313</div>
+      <blockquote class="src-quote">**Recommendation: C, weighted to B.** Derived state always comes from the harness: `sdlc tickets` (list),
+`sdlc ticket-detail` (one ticket), `sdlc gate-request` (one gate).</blockquote>
+    </li>
+    <li id="src-4">
+      <div class="src-head"><span class="src-id">S4</span><span class="src-type">Code</span><span class="src-title"><code>cmd_gate</code>: rejected and stopped only set the verdict</span></div>
+      <div class="src-loc"><code>kaneki-harness/harness/cli.py:648-650</code> · branch <code>feat/learning-kit</code> @ <code>8dcc35b</code></div>
+      <blockquote class="src-quote"><code>else:  # rejected / stopped</code>
+<code>    rec["verdict"] = args.status</code>
+<code>    result["verdict"] = args.status</code></blockquote>
+    </li>
+    <li id="src-5">
+      <div class="src-head"><span class="src-id">S5</span><span class="src-type">Log</span><span class="src-title">TODO-1-2 decision log: two rejects, each followed by an invalidate</span></div>
+      <div class="src-loc"><code>D:/workspace/HAISE/testing/todo-nestjs-backend/.sdlc/tickets/TODO-1-2/decisions.jsonl</code> · lines 52, 54, 70, 72 (read-only)</div>
+      <blockquote class="src-quote">52 gate · actor user · execute-and-evidence · rejected · 2026-11-17T08:54:40
+54 invalidate · coding · stale [coding, code-review, execute-and-evidence, …] · 08:54:41
+70 gate · actor user · execute-and-evidence · rejected · 09:33:32
+72 invalidate · testcase · "… User chose reopen testcase." · 09:33:32</blockquote>
+      <div class="src-note">Fields summarised from the JSON lines; values copied verbatim.</div>
+    </li>
+    <li id="src-6">
+      <div class="src-head"><span class="src-id">S6</span><span class="src-type">Code</span><span class="src-title">Git guard hook: what it checks</span></div>
+      <div class="src-loc"><code>kaneki-harness/skills/kaneki-flow/scripts/guard_git.py:4-6</code> @ <code>8dcc35b</code></div>
+      <blockquote class="src-quote">Reads the hook input (JSON on stdin), finds every plain `git …` in the command line and refuses what the project
+git policy forbids (harness/gitpolicy.py): history writes and pushes (only kaneki-ship does those), deleting work,
+identity overrides, and remote access outside `sdlc git`.</blockquote>
+      <div class="src-note">Only plain <code>git</code> is inspected; <code>sdlc ship</code> is guarded by the approval-digest flow, which a session could run itself.</div>
+    </li>
+    <li id="src-7">
+      <div class="src-head"><span class="src-id">S7</span><span class="src-type">Doc</span><span class="src-title">P6 session supervision plan</span></div>
+      <div class="src-loc"><code>kaneki-harness-app/doc/build-plan/parts/P6-session-supervision.plan.md</code> · §4.2 spawning, §4.7 safety lines 175–176, §5 spikes S0a–S0c</div>
+      <blockquote class="src-quote">The guard does not mention `sdlc ship*`/`ship-request`; protection is the digest approval flow (`cli.py:850-865`), which a session
+could run itself.</blockquote>
+    </li>
+    <li id="src-8">
+      <div class="src-head"><span class="src-id">S8</span><span class="src-type">Doc</span><span class="src-title">P7 cost plan: measured reference numbers</span></div>
+      <div class="src-loc"><code>kaneki-harness-app/doc/build-plan/parts/P7-cost-panel.plan.md</code> · "Measured reference numbers", lines 339–346 · measured 2026-11-18 from <code>~/.claude/projects/</code> (read-only)</div>
+      <blockquote class="src-quote">722 calls (632 duplicate rows dropped), **50,857,722 tokens**
+TODO-1 matches the report exactly (50.86M, 722). TODO-1-2: gross minus presession is about 59.45M vs 59.63M
+Real / harness | TODO-1 about 28.8x; TODO-1-2 about 28.9x (net)</blockquote>
+    </li>
+    <li id="src-9">
+      <div class="src-head"><span class="src-id">S9</span><span class="src-type">Doc</span><span class="src-title">Harness token totals per ticket</span></div>
+      <div class="src-loc"><code>todo-nestjs-backend/.sdlc/tickets/TODO-1/token-usage.md:5</code> and <code>TODO-1-2/token-usage.md:5</code> (read-only)</div>
+      <blockquote class="src-quote">**Ticket total:** 1,763,370 tokens (all nodes, all generations)
+**Ticket total:** 2,066,547 tokens (all nodes, all generations)</blockquote>
+    </li>
+    <li id="src-10">
+      <div class="src-head"><span class="src-id">S10</span><span class="src-type">Doc</span><span class="src-title">Desktop app design plan: decisions D1, D11 and the old cost figure</span></div>
+      <div class="src-loc"><code>kaneki-harness/docs/desktop-app/plan.md:28, 35, 45</code> @ <code>8dcc35b</code></div>
+      <blockquote class="src-quote">| D1 | **The harness CLI stays the only writer.** The app reads ticket files directly; every state change (gate, invalidate, record, lane) runs `python &lt;skill&gt;/scripts/sdlc.py …`.
+- The harness's `token-usage.md` counted ~1.4M tokens where the session logs showed ~20M+ processed</blockquote>
+      <div class="src-note">D11 there still names <code>kaneki-desktop/</code>; the app lives in <code>kaneki-harness-app/</code> (owner's choice, 2026-11-18).</div>
+    </li>
+    <li id="src-11">
+      <div class="src-head"><span class="src-id">S11</span><span class="src-type">Doc</span><span class="src-title">P3 Host core plan</span></div>
+      <div class="src-loc"><code>kaneki-harness-app/doc/build-plan/parts/P3-host-core.plan.md</code> · §4.1 line 82 (Python), §4.2 allowlist, §4.4 caching</div>
+      <blockquote class="src-quote">require &gt;= 3.10 (harness uses `X | Y` annotations, `harness/state.py` and `cli.py` use `list[str] | None`, `cli.py:1184`)</blockquote>
+      <div class="src-note">The 3.10 requirement is corrected to 3.9 by S16.</div>
+    </li>
+    <li id="src-12">
+      <div class="src-head"><span class="src-id">S12</span><span class="src-type">Doc</span><span class="src-title">P2 Wails setup and scaffold plan</span></div>
+      <div class="src-loc"><code>kaneki-harness-app/doc/build-plan/parts/P2-stack-spike-scaffold.plan.md</code> · §4.1 Wails facts, §5 install plan</div>
+      <blockquote class="src-quote">**Constraint found:** C: has only 9.9 GB free, D: has 14.4 GB (read-only probe).</blockquote>
+    </li>
+    <li id="src-13">
+      <div class="src-head"><span class="src-id">S13</span><span class="src-type">Doc</span><span class="src-title">P4 UI shell plan</span></div>
+      <div class="src-loc"><code>kaneki-harness-app/doc/build-plan/parts/P4-ui-shell-readonly.plan.md</code> · §4.1 line 49</div>
+      <blockquote class="src-quote">**Preact + htm, vendored as two small files, no bundler.**</blockquote>
+    </li>
+    <li id="src-14">
+      <div class="src-head"><span class="src-id">S14</span><span class="src-type">Doc</span><span class="src-title">P5 gate and writes plan</span></div>
+      <div class="src-loc"><code>kaneki-harness-app/doc/build-plan/parts/P5-gate-and-writes.plan.md</code> · §4.1 lines 75–81</div>
+      <blockquote class="src-quote">**Real reject flow = two commands.** Reject-and-reopen in the real data is `gate --status rejected --actor user`
+followed one second later by `invalidate --node X --reason ...`</blockquote>
+    </li>
+    <li id="src-15">
+      <div class="src-head"><span class="src-id">S15</span><span class="src-type">Doc</span><span class="src-title">P8 setup, packaging and quality plan</span></div>
+      <div class="src-loc"><code>kaneki-harness-app/doc/build-plan/parts/P8-setup-packaging-quality.plan.md</code> · §4.5 packaging line 136</div>
+      <blockquote class="src-quote">Recommendations (personal use): **no code signing in v1** (SmartScreen will warn once; document "More info -&gt; Run anyway"); per-user NSIS install</blockquote>
+    </li>
+    <li id="src-16">
+      <div class="src-head"><span class="src-id">S16</span><span class="src-type">Code</span><span class="src-title">Harness Python version: future annotations and README</span></div>
+      <div class="src-loc"><code>kaneki-harness/harness/cli.py:3</code> (same line in <code>state.py:9</code>, <code>board.py:4</code>); <code>kaneki-harness/README.md:15</code> @ <code>8dcc35b</code></div>
+      <blockquote class="src-quote">from __future__ import annotations
+harness/                      driver library (stdlib only, Python 3.9+; tested on Windows, Linux, 3.9–3.12)</blockquote>
+    </li>
+    <li id="src-17">
+      <div class="src-head"><span class="src-id">S17</span><span class="src-type">Code</span><span class="src-title">Commands that skip the ticket lock</span></div>
+      <div class="src-loc"><code>kaneki-harness/harness/cli.py:1167-1168</code> @ <code>8dcc35b</code></div>
+      <blockquote class="src-quote">READ_ONLY = {"status", "plan", "validate", "digest", "onboard-scan", "onboard-verify", "onboard-write", "install",
+             "tickets", "status-of", "web", "zed-setup"}</blockquote>
+    </li>
+    <li id="src-18">
+      <div class="src-head"><span class="src-id">S18</span><span class="src-type">Code</span><span class="src-title"><code>board.next_hint</code>: "waiting on you" exists only as text</span></div>
+      <div class="src-loc"><code>kaneki-harness/harness/board.py:70-71</code> @ <code>8dcc35b</code></div>
+      <blockquote class="src-quote">if planned and set(planned) &lt;= done or (not planned and rec["status"] == "in_progress"):
+    return f"{node}: work recorded, waiting for " + ("your approval" if spec["boundary"] == "user" else "the gate")</blockquote>
+    </li>
+    <li id="src-19">
+      <div class="src-head"><span class="src-id">S19</span><span class="src-type">Test</span><span class="src-title">Board test pins the strip shape; the board page reads two keys</span></div>
+      <div class="src-loc"><code>kaneki-harness/tests/test_lanes_and_board.py:144</code>; <code>kaneki-harness/harness/web_page.html:126</code> @ <code>8dcc35b</code></div>
+      <blockquote class="src-quote">self.assertEqual(data["tickets"][0]["strip"][0], {"node": "scope", "status": "done", "verdict": "approved"})
+&lt;i class="s-${n.status}" title="${esc(n.node)}: ${n.status}"&gt;&lt;/i&gt;</blockquote>
+    </li>
+    <li id="src-20">
+      <div class="src-head"><span class="src-id">S20</span><span class="src-type">Code</span><span class="src-title">Harness version</span></div>
+      <div class="src-loc"><code>kaneki-harness/harness/__init__.py:3</code> @ <code>8dcc35b</code></div>
+      <blockquote class="src-quote">__version__ = "0.1.0"</blockquote>
+    </li>
+  </ol>
+</section>
+
+
+
+
+<footer class="doc-foot">Legend: <span class="tag sure">VERIFIED</span> seen directly in the cited source · <span class="tag infer">INFERRED</span> reasoned from evidence, not confirmed end-to-end · <span class="tag open">OPEN</span> unresolved, needs an answer. Part-plan links open the Markdown files next to this page. Press <code>/</code> to search; the ⟳ button reloads the latest version of this file.</footer>
+<!-- ===================== DOCUMENT CONTENT END ===================== -->
+</main>
+</div>
+
+<script id="haise-shell-js">
+/* ===== haise-doc shell v3.1.1 — do not edit per document ===== */
+(function(){
+  var root=document.documentElement, body=document.body;
+  var LANG=(root.lang||'en').slice(0,2).toLowerCase();
+  var I18N={
+    en:{toc:'Contents',search:'Search this document…  ( / )',none:'No matches',nav:'Show / hide contents',
+        prev:'Previous match (Shift+Enter)',next:'Next match (Enter)',citedIn:'Cited in',
+        reload:'Reload latest version (keeps your place)',
+        zoom:{hint:'Click to enlarge',zin:'Zoom in (+)',zout:'Zoom out (−)',fit:'Fit to screen (0)',one:'Actual size (1)',close:'Close (Esc)'},
+        theme:{auto:'Theme: auto',light:'Theme: light',dark:'Theme: dark'}},
+    vi:{toc:'Mục lục',search:'Tìm trong tài liệu…  ( / )',none:'Không có kết quả',nav:'Ẩn / hiện mục lục',
+        prev:'Kết quả trước (Shift+Enter)',next:'Kết quả sau (Enter)',citedIn:'Được dẫn ở',
+        reload:'Tải lại bản mới nhất (giữ vị trí đang đọc)',
+        zoom:{hint:'Nhấn để phóng to',zin:'Phóng to (+)',zout:'Thu nhỏ (−)',fit:'Vừa màn hình (0)',one:'Kích thước thật (1)',close:'Đóng (Esc)'},
+        theme:{auto:'Giao diện: tự động',light:'Giao diện: sáng',dark:'Giao diện: tối'}}
+  };
+  var T=I18N[LANG]||I18N.en;
+  var store={get:function(k){try{return localStorage.getItem(k);}catch(e){return null;}},
+             set:function(k,v){try{localStorage.setItem(k,v);}catch(e){}}};
+  var $=function(id){return document.getElementById(id);};
+  var main=$('content');
+
+  /* ---------- theme ---------- */
+  var themeBtn=$('haise-theme'), ICON={auto:'◐',light:'☀',dark:'☾'};
+  function applyTheme(t){
+    if(t==='light'||t==='dark') root.setAttribute('data-theme',t); else root.removeAttribute('data-theme');
+    themeBtn.textContent=ICON[t]; themeBtn.title=T.theme[t]; themeBtn.setAttribute('aria-label',T.theme[t]);
+  }
+  var theme=store.get('haise.theme'); if(theme!=='light'&&theme!=='dark') theme='auto';
+  applyTheme(theme);
+  themeBtn.addEventListener('click',function(){
+    theme=theme==='auto'?'light':theme==='light'?'dark':'auto';
+    store.set('haise.theme',theme); applyTheme(theme);
+  });
+
+  /* ---------- numbering + table of contents ---------- */
+  $('haise-toc-label').textContent=T.toc;
+  var toc=$('haise-toc'), ol=document.createElement('ol'), tocLinks=[], sections=[];
+  [].forEach.call(main.querySelectorAll('section'),function(sec,i){
+    var h2=sec.querySelector(':scope > h2'); if(!h2) return;
+    if(!sec.id) sec.id='s'+(i+1);
+    var n=String(sections.length+1);
+    sections.push(sec);
+    var num=document.createElement('span'); num.className='num'; num.textContent=n+'.'; h2.insertBefore(num,h2.firstChild);
+    var li=document.createElement('li'), a=mkLink('#'+sec.id,n+'.',h2);
+    a.dataset.sec=sec.id; li.appendChild(a); tocLinks.push({el:sec,a:a});
+    var subs=sec.querySelectorAll('h3');
+    if(subs.length){
+      var sub=document.createElement('ol');
+      [].forEach.call(subs,function(h3,j){
+        if(!h3.id) h3.id=sec.id+'-'+(j+1);
+        var m=n+'.'+(j+1);
+        var s=document.createElement('span'); s.className='num'; s.textContent=m; h3.insertBefore(s,h3.firstChild);
+        var sli=document.createElement('li'), sa=mkLink('#'+h3.id,m,h3);
+        sli.appendChild(sa); sub.appendChild(sli); tocLinks.push({el:h3,a:sa});
+      });
+      li.appendChild(sub);
+    }
+    ol.appendChild(li);
+  });
+  toc.appendChild(ol);
+  function mkLink(href,n,h){
+    var a=document.createElement('a'); a.href=href;
+    var s=document.createElement('span'); s.className='num'; s.textContent=n;
+    var t=document.createElement('span'); t.className='t';
+    var clone=h.cloneNode(true); var c=clone.querySelector('.num'); if(c) c.remove();
+    [].forEach.call(clone.querySelectorAll('a.cite,.tag'),function(x){x.remove();});
+    t.textContent=clone.textContent.trim();
+    var b=document.createElement('span'); b.className='badge';
+    a.appendChild(s); a.appendChild(t); a.appendChild(b);
+    a.addEventListener('click',function(){ if(isMobile()) body.classList.remove('nav-open'); });
+    return a;
+  }
+
+  /* ---------- sidebar toggle ---------- */
+  var navBtn=$('haise-nav-btn'); navBtn.title=T.nav; navBtn.setAttribute('aria-label',T.nav);
+  var mq=window.matchMedia('(max-width:960px)');
+  function isMobile(){return mq.matches;}
+  if(store.get('haise.nav')==='collapsed') body.classList.add('nav-collapsed');
+  navBtn.addEventListener('click',function(){
+    if(isMobile()){ body.classList.toggle('nav-open'); }
+    else{ body.classList.toggle('nav-collapsed'); store.set('haise.nav',body.classList.contains('nav-collapsed')?'collapsed':'open'); }
+  });
+  $('haise-backdrop').addEventListener('click',function(){body.classList.remove('nav-open');});
+
+  /* ---------- scroll spy + progress ---------- */
+  var ticking=false, prog=$('haise-progress');
+  function onScroll(){
+    ticking=false;
+    var y=window.scrollY, H=document.documentElement.scrollHeight-window.innerHeight;
+    prog.style.width=(H>0?Math.min(100,y/H*100):0)+'%';
+    var off=parseInt(getComputedStyle(root).getPropertyValue('--topbar-h'))+30, cur=null;
+    for(var i=0;i<tocLinks.length;i++){ if(tocLinks[i].el.getBoundingClientRect().top-off<=0) cur=tocLinks[i]; }
+    if(!cur&&tocLinks.length) cur=tocLinks[0];
+    tocLinks.forEach(function(t){t.a.classList.toggle('active',t===cur);});
+    if(cur&&!isMobile()){
+      var r=cur.a.getBoundingClientRect(), sb=$('haise-sidebar').getBoundingClientRect();
+      if(r.top<sb.top+20||r.bottom>sb.bottom-20) cur.a.scrollIntoView({block:'nearest'});
+    }
+  }
+  window.addEventListener('scroll',function(){ if(!ticking){ticking=true;requestAnimationFrame(onScroll);} },{passive:true});
+  onScroll();
+
+  /* ---------- citations: tooltips + back-references ---------- */
+  var back={};
+  [].forEach.call(main.querySelectorAll('a.cite'),function(a,i){
+    var id=(a.getAttribute('href')||'').replace(/^#/,''), src=document.getElementById(id);
+    if(!a.id) a.id='cite-'+(i+1);
+    if(!src){a.classList.add('broken');return;}
+    var t=src.querySelector('.src-title'); if(t) a.title=t.textContent.trim();
+    (back[id]=back[id]||[]).push(a);
+  });
+  Object.keys(back).forEach(function(id){
+    var src=document.getElementById(id), box=src.querySelector('.backrefs');
+    if(!box){box=document.createElement('div');box.className='backrefs';src.appendChild(box);}
+    box.textContent=T.citedIn+': ';
+    back[id].forEach(function(a){
+      var sec=a.closest('section'), n=sec?sec.querySelector(':scope > h2 .num'):null;
+      var l=document.createElement('a'); l.href='#'+a.id; l.textContent='↩ §'+(n?n.textContent.replace('.',''):'?');
+      var h=sec?sec.querySelector(':scope > h2'):null; if(h) l.title=h.textContent.trim();
+      box.appendChild(l);
+    });
+  });
+
+  /* ---------- search (case- and accent-insensitive) ---------- */
+  var q=$('haise-q'), countEl=$('haise-count'), hits=[], cur=-1, opened=[], timer=null;
+  q.placeholder=T.search; q.setAttribute('aria-label',T.search);
+  $('haise-prev').title=T.prev; $('haise-prev').setAttribute('aria-label',T.prev);
+  $('haise-next').title=T.next; $('haise-next').setAttribute('aria-label',T.next);
+  function foldChar(c){
+    if(c==='đ'||c==='Đ') return 'd';
+    return c.normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
+  }
+  function fold(s){
+    var out='', map=[];
+    for(var i=0;i<s.length;i++){ var f=foldChar(s[i]); for(var j=0;j<f.length;j++){out+=f[j];map.push(i);} }
+    return {s:out,map:map};
+  }
+  function clear(){
+    var parents=[];
+    hits.forEach(function(m){ var p=m.parentNode; if(!p) return; p.replaceChild(document.createTextNode(m.textContent),m); if(parents.indexOf(p)<0) parents.push(p); });
+    parents.forEach(function(p){p.normalize();});
+    opened.forEach(function(d){d.open=false;}); opened=[];
+    hits=[]; cur=-1;
+    tocLinks.forEach(function(t){t.a.querySelector('.badge').textContent='';});
+  }
+  function run(noJump){
+    clear();
+    var raw=q.value.trim(); if(raw.length<2){countEl.textContent='';return;}
+    var needle=fold(raw).s, nodes=[];
+    var w=document.createTreeWalker(main,NodeFilter.SHOW_TEXT,{acceptNode:function(n){
+      if(!n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+      var p=n.parentNode;
+      if(p.closest('script,style,svg,.no-search,textarea')) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;}});
+    while(w.nextNode()) nodes.push(w.currentNode);
+    for(var k=0;k<nodes.length&&hits.length<3000;k++){
+      var node=nodes[k], text=node.nodeValue, f=fold(text), idx=f.s.indexOf(needle);
+      if(idx<0) continue;
+      var frag=document.createDocumentFragment(), last=0;
+      while(idx>=0){
+        var a=f.map[idx], b=f.map[idx+needle.length-1]+1;
+        if(a>=last){
+          frag.appendChild(document.createTextNode(text.slice(last,a)));
+          var m=document.createElement('mark'); m.className='hit'; m.textContent=text.slice(a,b);
+          frag.appendChild(m); hits.push(m); last=b;
+        }
+        idx=f.s.indexOf(needle,idx+needle.length);
+      }
+      frag.appendChild(document.createTextNode(text.slice(last)));
+      node.parentNode.replaceChild(frag,node);
+    }
+    hits.forEach(function(m){
+      var d=m.parentNode.closest('details');
+      while(d){ if(!d.open){d.open=true;opened.push(d);} d=d.parentNode.closest('details'); }
+    });
+    tocLinks.forEach(function(t){
+      var scope=t.el.tagName==='SECTION'?t.el:null; if(!scope) return;
+      var n=scope.querySelectorAll('mark.hit').length;
+      t.a.querySelector('.badge').textContent=n?String(n):'';
+    });
+    if(!hits.length) countEl.textContent=T.none;
+    else if(noJump===true) countEl.textContent='– / '+hits.length;
+    else go(0);
+  }
+  function go(i){
+    if(!hits.length) return;
+    if(cur>=0&&hits[cur]) hits[cur].classList.remove('cur');
+    cur=(i+hits.length)%hits.length;
+    hits[cur].classList.add('cur');
+    hits[cur].scrollIntoView({block:'center',behavior:'smooth'});
+    countEl.textContent=(cur+1)+' / '+hits.length;
+  }
+  q.addEventListener('input',function(){clearTimeout(timer);timer=setTimeout(run,180);});
+  q.addEventListener('keydown',function(e){
+    if(e.key==='Enter'){e.preventDefault(); if(timer){clearTimeout(timer);timer=null;} if(!hits.length) run(); else go(cur+(e.shiftKey?-1:1));}
+    else if(e.key==='Escape'){q.value='';clear();countEl.textContent='';q.blur();}
+  });
+  $('haise-prev').addEventListener('click',function(){go(cur-1);});
+  $('haise-next').addEventListener('click',function(){go(cur+1);});
+
+  /* ---------- reload: re-read the file from disk, keep the reader's place ---------- */
+  var RK='haise.reload:'+location.pathname, reloadBtn=$('haise-reload');
+  reloadBtn.title=T.reload; reloadBtn.setAttribute('aria-label',T.reload);
+  function ss(k,v){try{if(v===undefined){var r=sessionStorage.getItem(k);sessionStorage.removeItem(k);return r;}sessionStorage.setItem(k,v);}catch(e){return null;}}
+  function reload(){
+    var anchor=null, top=0;
+    for(var i=tocLinks.length-1;i>=0;i--){ var r=tocLinks[i].el.getBoundingClientRect(); if(r.top<=window.innerHeight/3){anchor=tocLinks[i].el.id;top=r.top;break;} }
+    var open=[].map.call(main.querySelectorAll('details'),function(d){return d.open&&opened.indexOf(d)<0;});
+    ss(RK,JSON.stringify({y:window.scrollY,anchor:anchor,top:top,q:q.value,open:open}));
+    location.reload();
+  }
+  reloadBtn.addEventListener('click',reload);
+  (function restore(){
+    var s=ss(RK); if(!s) return;
+    try{s=JSON.parse(s);}catch(e){return;}
+    if('scrollRestoration' in history) history.scrollRestoration='manual';
+    var ds=main.querySelectorAll('details');
+    (s.open||[]).forEach(function(o,i){ if(o&&ds[i]) ds[i].open=true; });
+    if(s.q){q.value=s.q; run(true);}
+    var el=s.anchor&&document.getElementById(s.anchor);
+    var y=el?el.getBoundingClientRect().top+window.scrollY-s.top:s.y;
+    root.style.scrollBehavior='auto'; window.scrollTo(0,y); root.style.scrollBehavior='';
+    onScroll();
+  })();
+  /* ---------- zoom: click a figure image or diagram to view it large (vector stays sharp) ---------- */
+  (function zoom(){
+    var items=[].slice.call(main.querySelectorAll('figure.fig img, figure.fig svg')).filter(function(el){
+      return !el.closest('[data-nozoom]') && !(el.tagName.toLowerCase()==='svg' && el.parentElement.closest('svg'));
+    });
+    if(!items.length) return;
+    var Z=T.zoom, ov=document.createElement('div');
+    ov.className='zoom-ov'; ov.setAttribute('role','dialog'); ov.setAttribute('aria-modal','true');
+    ov.innerHTML='<div class="zoom-bar"><span class="zoom-pct"></span>'+
+      '<button class="iconbtn" type="button" data-z="out">−</button><button class="iconbtn" type="button" data-z="fit">⤢</button>'+
+      '<button class="iconbtn" type="button" data-z="one">1:1</button><button class="iconbtn" type="button" data-z="in">+</button>'+
+      '<button class="iconbtn" type="button" data-z="close">✕</button></div><div class="zoom-cap"></div>';
+    body.appendChild(ov);
+    var bar=ov.querySelector('.zoom-bar'), cap=ov.querySelector('.zoom-cap'), pct=ov.querySelector('.zoom-pct');
+    var TT={out:Z.zout,fit:Z.fit,one:Z.one,'in':Z.zin,close:Z.close};
+    [].forEach.call(bar.querySelectorAll('button'),function(b){b.title=TT[b.dataset.z];b.setAttribute('aria-label',TT[b.dataset.z]);});
+    var node=null,isSvg=false,w=1,h=1,s=1,fit=1,x=0,y=0,idx=-1,lastFocus=null,pts={},moved=false;
+    function dims(el){
+      if(el.tagName.toLowerCase()==='svg'){var vb=el.viewBox&&el.viewBox.baseVal; if(vb&&vb.width) return [vb.width,vb.height];}
+      else if(el.naturalWidth) return [el.naturalWidth,el.naturalHeight];
+      var r=el.getBoundingClientRect(); return [r.width||1,r.height||1];
+    }
+    function vw(){return ov.clientWidth;} function vh(){return ov.clientHeight;}
+    function lim(){var b=Math.max(fit,1); return [fit*0.5, b*(isSvg?10:4)];}
+    function render(){
+      node.style.width=(w*s)+'px'; node.style.height=(h*s)+'px';
+      node.style.transform='translate('+Math.round(x)+'px,'+Math.round(y)+'px)';
+      pct.textContent=Math.round(s*100)+'%';
+    }
+    function setScale(ns,cx,cy){
+      var l=lim(); ns=Math.min(l[1],Math.max(l[0],ns));
+      if(cx===undefined){cx=vw()/2;cy=vh()/2;}
+      x=cx-(cx-x)*ns/s; y=cy-(cy-y)*ns/s; s=ns; render();
+    }
+    function toFit(){
+      var top=60, bottom=(cap.textContent?cap.offsetHeight+24:16), room=vh()-top-bottom;
+      fit=Math.min((vw()-32)/w,room/h);
+      s=fit; x=(vw()-w*s)/2; y=top+(room-h*s)/2; render();
+    }
+    function open(i){
+      idx=(i+items.length)%items.length;
+      var src=items[idx]; isSvg=src.tagName.toLowerCase()==='svg';
+      if(node) node.remove();
+      node=src.cloneNode(true); node.removeAttribute('id'); node.removeAttribute('tabindex');
+      node.classList.remove('zoomable'); node.removeAttribute('style'); node.classList.add('zoom-item');
+      if(isSvg){node.removeAttribute('width');node.removeAttribute('height');node.setAttribute('preserveAspectRatio','xMidYMid meet');}
+      var d=dims(src); w=d[0]; h=d[1];
+      ov.insertBefore(node,bar);
+      var fig=src.closest('figure'), fc=fig&&fig.querySelector(':scope > figcaption');
+      var label=src.getAttribute('alt')||src.getAttribute('aria-label')||'';
+      cap.innerHTML='';
+      if(items.length>1){var n=document.createElement('b');n.textContent=(idx+1)+' / '+items.length+'  ';cap.appendChild(n);}
+      cap.appendChild(document.createTextNode([label,fc?fc.textContent.trim():''].filter(Boolean).join(' — ')));
+      if(!ov.classList.contains('on')){lastFocus=document.activeElement; ov.classList.add('on'); body.style.overflow='hidden';}
+      toFit(); bar.querySelector('[data-z="close"]').focus();
+    }
+    function close(){
+      ov.classList.remove('on'); body.style.overflow=''; pts={};
+      if(node){node.remove();node=null;} if(lastFocus&&lastFocus.focus) lastFocus.focus();
+    }
+    function act(z){
+      if(z==='close') close(); else if(z==='fit') toFit(); else if(z==='one') setScale(1);
+      else if(z==='in') setScale(s*1.4); else if(z==='out') setScale(s/1.4);
+    }
+    items.forEach(function(el,i){
+      el.classList.add('zoomable'); el.setAttribute('tabindex','0');
+      if(el.tagName.toLowerCase()==='img') el.title=Z.hint;
+      el.addEventListener('click',function(e){ if(e.target.closest&&e.target.closest('a')) return; open(i); });
+      el.addEventListener('keydown',function(e){ if(e.key==='Enter'||e.key===' '){e.preventDefault();open(i);} });
+    });
+    bar.addEventListener('click',function(e){var b=e.target.closest('button'); if(b) act(b.dataset.z);});
+    ov.addEventListener('wheel',function(e){
+      e.preventDefault(); setScale(s*Math.exp(-e.deltaY*(e.ctrlKey?0.01:0.0015)),e.clientX,e.clientY);
+    },{passive:false});
+    ov.addEventListener('pointerdown',function(e){
+      if(e.target.closest('.zoom-bar')) return;
+      try{ov.setPointerCapture(e.pointerId);}catch(_){}
+      pts[e.pointerId]={x:e.clientX,y:e.clientY,t:e.target}; if(Object.keys(pts).length===1) moved=false;
+      ov.classList.add('drag');
+    });
+    ov.addEventListener('pointermove',function(e){
+      var p=pts[e.pointerId]; if(!p) return;
+      var ids=Object.keys(pts);
+      if(ids.length===1){
+        var dx=e.clientX-p.x, dy=e.clientY-p.y; if(Math.abs(dx)+Math.abs(dy)>2) moved=true;
+        x+=dx; y+=dy; p.x=e.clientX; p.y=e.clientY; render();
+      }else if(ids.length===2){
+        var o=pts[ids[0]===String(e.pointerId)?ids[1]:ids[0]];
+        var d0=Math.hypot(p.x-o.x,p.y-o.y); p.x=e.clientX; p.y=e.clientY;
+        var d1=Math.hypot(p.x-o.x,p.y-o.y); moved=true;
+        if(d0>0) setScale(s*d1/d0,(p.x+o.x)/2,(p.y+o.y)/2);
+      }
+    });
+    function up(e){
+      var p=pts[e.pointerId]; delete pts[e.pointerId];
+      if(!Object.keys(pts).length){ ov.classList.remove('drag'); if(e.type==='pointerup'&&!moved&&p&&p.t===ov) close(); }
+    }
+    ov.addEventListener('pointerup',up); ov.addEventListener('pointercancel',up);
+    ov.addEventListener('dblclick',function(e){
+      if(!node||!node.contains(e.target)) return;
+      if(s>fit*1.05) toFit(); else setScale(isSvg?fit*2.5:Math.max(1,fit*2),e.clientX,e.clientY);
+    });
+    document.addEventListener('keydown',function(e){
+      if(!ov.classList.contains('on')) return;
+      var k=e.key, map={'Escape':'close','+':'in','=':'in','-':'out','_':'out','0':'fit','1':'one'};
+      if(map[k]) act(map[k]);
+      else if(k==='ArrowRight') open(idx+1);
+      else if(k==='ArrowLeft') open(idx-1);
+      else if(k==='Tab'){ /* keep focus inside the viewer */
+        var bs=bar.querySelectorAll('button'), f=bs[0], l=bs[bs.length-1];
+        if(e.shiftKey&&document.activeElement===f){l.focus();} else if(!e.shiftKey&&document.activeElement===l){f.focus();} else return;
+      } else return;
+      e.preventDefault(); e.stopImmediatePropagation();
+    },true);
+    window.addEventListener('resize',function(){ if(ov.classList.contains('on')) toFit(); });
+  })();
+
+  /* ---------- phase focus: hover anything with data-phase to light up the same phase everywhere; tap/click pins it ---------- */
+  (function phases(){
+    var els=[].slice.call(main.querySelectorAll('[data-phase]'));
+    if(!els.length) return;
+    var pinned=null;
+    function focus(p){
+      body.classList.toggle('focus-on',!!p);
+      els.forEach(function(el){el.classList.toggle('on',!!p&&el.getAttribute('data-phase')===p);});
+    }
+    els.forEach(function(el){
+      var p=el.getAttribute('data-phase');
+      el.addEventListener('mouseenter',function(){focus(p);});
+      el.addEventListener('mouseleave',function(){focus(pinned);});
+      if(!el.closest('svg')){ /* clicks inside diagrams stay with the zoom viewer */
+        el.addEventListener('click',function(e){
+          if(e.target.closest('a,button,summary,input,code')) return;
+          e.stopPropagation(); pinned=pinned===p?null:p; focus(pinned);
+        });
+      }
+    });
+    document.addEventListener('keydown',function(e){
+      if(e.key==='Escape'&&pinned&&!document.querySelector('.zoom-ov.on')){pinned=null;focus(null);}
+    });
+  })();
+
+  document.addEventListener('keydown',function(e){
+    var tag=(e.target.tagName||'').toLowerCase(), typing=tag==='input'||tag==='textarea'||e.target.isContentEditable;
+    if((e.key==='/'&&!typing)||((e.ctrlKey||e.metaKey)&&(e.key==='k'||e.key==='K'))){e.preventDefault();q.focus();q.select();}
+  });
+})();
+</script>
+</body>
+</html>

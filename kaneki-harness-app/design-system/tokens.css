@@ -1,0 +1,203 @@
+/* Kaneki Desktop — generated from tokens.json by build_tokens.py; do not edit by hand */
+
+:root, [data-theme="light"] {
+  --canvas: #f5f6f8;
+  --surface: #ffffff;
+  --surface-2: #fafbfc;
+  --surface-3: #f0f2f5;
+  --overlay: #ffffff;
+  --border: #e4e7ec;
+  --border-strong: #cfd4dc;
+  --ink: #101828;
+  --ink-2: #475467;
+  --ink-3: #5d6879;
+  --ink-disabled: #a3abb8;
+  --accent: #2f54d0;
+  --accent-hover: #2445b8;
+  --accent-soft: #edf1ff;
+  --accent-text: #2945b5;
+  --on-accent: #ffffff;
+  --ok: #14855e;
+  --ok-soft: #e8f6f0;
+  --ok-text: #0c6b4a;
+  --warn: #c27409;
+  --warn-soft: #fdf3e2;
+  --warn-text: #8a4f00;
+  --on-warn: #1c1200;
+  --bad: #d0343e;
+  --bad-soft: #fdeeee;
+  --bad-text: #b0222c;
+  --on-bad: #ffffff;
+  --run: var(--accent);
+  --haiku: #0e8a7b;
+  --haiku-soft: #e6f6f3;
+  --haiku-text: #0a6b60;
+  --sonnet: #7a52db;
+  --sonnet-soft: #f2eefe;
+  --sonnet-text: #5b37b8;
+  --opus: #d1621c;
+  --opus-soft: #fdf0e7;
+  --opus-text: #9c4410;
+  --scrim: rgba(16,24,40,0.36);
+  --knob: #ffffff;
+  --tooltip: #101828;
+  --on-tooltip: #ffffff;
+  --shadow-xs: 0 1px 2px rgba(16,24,40,0.05);
+  --shadow-sm: 0 1px 2px rgba(16,24,40,0.06), 0 1px 3px rgba(16,24,40,0.08);
+  --shadow-md: 0 4px 8px -2px rgba(16,24,40,0.08), 0 2px 4px -2px rgba(16,24,40,0.05);
+  --shadow-lg: 0 20px 40px -8px rgba(16,24,40,0.18), 0 6px 12px -4px rgba(16,24,40,0.08);
+  --focus-ring: 0 0 0 2px #ffffff, 0 0 0 4px #2f54d0;
+}
+
+[data-theme="dark"] {
+  --canvas: #0b0d11;
+  --surface: #121519;
+  --surface-2: #161a20;
+  --surface-3: #1c2129;
+  --overlay: #181c23;
+  --border: #252a33;
+  --border-strong: #353c47;
+  --ink: #eef1f5;
+  --ink-2: #b3bac6;
+  --ink-3: #8f98a6;
+  --ink-disabled: #565e6b;
+  --accent: #7591ff;
+  --accent-hover: #8aa2ff;
+  --accent-soft: #18203d;
+  --accent-text: #a3b5ff;
+  --on-accent: #0b0d11;
+  --ok: #3cc796;
+  --ok-soft: #0f2a20;
+  --ok-text: #62d9ad;
+  --warn: #f2a531;
+  --warn-soft: #2e220c;
+  --warn-text: #f6bb5c;
+  --on-warn: #1c1200;
+  --bad: #f26b6b;
+  --bad-soft: #2e1517;
+  --bad-text: #ff8f8f;
+  --on-bad: #1a0a0b;
+  --run: var(--accent);
+  --haiku: #3fd0bd;
+  --haiku-soft: #0f2724;
+  --haiku-text: #5fe0cf;
+  --sonnet: #b39cff;
+  --sonnet-soft: #1f1936;
+  --sonnet-text: #c4b2ff;
+  --opus: #ff9d5c;
+  --opus-soft: #2d1c10;
+  --opus-text: #ffb27f;
+  --scrim: rgba(0,0,0,0.6);
+  --knob: #f4f6f9;
+  --tooltip: #eef1f5;
+  --on-tooltip: #101828;
+  --shadow-xs: 0 1px 2px rgba(0,0,0,0.4);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.03);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.05);
+  --shadow-lg: 0 24px 48px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.06);
+  --focus-ring: 0 0 0 2px #0b0d11, 0 0 0 4px #7591ff;
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --canvas: #0b0d11;
+    --surface: #121519;
+    --surface-2: #161a20;
+    --surface-3: #1c2129;
+    --overlay: #181c23;
+    --border: #252a33;
+    --border-strong: #353c47;
+    --ink: #eef1f5;
+    --ink-2: #b3bac6;
+    --ink-3: #8f98a6;
+    --ink-disabled: #565e6b;
+    --accent: #7591ff;
+    --accent-hover: #8aa2ff;
+    --accent-soft: #18203d;
+    --accent-text: #a3b5ff;
+    --on-accent: #0b0d11;
+    --ok: #3cc796;
+    --ok-soft: #0f2a20;
+    --ok-text: #62d9ad;
+    --warn: #f2a531;
+    --warn-soft: #2e220c;
+    --warn-text: #f6bb5c;
+    --on-warn: #1c1200;
+    --bad: #f26b6b;
+    --bad-soft: #2e1517;
+    --bad-text: #ff8f8f;
+    --on-bad: #1a0a0b;
+    --run: var(--accent);
+    --haiku: #3fd0bd;
+    --haiku-soft: #0f2724;
+    --haiku-text: #5fe0cf;
+    --sonnet: #b39cff;
+    --sonnet-soft: #1f1936;
+    --sonnet-text: #c4b2ff;
+    --opus: #ff9d5c;
+    --opus-soft: #2d1c10;
+    --opus-text: #ffb27f;
+    --scrim: rgba(0,0,0,0.6);
+    --knob: #f4f6f9;
+    --tooltip: #eef1f5;
+    --on-tooltip: #101828;
+    --shadow-xs: 0 1px 2px rgba(0,0,0,0.4);
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.03);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.05);
+    --shadow-lg: 0 24px 48px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.06);
+    --focus-ring: 0 0 0 2px #0b0d11, 0 0 0 4px #7591ff;
+    color-scheme: dark;
+  }
+}
+
+:root {
+  --space-0-5: 2px;
+  --space-1: 4px;
+  --space-1-5: 6px;
+  --space-2: 8px;
+  --space-2-5: 10px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 14px;
+  --radius-full: 999px;
+  --control-sm: 26px;
+  --control-md: 32px;
+  --control-lg: 38px;
+  --icon-sm: 14px;
+  --icon-md: 16px;
+  --titlebar-height: 48px;
+  --rail-width: 260px;
+  --inspector-width: 360px;
+  --dock-height: 188px;
+  --node-size: 32px;
+  --drawer-width: 400px;
+  --dialog-width: 720px;
+  --palette-width: 600px;
+  --toast-width: 360px;
+  --ease-out: cubic-bezier(0.2,0.8,0.2,1);
+  --duration-fast: 120ms;
+  --duration-base: 180ms;
+  --duration-slow: 260ms;
+  --font-ui: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono: "Cascadia Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
+}
+
+.type-display { font-family: var(--font-display); font-size: 28px; line-height: 1.15; font-weight: 600; letter-spacing: -0.4px; }
+.type-heading { font-family: var(--font-display); font-size: 20px; line-height: 1.25; font-weight: 600; letter-spacing: -0.2px; }
+.type-title { font-family: var(--font-display); font-size: 15px; line-height: 1.35; font-weight: 600; }
+.type-body-lg { font-family: var(--font-ui); font-size: 14px; line-height: 1.5; font-weight: 400; }
+.type-body { font-family: var(--font-ui); font-size: 13px; line-height: 1.5; font-weight: 400; }
+.type-body-strong { font-family: var(--font-ui); font-size: 13px; line-height: 1.5; font-weight: 600; }
+.type-small { font-family: var(--font-ui); font-size: 12px; line-height: 1.45; font-weight: 400; }
+.type-caption { font-family: var(--font-ui); font-size: 11px; line-height: 1.4; font-weight: 500; }
+.type-overline { font-family: var(--font-ui); font-size: 11px; line-height: 1.4; font-weight: 600; letter-spacing: 0.6px; }
+.type-code { font-family: var(--font-mono); font-size: 12px; line-height: 1.6; font-weight: 400; }

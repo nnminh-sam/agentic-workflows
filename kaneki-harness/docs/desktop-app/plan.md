@@ -41,7 +41,7 @@ shipping/committing/pushing from the app.
 | D7 | **Real cost from the Claude Code session logs** (`~/.claude/projects/**/*.jsonl` + `subagents/*.jsonl`), deduplicated by message id, priced per call, shown next to the harness count; flag waste (leftover driver context, oversized agent start context, loops). | Decided | The harness count misses most real usage. Method: `kaneki-todo1-vs-todo12` comparison scripts. |
 | D8 | **Local only.** No listening server, or `127.0.0.1` only with a per-run token if one is needed. | Decided | Same stance as `sdlc web`. |
 | D9 | **Documents open in Zed**; the app shows previews/summaries, not a full Markdown/diff viewer in v1. | Decided | Keeps v1 small, especially if the UI stack is immediate-mode. |
-| D10 | **UI stack**: Tauri 2 (Rust), Wails (Go) or C++ + Dear ImGui. | **Open** → decided by spike S1 | Priorities: low memory, performance, small toolchain. See §6. |
+| D10 | **Host stack**: Go + Wails. | **Decided** (owner, 2026-11-18); no spike comparison | Tauri/Rust and C++/Dear ImGui were considered and dropped by the owner. Priorities: low memory, performance, small toolchain. See §6. |
 | D11 | **Where the app lives**: new folder `agentic-workflows/kaneki-desktop/` (separate from the Python harness). | Proposed | The harness stays stdlib-only Python; the app is a client of it. |
 
 ## 4. Mockup reference
@@ -79,9 +79,11 @@ first-run setup.
 - `sdlc lane --ticket T --set full --reason R`, `sdlc init …` (new ticket), `sdlc worktree …`
 - Node work itself stays in Claude sessions running `/kaneki-flow`; the app starts and stops those sessions.
 
-## 6. Stack decision (D10): spike S1
+## 6. Stack decision (D10): Go + Wails (decided 2026-11-18)
 
-Build the same thin slice in each candidate: window + ticket list from `sdlc tickets` + watch `decisions.jsonl`
+D10 is closed by the owner: **Go + Wails only**. There is no two-stack spike. P2 installs Go and the Wails CLI under
+`D:	oolchains`, then builds one small Wails slice and measures it as a baseline against the targets below (not as a comparison).
+The slice: window + ticket list from `sdlc tickets` + watch `decisions.jsonl`
 + one toast + one button that runs `sdlc gate --help`. Measure, on this machine:
 
 | Criterion | How | Target |
@@ -94,15 +96,15 @@ Build the same thin slice in each candidate: window + ticket list from `sdlc tic
 | Vietnamese Telex input in a text field | type a note | must work |
 | Effort to port `web_page.html` UI | hours | report |
 
-Already on this machine: Node 22, WebView2 runtime, VS 2019 Build Tools (MSVC 14.29). Not installed: Rust, Go, CMake.
-Rough expectations: Wails ≈ smallest toolchain; ImGui ≈ smallest runtime footprint but weak rich text and IME
-risk; Tauri ≈ best plugin set (notifications, single instance, updater) but the largest toolchain and `target/`.
+Already on this machine: Node 22, WebView2 runtime. Not installed: Go, the Wails CLI (P2 installs them, with owner approval).
+Known gaps to fill with small Go libraries: notifications and single instance (P2-T01 verifies). Telex must still pass in the Wails webview.
+Decision record: the P2 task P2-T08 pastes the measured results here.
 
 ## 7. Milestones
 
 | M | Scope | Done when |
 |---|---|---|
-| M0 | Spike S1, pick stack (D10), scaffold `kaneki-desktop/` | Decision recorded here with measurements |
+| M0 | Go + Wails setup and spike slice (D10 closed: Go/Wails), scaffold `kaneki-desktop/` | Decision recorded here with measurements |
 | M1 | Read-only: ticket rail, pipeline strip, node card, inspector preview, decision feed, file watching | Matches `sdlc web` data for every ticket in `todo-nestjs-backend` |
 | M2 | Gate approval screen + command preview + toasts | Approve/reject a real gate; `decisions.jsonl` shows `actor: user` |
 | M3 | Session supervision + run policy ("Run next node", auto-continue, stop rules) | TODO-n runs node by node to `deliverable-ready` without the chat session |
@@ -122,7 +124,7 @@ risk; Tauri ≈ best plugin set (notifications, single instance, updater) but th
 
 1. Answer Q1–Q3 (they shape M3 and the app↔harness contract).
 2. Fix the mock's reject command preview (see §4).
-3. Run spike S1 for the stack candidates you want to compare, record the numbers in §6 and close D10.
+3. Run P2 (Go + Wails setup and spike slice), record the numbers in §6. D10 itself is already closed.
 4. Write the M1 contract: the exact JSON the UI consumes (start from `sdlc tickets` / `board.summarize`).
 5. Finish TODO-1-2 and its comparison report, then use the TODO-1 vs TODO-1-2 numbers as the M4 test fixture.
 
