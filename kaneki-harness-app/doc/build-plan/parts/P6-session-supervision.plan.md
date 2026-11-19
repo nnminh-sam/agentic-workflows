@@ -56,9 +56,9 @@ subscribes), the board/UI shell (P2-P4), the stack (D10, closed: Go/Wails).
 - A session running the skill carries a `PreToolUse` guard for `Bash|PowerShell` (`SKILL.md:7-14`) that runs `guard_git.py`.
 - Spawning today: `zed-spawn.ps1` pastes a command into a new Zed terminal by SendKeys; the launcher runs
   `claude -n <name> --append-system-prompt-file <sys> [-w <name>] [--permission-mode <m>] <task>`
-  (`zed-spawn-session/scripts/zed-spawn.ps1:93-101`); the system file tells the child to check in with the parent over
+  (`skills/zed-spawn-session/scripts/zed-spawn.ps1:93-101`); the system file tells the child to check in with the parent over
   `ListAgents`/`SendMessage` and report at the end (`zed-spawn.ps1:77-86`). Peer messages cannot approve permission prompts
-  (`zed-spawn-session/SKILL.md:61`). Foreground-window check exists because keys once landed in Teams (`SKILL.md:47`).
+  (`skills/zed-spawn-session/SKILL.md:61`). Foreground-window check exists because keys once landed in Teams (`SKILL.md:47`).
 - The app replaces SendKeys with a PTY it owns, and replaces peer messaging with files (Q2).
 
 ### 4.2 Spawning: interactive in an embedded PTY (recommended) vs headless
@@ -117,14 +117,14 @@ no port per D8). The hook dir is outside the ticket dir so the harness integrity
 
 ### 4.4 Q2 task in, report out (recommended: argument + files; report = harness trail)
 - **In:** brief written to `runs/<id>/brief.txt` and passed as the positional prompt (single line pointing to the file, to avoid
-  the quoting/newline flattening that `zed-spawn-session/SKILL.md:41` warns about). Content: `/kaneki-flow <ticket> --node <n>`
+  the quoting/newline flattening that `skills/zed-spawn-session/SKILL.md:41` warns about). Content: `/kaneki-flow <ticket> --node <n>`
   plus the stop rules from 4.6 and "do not message other sessions". The system file replaces the zed protocol: no `ListAgents`,
   no check-in message.
 - **Out:** no report file the session must write. Truth is the harness: node is done when `decisions.jsonl` gains a `gate` event
   for that node with status approved/needs-changes (event type exists, `contracts/decision-event.schema.json:18-30`, V), read
   via `sdlc status --ticket <id> --compact` after `ticket-changed`. The Stop hook only says "the session went quiet", which
   triggers the status check. `HANDOFF.md` written by the node (`SKILL.md:157`) is shown to the user as the narrative.
-- Why not messaging: needs `crossSessionInbound` and a parent session (`zed-spawn-session/SKILL.md:60-62`); the app is not a session.
+- Why not messaging: needs `crossSessionInbound` and a parent session (`skills/zed-spawn-session/SKILL.md:60-62`); the app is not a session.
 
 ### 4.5 Q3 run policy storage (recommended: app config, never in the ticket dir)
 `policy/<ticket>.json` in app data (survives `sdlc init`, never trips ticket integrity, which covers `state.json` and
@@ -259,7 +259,7 @@ copies hook scripts, tails events.jsonl), `host/policy` (schema, validation, loc
 ## 9. Evidence read
 - `kaneki-harness/skills/kaneki-flow/SKILL.md:7-14, 20-22, 24-25, 104-118, 119-159, 161-175, 187-194`
 - `kaneki-harness/skills/kaneki-flow/scripts/guard_git.py:1-69`
-- `zed-spawn-session/SKILL.md:41, 47, 56-65`; `zed-spawn-session/scripts/zed-spawn.ps1:70-101`
+- `skills/zed-spawn-session/SKILL.md:41, 47, 56-65`; `skills/zed-spawn-session/scripts/zed-spawn.ps1:70-101`
 - `notify-hook/README.md:3-26`; `notify-hook/notify.py:5-6, 54-72`
 - `kaneki-harness/harness/state.py:25, 67-90, 150-175` (lock dir, owner.json, 600 s stale, hash chain)
 - `kaneki-harness/harness/cli.py:572-589, 850-865` (gate approve, ship-request/ship digest); `harness/board.py:38,54`

@@ -10,7 +10,7 @@ runs a ticket node by node under a policy, stopping at user gates. M3 done-when:
 
 ## Plan must cover
 1. **How a node is run today**: read `kaneki-harness/skills/kaneki-flow/SKILL.md` (the `/kaneki-flow` driver),
-   the session brief, and `zed-spawn-session/` (repo root) to describe the current loop precisely.
+   the session brief, and `skills/zed-spawn-session/` to describe the current loop precisely.
 2. **Spawning**: the `claude` CLI options that matter (interactive vs. `-p`/print mode, `--output-format
    stream-json`, `--append-system-prompt-file`, `-n`, permission modes, `--allowedTools`); check what the local
    `claude --help` reports (read-only). Interactive terminal vs. headless: can the user still watch and type into
