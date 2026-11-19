@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 from helpers import SCRIPTS  # noqa: F401  (puts scripts/ on sys.path)
 from gitguard import paths
@@ -55,6 +56,14 @@ def run_install(*argv):
 
 
 class Install(unittest.TestCase):
+    def setUp(self):
+        # Never read (or act on) the real ~/.claude/plugins/known_marketplaces.json.
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        patcher = mock.patch.object(install, "KNOWN_MARKETPLACES", Path(tmp.name) / "known_marketplaces.json")
+        self.known = patcher.start()
+        self.addCleanup(patcher.stop)
+
     def settings(self, project):
         return json.loads((Path(project) / ".claude" / "settings.json").read_text(encoding="utf-8"))
 
@@ -96,6 +105,53 @@ class Install(unittest.TestCase):
             data = self.settings(tmp)
             self.assertNotIn("hooks", data)
             self.assertTrue(data["enabledPlugins"][install.PLUGIN_ID])
+
+
+class LegacyRegistration(unittest.TestCase):
+    """git-guard-local added with `/plugin marketplace add` lives outside settings.json."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.known = Path(tmp.name) / "known_marketplaces.json"
+        patcher = mock.patch.object(install, "KNOWN_MARKETPLACES", self.known)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.run_cli = mock.Mock(return_value=mock.Mock(returncode=0, stdout="", stderr=""))
+
+    def register(self, *names):
+        self.known.write_text(json.dumps({n: {"source": {"source": "directory", "path": "/gone"}} for n in names}),
+                              encoding="utf-8")
+
+    def drop(self, dry=False, which="/bin/claude"):
+        out = io.StringIO()
+        with mock.patch.object(install.shutil, "which", return_value=which), redirect_stdout(out):
+            install.drop_legacy_registration(dry, run=self.run_cli)
+        return out.getvalue()
+
+    def test_removes_registered_legacy_marketplace_through_the_cli(self):
+        self.register("claude-plugins-official", install.LEGACY_MARKETPLACE)
+        self.assertIn("removed the old", self.drop())
+        self.assertEqual(self.run_cli.call_args.args[0],
+                         ["/bin/claude", "plugin", "marketplace", "remove", install.LEGACY_MARKETPLACE])
+
+    def test_nothing_to_do_without_the_legacy_entry_or_the_file(self):
+        self.assertEqual(self.drop(), "")  # no known_marketplaces.json at all
+        self.register("claude-plugins-official")
+        self.assertEqual(self.drop(), "")
+        self.run_cli.assert_not_called()
+
+    def test_dry_run_only_reports(self):
+        self.register(install.LEGACY_MARKETPLACE)
+        self.assertIn("[dry-run]", self.drop(dry=True))
+        self.run_cli.assert_not_called()
+
+    def test_tells_the_user_when_it_cannot_remove_it(self):
+        self.register(install.LEGACY_MARKETPLACE)
+        self.assertIn("/plugin marketplace remove", self.drop(which=None))
+        self.run_cli.assert_not_called()
+        self.run_cli.return_value = mock.Mock(returncode=1, stdout="", stderr="boom")
+        self.assertIn("boom", self.drop())
 
 
 if __name__ == "__main__":

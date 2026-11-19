@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -34,6 +35,8 @@ MARKETPLACE = "my-git-local"
 PLUGIN_ID = f"my-git@{MARKETPLACE}"
 LEGACY_MARKETPLACE = "git-guard-local"
 LEGACY_PLUGIN_ID = f"git-guard@{LEGACY_MARKETPLACE}"
+# Claude Code's own registry of marketplaces added with `/plugin marketplace add` (user-level, any scope).
+KNOWN_MARKETPLACES = Path.home() / ".claude" / "plugins" / "known_marketplaces.json"
 VENDOR_REL = Path(".claude") / "hooks" / "git-guard"
 SKILLS_REL = Path(".claude") / "skills"
 # shipped skill dir -> vendored skill dir (commit/push get a prefix so they can't clash with a project's own skills)
@@ -94,10 +97,41 @@ def drop_legacy_plugin(s: dict) -> bool:
     return changed
 
 
+def drop_legacy_registration(dry: bool, run=subprocess.run) -> None:
+    """Remove a git-guard-local marketplace registered with `/plugin marketplace add`.
+
+    That registration lives in Claude Code's known_marketplaces.json, not in settings.json, so
+    drop_legacy_plugin() can't see it. Once the old git-guard folder is gone it shows up in /plugin
+    as "Couldn't load marketplace 'git-guard-local'". Claude Code owns that file, so remove the
+    entry through its CLI instead of editing it.
+    """
+    try:
+        known = read_json(KNOWN_MARKETPLACES)
+    except (OSError, ValueError, SystemExit):
+        return
+    if LEGACY_MARKETPLACE not in known:
+        return
+    manual = f"run `/plugin marketplace remove {LEGACY_MARKETPLACE}` in Claude Code"
+    if dry:
+        print(f"[dry-run] would remove the old {LEGACY_MARKETPLACE} marketplace registration")
+        return
+    exe = shutil.which("claude")
+    if not exe:
+        print(f"the old {LEGACY_MARKETPLACE} marketplace is still registered: {manual}")
+        return
+    r = run([exe, "plugin", "marketplace", "remove", LEGACY_MARKETPLACE], capture_output=True, text=True)
+    if r.returncode == 0:
+        print(f"removed the old {LEGACY_MARKETPLACE} marketplace registration")
+    else:
+        print(f"could not remove the old {LEGACY_MARKETPLACE} marketplace "
+              f"({(r.stderr or r.stdout or '').strip()}): {manual}")
+
+
 def install_plugin(settings_path: Path, dry: bool) -> None:
     s = read_json(settings_path)
     if drop_legacy_plugin(s):
         print(f"removed the old {LEGACY_PLUGIN_ID} plugin (renamed to {PLUGIN_ID})")
+    drop_legacy_registration(dry)
     s.setdefault("extraKnownMarketplaces", {})[MARKETPLACE] = {
         "source": {"source": "directory", "path": PKG.as_posix()}}
     s.setdefault("enabledPlugins", {})[PLUGIN_ID] = True
@@ -111,6 +145,7 @@ def uninstall_plugin(settings_path: Path, dry: bool) -> None:
     s.get("enabledPlugins", {}).pop(PLUGIN_ID, None)
     s.get("extraKnownMarketplaces", {}).pop(MARKETPLACE, None)
     drop_legacy_plugin(s)
+    drop_legacy_registration(dry)
     for key in ("enabledPlugins", "extraKnownMarketplaces"):
         if key in s and not s[key]:
             del s[key]
