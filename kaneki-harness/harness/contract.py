@@ -17,8 +17,9 @@ from . import __version__
 CONTRACT_VERSION: int = 1
 
 # Read-only commands that exist today and that the app may call. Append a command here when it ships
-# (`gate-request`, `cost`); adding one is additive and does not bump CONTRACT_VERSION.
-APP_COMMANDS: tuple[str, ...] = ("contract", "tickets", "status-of", "status", "validate", "ticket-detail")
+# (`cost`); adding one is additive and does not bump CONTRACT_VERSION.
+APP_COMMANDS: tuple[str, ...] = ("contract", "tickets", "status-of", "status", "validate", "ticket-detail",
+                                    "gate-request")
 
 
 def contract_info() -> dict[str, Any]:

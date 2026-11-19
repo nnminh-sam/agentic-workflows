@@ -7,7 +7,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from . import checks as C
 from . import ship as SHIP
@@ -542,97 +542,169 @@ def cmd_record(args: argparse.Namespace) -> None:
     out({"ok": True, "recorded": entry, "nodeTokens": U.node_usage(rec)["total"]})
 
 
+def _readiness_walk(s: "Session", node: str, status: str, reopen: str | None, notes: dict[str, Any] | None = None,
+                    memo: dict[str, Any] | None = None) -> Iterator[tuple[str, bool]]:
+    """Every reason the gate would refuse `status` on `node`, lazily and in the order `sdlc gate` checks them, as
+    `(message, controller_only)`. Never writes. `controller_only` marks the checks a `--actor user` call skips (G4, G5,
+    G0). A check that would repeat or choke on an earlier finding (a unit with no record, a missing file) is skipped when
+    that finding was already yielded; `cmd_gate` stops at the first yield, so it never reaches such a guard.
+    `notes` receives non-blocking findings (`citationWarnings`); `memo` caches the git-backed checks across walks."""
+    memo = {} if memo is None else memo
+    spec = s.spec(node)
+    rec = s.state["nodes"][node]
+    if rec["status"] == "done":
+        yield f"{node} already closed at generation {rec['generation']} (gate calls are not re-asked)", False
+        return
+    missing = missing_prerequisites(s.graph, s.order, s.state, node)
+    if missing:
+        yield f"G7: {node} is not ready; missing {missing}", False
+        return
+    current = [u for u in rec["units"] if u["generation"] == rec["generation"]]
+
+    if status == "needs-changes":
+        if not spec.get("loopBackTo"):
+            yield f"{node} has no loop-back; use rejected + invalidate", False
+            return
+        attempts = rec["attempts"] + 1
+        cap = s.profile.get("gates", {}).get("loopCap", 2)
+        if attempts >= cap:
+            yield (f"G4: {node} NEEDS CHANGES after {attempts} rounds (cap {cap}); ask the user, then repeat with "
+                   "--actor user"), True
+        problems = artifact_problems(s, node, "needs-changes", None)
+        if problems:
+            yield f"G7: {node}: " + "; ".join(problems), False
+    elif status == "approved":
+        planned = [u["id"] for u in s.units(node)]
+        done_units = {u["unit"] for u in current if u["status"] == "ok"}
+        lacking = [u for u in planned if u not in done_units]
+        if lacking:
+            yield f"G7: {node} has no ok record for units {lacking} at generation {rec['generation']}", False
+        elif spec.get("reviewer"):
+            last_rev = [u for u in current if u["unit"] == "reviewer"][-1]
+            if last_rev.get("verdict") == "FAIL":
+                yield f"{node}: last reviewer verdict is FAIL ({last_rev.get('failureClass')}); fix and re-review", False
+        absent = [a for a in s.artifacts(node) if not (s.ticket.dir / a).is_file()]
+        if absent:
+            yield f"G7: {node} artifacts missing: {absent}", False
+        not_rewritten = [a for a in s.artifacts(node) if a.endswith(".md") and a not in absent
+                         and not live_text(s.ticket.dir / a).strip()]  # an absent file is already reported above
+        if not_rewritten:
+            yield (f"G7: {node} artifacts not rewritten since a rerun superseded them: {not_rewritten} "
+                   f"(replace the file, or write the new round below its last `{SUPERSEDED_HEADER}` line)"), False
+        if not (absent or not_rewritten):  # the content checks need files that exist and carry live text
+            problems = artifact_problems(s, node, "approved", reopen)
+            if problems:
+                yield f"G7: {node}: " + "; ".join(problems), False
+            broken = {a: C.citations(live_text(s.ticket.dir / a), citation_roots(s)) for a in s.artifacts(node) if a.endswith(".md")}
+            broken = {a: b for a, b in broken.items() if b}
+            if broken and spec.get("subjectNode"):
+                yield f"G7: {node}: citations that do not resolve (receipt node): {broken}", False
+            elif broken and notes is not None:
+                notes["citationWarnings"] = broken
+            wrong_lang = language_problems(s, node)
+            if wrong_lang:
+                yield (f"G5: {node}: output language does not match the configured one: {wrong_lang}. "
+                       "Rewrite it, or if the user confirms the text is right, repeat with --actor user"), True
+        if _effective_boundary(s, node) == "user":
+            yield f"G0: {node} closes on the user's approval; ask Proceed / Re-run / Stop, then --actor user", True
+        if spec.get("reopens") and not reopen:
+            yield f"{node}: pass --reopen <earliest invalidated node> or --reopen none", False
+        if spec.get("subjectNode") or spec.get("checksReceipts"):
+            if "commit" not in memo:
+                memo["commit"] = _commit_rule_problem(s)
+            if memo["commit"]:
+                yield memo["commit"], False
+        if spec.get("checksReceipts"):
+            if "receipts" not in memo:
+                found = check_receipts(s.state, s.profile["delivery"].get("minHoursLeft", 24), s.excludes)
+                memo["receipts"] = ("G7: receipts not shippable: " + "; ".join(found)) if found else ""
+            if memo["receipts"]:
+                yield memo["receipts"], False
+
+
+def _effective_boundary(s: "Session", node: str) -> str:
+    """The node's boundary after the plan-approval auto-skip."""
+    boundary = s.spec(node)["boundary"]
+    if boundary == "user" and node in ("fix-plan", "feature-plan") and s.profile.get("gates", {}).get("autoSkipPlanApproval"):
+        return "controller"
+    return boundary
+
+
+def _commit_rule_problem(s: "Session") -> str:
+    """The G7 commit-rule message (nodes never commit; only kaneki-ship does), or "" when the rule holds. Runs git."""
+    commit_problems = {}
+    for r in s.ctx["repositories"]:
+        path, ident = r.get("worktree") or r["path"], gitid.identity(s.profile, r["id"])
+        shipped = set((s.state.get("shipped") or {}).get(r["id"], {}).get("commits", []))
+        bad = gitid.foreign_commits(path, r.get("startHead"), ident)
+        unshipped = [c for c in gitid.commits_since(path, r.get("startHead"), ident) if c["sha"] not in shipped]
+        if unshipped:
+            bad.append("made during the flow, not by kaneki-ship: " + ", ".join(c["sha"][:10] for c in unshipped))
+        if bad:
+            commit_problems[r["id"]] = bad
+    if not commit_problems:
+        return ""
+    ident = gitid.identity(s.profile)
+    return (f"G7: commit rule broken {commit_problems}. Nodes never commit; only kaneki-ship does, as "
+            f"{ident['name']} <{ident['email']}>. Undo with `sdlc git --ticket {s.ctx['ticket']} --repo <id> "
+            "-- reset --soft <startHead>` (keeps the changes), then close the node again.")
+
+
+def gate_readiness(s: "Session", node: str, status: str, actor: str, reopen: str | None,
+                   notes: dict[str, Any] | None = None, memo: dict[str, Any] | None = None) -> Iterator[str]:
+    """What `sdlc gate --status <status> --actor <actor> [--reopen <reopen>]` would refuse, one message at a time and
+    lazily: the first message is the error `cmd_gate` raises. A `--actor user` call does not see the controller-only
+    checks (G4, G5, G0)."""
+    for message, controller_only in _readiness_walk(s, node, status, reopen, notes, memo):
+        if controller_only and actor == "user":
+            continue
+        yield message
+
+
+def readiness_views(s: "Session", node: str, status: str, reopen: str | None,
+                    memo: dict[str, Any] | None = None) -> dict[str, Any]:
+    """One walk, both actors: `{"user": [...], "controller": [...], "notes": {...}}`. Git runs once per walk. A
+    HarnessError of a git-backed check ends the walk as its last problem (the gate raises the same text)."""
+    user: list[str] = []
+    controller: list[str] = []
+    notes: dict[str, Any] = {}
+    try:
+        for message, controller_only in _readiness_walk(s, node, status, reopen, notes, memo):
+            controller.append(message)
+            if not controller_only:
+                user.append(message)
+    except HarnessError as exc:
+        user.append(str(exc))
+        controller.append(str(exc))
+    return {"user": user, "controller": controller, "notes": notes}
+
+
 def cmd_gate(args: argparse.Namespace) -> None:
     s = Session(args)
     node = args.node
     spec = s.spec(node)
     rec = s.state["nodes"][node]
-    if rec["status"] == "done":
-        raise HarnessError(f"{node} already closed at generation {rec['generation']} (gate calls are not re-asked)")
-    missing = missing_prerequisites(s.graph, s.order, s.state, node)
-    if missing:
-        raise HarnessError(f"G7: {node} is not ready; missing {missing}")
-    cap = s.profile.get("gates", {}).get("loopCap", 2)
-    current = [u for u in rec["units"] if u["generation"] == rec["generation"]]
+    notes: dict[str, Any] = {}
+    problem = next(gate_readiness(s, node, args.status, args.actor, args.reopen, notes), None)
+    if problem:
+        raise HarnessError(problem)
     result: dict[str, Any] = {"node": node}
 
     if args.status == "needs-changes":
-        back = spec.get("loopBackTo")
-        if not back:
-            raise HarnessError(f"{node} has no loop-back; use rejected + invalidate")
+        back = spec["loopBackTo"]
         attempts = rec["attempts"] + 1
-        if attempts >= cap and args.actor != "user":
-            raise HarnessError(f"G4: {node} NEEDS CHANGES after {attempts} rounds (cap {cap}); ask the user, then repeat with --actor user")
-        problems = artifact_problems(s, node, "needs-changes", None)
-        if problems:
-            raise HarnessError(f"G7: {node}: " + "; ".join(problems))
         stale = _invalidate(s, back, f"{node} NEEDS CHANGES: {args.note or ''}".strip())
         rec["attempts"] = attempts  # _invalidate resets dependents' counters; the looping node keeps its own
         result.update({"verdict": "needs-changes", "attempts": attempts, "reopened": back, "stale": stale})
     elif args.status == "approved":
-        planned = [u["id"] for u in s.units(node)]
-        done_units = {u["unit"] for u in current if u["status"] == "ok"}
-        lacking = [u for u in planned if u not in done_units]
-        if lacking:
-            raise HarnessError(f"G7: {node} has no ok record for units {lacking} at generation {rec['generation']}")
-        if spec.get("reviewer"):
-            last_rev = [u for u in current if u["unit"] == "reviewer"][-1]
-            if last_rev.get("verdict") == "FAIL":
-                raise HarnessError(f"{node}: last reviewer verdict is FAIL ({last_rev.get('failureClass')}); fix and re-review")
-        absent = [a for a in s.artifacts(node) if not (s.ticket.dir / a).is_file()]
-        if absent:
-            raise HarnessError(f"G7: {node} artifacts missing: {absent}")
-        not_rewritten = [a for a in s.artifacts(node) if a.endswith(".md") and not live_text(s.ticket.dir / a).strip()]
-        if not_rewritten:
-            raise HarnessError(f"G7: {node} artifacts not rewritten since a rerun superseded them: {not_rewritten} "
-                               f"(replace the file, or write the new round below its last `{SUPERSEDED_HEADER}` line)")
-        problems = artifact_problems(s, node, "approved", args.reopen)
-        if problems:
-            raise HarnessError(f"G7: {node}: " + "; ".join(problems))
-        broken = {a: C.citations(live_text(s.ticket.dir / a), citation_roots(s)) for a in s.artifacts(node) if a.endswith(".md")}
-        broken = {a: b for a, b in broken.items() if b}
-        if broken and spec.get("subjectNode"):
-            raise HarnessError(f"G7: {node}: citations that do not resolve (receipt node): {broken}")
-        if broken:
-            result["citationWarnings"] = broken
-        wrong_lang = language_problems(s, node)
-        if wrong_lang and args.actor != "user":
-            raise HarnessError(f"G5: {node}: output language does not match the configured one: {wrong_lang}. "
-                               "Rewrite it, or if the user confirms the text is right, repeat with --actor user")
-        boundary = spec["boundary"]
-        if boundary == "user" and node in ("fix-plan", "feature-plan") and s.profile.get("gates", {}).get("autoSkipPlanApproval"):
-            boundary = "controller"
-        if boundary == "user" and args.actor != "user":
-            raise HarnessError(f"G0: {node} closes on the user's approval; ask Proceed / Re-run / Stop, then --actor user")
-        if spec.get("reopens"):
-            if not args.reopen:
-                raise HarnessError(f"{node}: pass --reopen <earliest invalidated node> or --reopen none")
-        if spec.get("subjectNode") or spec.get("checksReceipts"):
-            commit_problems = {}
-            for r in s.ctx["repositories"]:
-                path, ident = r.get("worktree") or r["path"], gitid.identity(s.profile, r["id"])
-                shipped = set((s.state.get("shipped") or {}).get(r["id"], {}).get("commits", []))
-                bad = gitid.foreign_commits(path, r.get("startHead"), ident)
-                unshipped = [c for c in gitid.commits_since(path, r.get("startHead"), ident) if c["sha"] not in shipped]
-                if unshipped:
-                    bad.append("made during the flow, not by kaneki-ship: " + ", ".join(c["sha"][:10] for c in unshipped))
-                if bad:
-                    commit_problems[r["id"]] = bad
-            if commit_problems:
-                ident = gitid.identity(s.profile)
-                raise HarnessError(f"G7: commit rule broken {commit_problems}. Nodes never commit; only kaneki-ship does, as "
-                                   f"{ident['name']} <{ident['email']}>. Undo with `sdlc git --ticket {s.ctx['ticket']} --repo <id> "
-                                   "-- reset --soft <startHead>` (keeps the changes), then close the node again.")
+        if "citationWarnings" in notes:
+            result["citationWarnings"] = notes["citationWarnings"]
         if spec.get("subjectNode"):
             rec["subject"] = {r["id"]: repo_subject(r.get("worktree") or r["path"], s.excludes) for r in s.ctx["repositories"]}
             result["subject"] = rec["subject"]
         if spec.get("issuesReceipts"):
             ttl = s.profile["delivery"].get("receiptTtlHours", 72)
             result["receipts"] = issue_receipts(s.state, ttl, s.excludes)
-        if spec.get("checksReceipts"):
-            problems = check_receipts(s.state, s.profile["delivery"].get("minHoursLeft", 24), s.excludes)
-            if problems:
-                raise HarnessError("G7: receipts not shippable: " + "; ".join(problems))
         usage = U.node_usage(rec)
         result["tokenUsage"] = {"total": usage["total"], "agents": usage["agents"],
                                 "writtenTo": [a for a in s.artifacts(node) if U.writes_block(node, a)
@@ -762,11 +834,26 @@ def mark_superseded(s: "Session", node: str, from_node: str, generation: int) ->
     return marked
 
 
+def _never_ran(rec: dict[str, Any]) -> bool:
+    """A node that was never started: nothing to supersede when an earlier node is reopened."""
+    return rec["status"] == "pending" and rec["generation"] == 1 and not rec["units"]
+
+
+def stale_preview(s: "Session", node: str) -> list[str]:
+    """What `_invalidate(node)` would return: `node` and every later node that consumes what it produces. Pure."""
+    return G.dependents(s.graph, s.order, node)
+
+
+def superseded_preview(s: "Session", node: str) -> list[str]:
+    """The part of `stale_preview(node)` that `_invalidate` really supersedes (a node that never ran is left alone). Pure."""
+    return [n for n in stale_preview(s, node) if not _never_ran(s.state["nodes"][n])]
+
+
 def _invalidate(s: Session, node: str, reason: str) -> list[str]:
-    stale = G.dependents(s.graph, s.order, node)
+    stale = stale_preview(s, node)
     for n in stale:
         rec = s.state["nodes"][n]
-        if rec["status"] == "pending" and rec["generation"] == 1 and not rec["units"]:
+        if _never_ran(rec):
             continue  # never ran: nothing to supersede
         rec["status"] = "stale"
         rec["generation"] += 1
@@ -991,6 +1078,12 @@ def cmd_ticket_detail(args: argparse.Namespace) -> None:
     out(board.summarize(Session(args), events_limit=args.events, detail=True))
 
 
+def cmd_gate_request(args: argparse.Namespace) -> None:
+    """What the gate on a node would accept, as the desktop app's `GateRequest`. Read-only; never closes anything."""
+    from . import board
+    out(board.gate_request(Session(args), args.node))
+
+
 def cmd_contract(args: argparse.Namespace) -> None:
     """The contract version the desktop app checks at start-up; needs no profile or ticket and writes nothing."""
     from .contract import contract_info
@@ -1173,6 +1266,11 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--events", type=_non_negative, default=40, help="how many recent decision events to include")
     x.set_defaults(fn=cmd_ticket_detail)
 
+    x = sub.add_parser("gate-request", parents=[ticketed],
+                       help="what the gate on a node would accept, as JSON for the desktop app (read-only; default: next pending)")
+    x.add_argument("--node")
+    x.set_defaults(fn=cmd_gate_request)
+
     x = sub.add_parser("contract", help="the data contract version the desktop app checks (read-only, no profile)")
     x.set_defaults(fn=cmd_contract)
 
@@ -1194,7 +1292,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 READ_ONLY = {"status", "plan", "validate", "digest", "onboard-scan", "onboard-verify", "onboard-write", "install",
-             "tickets", "status-of", "web", "zed-setup", "contract", "ticket-detail"}
+             "tickets", "status-of", "web", "zed-setup", "contract", "ticket-detail", "gate-request"}
 NO_STATUS_REFRESH = READ_ONLY | {"git"}
 
 
