@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install my-git (the git-guard hooks plus the commit/push skills) into a Claude Code project
+"""Install my-git (the git-guard hooks plus the commit/push/pr/graph skills) into a Claude Code project
 (or for your user account).
 
   python install.py D:/work/my-project                 # plugin mode (default)
@@ -16,7 +16,7 @@ plugin  Registers this folder as the local marketplace "my-git-local" and enable
         "git-guard@git-guard-local" entries are removed.
         Claude Code asks you to trust the marketplace the first time it opens the project.
 vendor  Copies scripts/, contracts/, viewer/ to <project>/.claude/hooks/git-guard/, the skills to
-        <project>/.claude/skills/{git-guard,my-git-commit,my-git-push,my-git-pr}/, and adds the hooks to
+        <project>/.claude/skills/{git-guard,my-git-commit,my-git-push,my-git-pr,my-git-graph}/, and adds the hooks to
         <project>/.claude/settings.json.
         The project is then self-contained (commit it); re-run to upgrade. Existing contracts and
         profile.local.json are kept unless --force.
@@ -37,7 +37,8 @@ LEGACY_PLUGIN_ID = f"git-guard@{LEGACY_MARKETPLACE}"
 VENDOR_REL = Path(".claude") / "hooks" / "git-guard"
 SKILLS_REL = Path(".claude") / "skills"
 # shipped skill dir -> vendored skill dir (commit/push get a prefix so they can't clash with a project's own skills)
-VENDOR_SKILLS = {"git-guard": "git-guard", "commit": "my-git-commit", "push": "my-git-push", "pr": "my-git-pr"}
+VENDOR_SKILLS = {"git-guard": "git-guard", "commit": "my-git-commit", "push": "my-git-push", "pr": "my-git-pr",
+                 "graph": "my-git-graph"}
 SKILL_REL = SKILLS_REL / "git-guard"
 HOOK_MARK = "/.claude/hooks/git-guard/scripts/"
 VENDOR_HOOKS = {
@@ -139,7 +140,7 @@ def vendor_skill(src: Path, dst: Path, name: str, dry: bool) -> None:
     text = (src / "SKILL.md").read_text(encoding="utf-8")
     text = text.replace("${CLAUDE_PLUGIN_ROOT}", VENDOR_REL.as_posix())
     text = (text.replace("my-git:commit", "my-git-commit").replace("/my-git:push", "/my-git-push")
-            .replace("/my-git:pr", "/my-git-pr"))
+            .replace("/my-git:pr", "/my-git-pr").replace("/my-git:graph", "/my-git-graph"))
     text = text.replace("<root>/skills/commit/SKILL.md", f"{(SKILLS_REL / VENDOR_SKILLS['commit']).as_posix()}/SKILL.md")
     lines = text.split("\n")
     lines = [f"name: {name}" if ln.startswith("name: ") else ln for ln in lines]

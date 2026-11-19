@@ -7,6 +7,7 @@ A Claude Code plugin with a customized git workflow:
   - `/my-git:commit [repo-path] [hint]`: stage and commit as the profile's identity with a validated Conventional Commits message.
   - `/my-git:push [repo-path] [--commit [hint]] [--upstream]`: push with the profile's credential after an explicit confirmation; never force-pushes.
   - `/my-git:pr [repo-path] [--release] [--draft] [hint]`: run unit tests + lint locally, then open a PR from the current work branch into `develop/base` (or, with `--release`, from `develop/base` into `main`) with a Summary / Detailed changes / Explanation / Test results body.
+  - `/my-git:graph [workspace] [--all] [--fetch] [--text] [--json]`: opens a browser page mapping the whole workspace: every repo (also ones outside the folder, from `sdlc.profile.json`), every checkout (base clone + worktrees) and the branch it holds, each local branch ahead/behind its remote and its base (staging, production, or a nested parent), and a commit graph. See [Workspace graph](#workspace-graph).
   - `git-guard`: how agents react to a block, set up the profile, and view or customize rules.
 
 The guard is **account-agnostic**: the shared contracts never name a user. Each person supplies their own account values in a profile.
@@ -109,13 +110,35 @@ my-git/
   skills/commit/SKILL.md            /my-git:commit
   skills/push/SKILL.md              /my-git:push
   skills/pr/SKILL.md                /my-git:pr
+  skills/graph/SKILL.md             /my-git:graph (scripts/workspace_graph.py + viewer/graph.html)
   templates/repo/                   repo template: PR template, .githooks, GitHub ruleset
   scripts/                          hook entry points, CLIs, gitguard/ package
   contracts/                        shipped default rules
   viewer/shell.html                 template for rules.html
+  viewer/graph.html                 template for the /my-git:graph page
   tests/                            python -m unittest
   install.py                        one-command install into a project
 ```
+
+## Workspace graph
+
+`/my-git:graph` runs `scripts/workspace_graph.py --open`: it fills `viewer/graph.html` with the workspace data and opens it in the browser (one self-contained, offline file at `<temp>/my-git-graph/<workspace>-<hash>.html`, overwritten on each run). It never changes a repo. `--fetch` is the only option that uses the network.
+
+```sh
+python3 scripts/workspace_graph.py [workspace] --open            # HTML page in the browser (what the skill does)
+python3 scripts/workspace_graph.py [workspace] --html out.html   # write the page only
+python3 scripts/workspace_graph.py [workspace] --json            # the data
+python3 scripts/workspace_graph.py [workspace]                   # terminal view
+#   --all  draw every local branch   --fetch  fetch first   --max-commits N  (default 400)
+```
+
+The page has stat tiles (checkouts, branches, branches needing action, unreleased commits, local changes, last fetch), a sidebar listing each base repo with its worktrees below it (branch, lane color, `↑ahead ↓behind` vs remote and base, working-tree state; clicking one highlights its commits in the graph), the drawn commit graph with checkout / local / remote ref labels, a details panel that lists the commits behind every count, and a filterable branch table. It has light and dark themes.
+
+- **Workspace**: the given folder, or the nearest parent with `sdlc.profile.json`, so it works from any worktree.
+- **Repos**: `repositories[].path` from the profile (relative or absolute, inside the workspace or not), git repos directly under the workspace, and the owners of checkouts under `paths.worktreeRoot` (default `worktrees`).
+- **Checkouts**: from `git worktree list`: base clone, worktree under the worktree root, or external worktree.
+- **Base**: production is compared with remote staging (unreleased work), staging with remote production, and a work branch with remote staging, or with its parent when `nested_work_branches` is on and the parent is an unmerged remote work branch closer than staging.
+- **Graph**: the selected refs (trunks, checked-out branches and their upstreams, or every local branch with `--all`) back to their common merge base.
 
 ## Install into a project
 
