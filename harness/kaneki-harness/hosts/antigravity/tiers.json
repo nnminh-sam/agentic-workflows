@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "host": "antigravity",
+  "dispatchMode": "native",
+  "modelSelection": "enum",
+  "enforcement": "alias-match",
+  "tiers": {
+    "light": {
+      "model": "flash_lite",
+      "contextWindow": 200000,
+      "aliases": [
+        "flash_lite",
+        "flash",
+        "gemini-2.5-flash-lite",
+        "gemini-flash-lite",
+        "inherit"
+      ]
+    },
+    "routine": {
+      "model": "flash",
+      "contextWindow": 200000,
+      "aliases": [
+        "flash",
+        "gemini-2.5-flash",
+        "gemini-3-flash",
+        "inherit"
+      ]
+    },
+    "deep": {
+      "model": "pro",
+      "contextWindow": 200000,
+      "aliases": [
+        "pro",
+        "gemini-2.5-pro",
+        "gemini-3-pro",
+        "gemini-3.1-pro",
+        "claude-opus-4-6",
+        "inherit"
+      ]
+    }
+  }
+}

@@ -341,6 +341,10 @@
           "type": "integer",
           "default": 24
         },
+        "shipBackend": {
+          "enum": ["native-git", "my-git"],
+          "description": "How `sdlc ship` executes commit/push/PR: `native-git` (default, agent-agnostic: commits via gitid, pushes, opens PR via gh/glab or manual) or `my-git` (Claude Code plugin: stages files and hands off to /my-git:commit, /my-git:push, /my-git:pr)."
+        },
         "config": {
           "type": "object"
         }
@@ -424,6 +428,55 @@
           "type": "integer",
           "minimum": 10000
         }
+      }
+    },
+    "nodeOverrides": {
+      "type": "object",
+      "description": "Portable per-node (and per-unit) policy overrides, keyed by graph node id. Concrete host models remain in .sdlc/host.local.json.",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "tier": {
+            "type": "string",
+            "enum": [
+              "light",
+              "routine",
+              "deep"
+            ]
+          },
+          "escalateAfter": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "preferCrossHost": {
+            "type": "boolean"
+          },
+          "units": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "tier": {
+                  "type": "string",
+                  "enum": [
+                    "light",
+                    "routine",
+                    "deep"
+                  ]
+                },
+                "escalateAfter": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "preferCrossHost": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
       }
     }
   },

@@ -6,15 +6,15 @@ Mockup: [`../mock/desktop-ui.html`](../mock/desktop-ui.html) (commit `686a5c7`, 
 ## 1. Goal
 
 One local desktop window to **watch, decide and drive** kaneki harness tickets, replacing today's mix of
-Zed panes, the read-only board (`sdlc web`), the chat session that spawns sessions, and hand-run cost scripts.
+external editor panes, the read-only board (`sdlc web`), the chat session that spawns sessions, and hand-run cost scripts.
 
 What it must make easy:
 1. See every ticket, which node it is on, and **who it is waiting on** (you, an agent, nothing).
 2. **Decide a gate** with its evidence next to it, without switching to the session that runs the node.
-3. **Run a ticket node by node** under a policy, with spawned sessions supervised by the app.
-4. See the **real cost** (tokens and dollars from the Claude Code session logs), not only the harness count.
+3. **Run a ticket node by node** under a policy, with spawned sessions supervised via an agent-agnostic `AgentBackend`.
+4. See the **real cost** (tokens and dollars from agent session logs + `sdlc dispatch` telemetry), not only the harness count.
 
-Out of scope for v1: editing artifacts (open them in Zed), multi-user or remote access, running on a server,
+Out of scope for v1: editing artifacts (open them in the configured editor), multi-user or remote access, running on a server,
 shipping/committing/pushing from the app.
 
 ## 2. Why now (evidence from the TODO-1-2 run, 2026-11-17)
@@ -36,11 +36,11 @@ shipping/committing/pushing from the app.
 | D2 | **Show the exact command before any state change**, and confirm. | Decided | Same pattern as `/push`; the user sees what will be logged. |
 | D3 | **Gate approval is the core screen**: question, evidence summary (NG list, reviewer verdict), choices (approve / reject + reopen node X), optional note, command preview, which nodes go stale. | Decided | The decision that most needs context. Notes optional because typing with Telex is awkward. |
 | D4 | **React to file changes, don't poll.** Watch `.sdlc/tickets/*/decisions.jsonl` and `state.json`. | Decided | The board polls every 2.5 s; a watcher is cheaper and instant. |
-| D5 | **The app spawns and supervises sessions as child processes** (`claude -n <name> --append-system-prompt-file …`), tracks PIDs, detects idle/exit, stops them. No keystroke injection. | Decided | Lesson from the Teams incident; also enables "waiting on permission" status. |
+| D5 | **The app supervises sessions through a Go `AgentBackend` interface** (`antigravity`, `claude`, `codex`, `gemini`, `opencode`, or `sdlc dispatch`), tracks PIDs, detects idle/waiting-on-user/exit, and stops them. No keystroke injection. | Decided | Lesson from the Teams incident; keeps supervision decoupled from any single agent CLI. |
 | D6 | **Run policy per ticket**: one node per fresh session (default) or one session per run; auto-continue after a pass; stop at gates needing the user, on reject/loop-back, at `deliverable-ready`; never ship/commit/push (locked on). | Decided | Mirrors the instructions pasted into every session brief today. One node per session keeps driver context small. |
-| D7 | **Real cost from the Claude Code session logs** (`~/.claude/projects/**/*.jsonl` + `subagents/*.jsonl`), deduplicated by message id, priced per call, shown next to the harness count; flag waste (leftover driver context, oversized agent start context, loops). | Decided | The harness count misses most real usage. Method: `kaneki-todo1-vs-todo12` comparison scripts. |
+| D7 | **Pluggable usage/cost collectors** (Claude session JSONL `~/.claude/projects/**/*.jsonl`, `sdlc dispatch` logs, and harness `token-usage.md`), deduplicated by message id, priced per model/tier, shown next to the harness count; flag waste. | Decided | The harness count misses real API usage (see `kaneki-todo1-vs-todo12`); collectors implement one Go interface per backend. |
 | D8 | **Local only.** No listening server, or `127.0.0.1` only with a per-run token if one is needed. | Decided | Same stance as `sdlc web`. |
-| D9 | **Documents open in Zed**; the app shows previews/summaries, not a full Markdown/diff viewer in v1. | Decided | Keeps v1 small, especially if the UI stack is immediate-mode. |
+| D9 | **Documents open in the configured editor** (`editor` setting: VS Code, Cursor, Antigravity, Zed, or OS default); the app shows previews/summaries, not a full Markdown/diff viewer in v1. | Decided | Keeps v1 small without tying users to one IDE. |
 | D10 | **UI stack**: Tauri 2 (Rust), Wails (Go) or C++ + Dear ImGui. | **Open** → decided by spike S1 | Priorities: low memory, performance, small toolchain. See §6. |
 | D11 | **Where the app lives**: new folder `agentic-workflows/kaneki-desktop/` (separate from the Python harness). | Proposed | The harness stays stdlib-only Python; the app is a client of it. |
 
@@ -65,19 +65,17 @@ first-run setup.
 ## 5. Interfaces the app uses (verified 2026-11-17 against `kaneki-harness` @ `487f5e8`)
 
 **Read (direct file access):**
-- Profile: `<workspace>/sdlc.profile.json` (ticket root, worktree root, repositories, models).
+- Profile & host binding: `<workspace>/sdlc.profile.json` and `.sdlc/host.local.json` (ticket root, worktree root, repositories, tier/model bindings).
 - Per ticket, under `.sdlc/tickets/<id>/`: `state.json`, `decisions.jsonl`, `STATUS.md`, `token-usage.md`,
-  `packets/`, `results/`, `facts/`, node artifacts (`plan.md`, `code-review.md`, `run-report.md`, …), `HANDOFF.md`.
-- Ready-made JSON: `sdlc tickets` (list with `nextPending`, `next`, `strip`, `tokensTotal`, `questions`, …) and
-  the board's summary functions (`harness/board.py`: `summarize`, `summarize_ticket`, `list_tickets`). Prefer
-  reusing this shape (or calling `sdlc tickets`) over re-deriving it, so the app and board agree.
-- Session logs: `~/.claude/projects/<cwd-slug>/<session>.jsonl` and `<session>/subagents/*.jsonl` (`message.usage`).
+  `packets/`, `results/`, `facts/`, `logs/*.dispatch.log`, node artifacts (`plan.md`, `code-review.md`, `run-report.md`, …), `HANDOFF.md`.
+- Ready-made JSON: `sdlc tickets` (list with `nextPending`, `next`, `strip`, `tokensTotal`, `questions`, …), `sdlc gate-request`, and `sdlc plan` (includes resolved `execution` block per unit).
+- Usage telemetry: pluggable backend collectors (e.g. Claude JSONL `~/.claude/projects/<cwd-slug>/*.jsonl`, `logs/*.dispatch.log`, and harness `token-usage.md`).
 
 **Write (always via the CLI, D1):**
 - `sdlc gate --ticket T --node N --status approved|needs-changes|rejected|stopped [--actor user] [--reopen NODE] [--note …]`
 - `sdlc invalidate --ticket T --node N --reason R`
-- `sdlc lane --ticket T --set full --reason R`, `sdlc init …` (new ticket), `sdlc worktree …`
-- Node work itself stays in Claude sessions running `/kaneki-flow`; the app starts and stops those sessions.
+- `sdlc lane --ticket T --set full --reason R`, `sdlc init …`, `sdlc worktree …`, `sdlc dispatch …`
+- Node sessions run via the configured `AgentBackend` (`antigravity`, `claude`, `codex`, `gemini`, `opencode`, or `sdlc dispatch`); the app starts, monitors, and stops them.
 
 ## 6. Stack decision (D10): spike S1
 
@@ -111,7 +109,7 @@ risk; Tauri ≈ best plugin set (notifications, single instance, updater) but th
 
 ## 8. Open questions
 
-- **Q1** How does the app know a spawned session is **waiting on a permission prompt**? (Claude Code hooks / Notification hook, cross-session idle notices, or process/console state.) Needed for M3.
+- **Q1** How does each `AgentBackend` report **waiting on permission or `ASK_USER` input**? (Standardize on `pending-prompt.json` + `sdlc gate-request` alongside backend-specific hooks/stream events.) Needed for M3.
 - **Q2** How does the app **send the task** to a spawned session and get its **report** back: command-line prompt + cross-session messaging (as now), or a file the session writes?
 - **Q3** Where is **run policy** stored: in the ticket folder (visible to the harness) or app config only?
 - **Q4** Prices for cost: hard-coded table, user setting, or fetched? (Haiku 5.5 cache-read price was assumed 0.1×.)

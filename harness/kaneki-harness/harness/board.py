@@ -428,10 +428,11 @@ def list_tickets(profile: Path) -> list[dict[str, Any]]:
 ICON = {"done": "✅", "in_progress": "🔄", "stale": "♻️", "pending": "⏳"}
 
 
-def render_status_md(summary: dict[str, Any]) -> str:
+def render_status_md(summary: dict[str, Any], mismatched_nodes: set[str] | None = None) -> str:
     """STATUS.md: what the ticket looks like right now, with relative links an editor can follow."""
     t = summary
     tdir = Path(t["ticketDir"])
+    mismatched = mismatched_nodes or set()
     lines = [
         f"# {t['ticket']} · {t['kind']} · lane `{t['lane']}`",
         "",
@@ -451,8 +452,13 @@ def render_status_md(summary: dict[str, Any]) -> str:
                                                                        f"{len(n['unitsDone'])}/{len(n['units'])} units")
         verdict = n["verdict"] or n["lastUnitVerdict"] or ""
         gen = f" (gen {n['generation']})" if n["generation"] > 1 else ""
+        model_col = ", ".join(n["models"]) or "—"
+        if n["node"] in mismatched and model_col != "—":
+            model_col += " ⚠"
         lines.append(f"| {i} | {n['node']}{gen} | {ICON.get(n['status'], '')} {n['status']} | {verdict} | {who} | "
-                     f"{', '.join(n['models']) or '—'} | {n['tokens'] or ''} | {arts} |")
+                     f"{model_col} | {n['tokens'] or ''} | {arts} |")
+    if mismatched:
+        lines += ["", "> ⚠️ **Model verification:** one or more current-round units ran on an inherited or unverified host model."]
     if (tdir / "token-usage.md").is_file():
         lines += ["", "**Token usage per node and agent:** [token-usage.md](token-usage.md)"]
     if t["questions"]["exists"]:
@@ -485,7 +491,11 @@ def _rel(path: str, base: Path) -> str:
 
 def write_status(s: Any) -> Path:
     path = s.ticket.dir / STATUS_FILE
-    path.write_text(render_status_md(summarize(s)), encoding="utf-8", newline="\n")
+    mismatched = {
+        node for node, rec in (s.state.get("nodes") or {}).items()
+        if any(u.get("generation") == rec.get("generation") and u.get("modelMismatch") for u in rec.get("units", []))
+    }
+    path.write_text(render_status_md(summarize(s), mismatched_nodes=mismatched), encoding="utf-8", newline="\n")
     return path
 
 

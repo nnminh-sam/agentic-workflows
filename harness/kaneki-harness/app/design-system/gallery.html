@@ -172,7 +172,7 @@ body{display:grid;grid-template-columns:264px 1fr;grid-template-rows:52px 1fr;gr
       h += '<h1 class="g-h1">Colour</h1><p class="g-lead">Every colour is a role. Pick by meaning: if something waits on the user it is <code>warn</code>, whatever looks nicer. Text tokens (<code>*-text</code>, <code>ink*</code>) are checked for 4.5:1 on the grounds their notes name, in both themes.</p>';
       var groups = [['Surfaces', ['canvas', 'surface', 'surface-2', 'surface-3', 'overlay', 'border', 'border-strong']], ['Text', ['ink', 'ink-2', 'ink-3', 'ink-disabled']],
         ['Accent', ['accent', 'accent-hover', 'accent-soft', 'accent-text', 'on-accent', 'run']], ['Status', ['ok', 'ok-soft', 'ok-text', 'warn', 'warn-soft', 'warn-text', 'on-warn', 'bad', 'bad-soft', 'bad-text', 'on-bad']],
-        ['Models', ['haiku', 'haiku-soft', 'haiku-text', 'sonnet', 'sonnet-soft', 'sonnet-text', 'opus', 'opus-soft', 'opus-text']], ['Overlays', ['scrim', 'knob', 'tooltip', 'on-tooltip']]];
+        ['Capability Tiers', ['tier-light', 'tier-light-soft', 'tier-light-text', 'tier-routine', 'tier-routine-soft', 'tier-routine-text', 'tier-deep', 'tier-deep-soft', 'tier-deep-text']], ['Overlays', ['scrim', 'knob', 'tooltip', 'on-tooltip']]];
       groups.forEach(function (g) {
         h += '<section class="g-section"><h3 class="g-section__title">' + g[0] + '</h3><div class="g-swatches" style="margin-top:10px">' + g[1].map(function (n) {
           var t = T.color.tokens.filter(function (x) { return x.name === n; })[0], l = resolve(n, 'light'), d = resolve(n, 'dark');

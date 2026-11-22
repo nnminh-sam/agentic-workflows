@@ -5,7 +5,7 @@ my-git (the project's git plugin) owns identity, SSH-key, remote and commit-mess
 my-git does not know about the flow (user decision: nodes never commit; only kaneki-ship does):
 
 - HISTORY: commit, merge, rebase, push, … are refused, except `commit` / `push` in the checkout of a request the
-  user approved in /kaneki-ship (`sdlc ship` writes `<project>/.claude/kaneki-ship-approvals.json`, valid 30 min).
+  user approved in /kaneki-ship (`sdlc ship` writes `<project>/.sdlc/ship-approvals.json`, valid 30 min).
 - DESTRUCTIVE: reset --hard, clean -f, branch -D, … are refused (never delete work).
 
 Self-contained on purpose (stdlib, no harness import): a moved or missing harness can never block every git command.
@@ -28,7 +28,8 @@ from pathlib import Path
 HISTORY = {"commit", "merge", "rebase", "cherry-pick", "revert", "am", "tag", "push", "pull", "filter-branch",
            "replace", "notes", "fast-import", "commit-tree"}
 APPROVABLE = {"commit", "push"}
-APPROVALS = Path(".claude") / "kaneki-ship-approvals.json"
+APPROVAL_PATHS = (Path(".sdlc") / "ship-approvals.json", Path(".claude") / "kaneki-ship-approvals.json")
+APPROVALS = APPROVAL_PATHS[0]
 WRAPPER_RE = re.compile(r"""sdlc(?:\.py)?["']?(?:\s+--profile\s+(?:"[^"]*"|'[^']*'|\S+))?\s+git\b""")
 GIT_RE = re.compile(r"""(?:^|[\s;|&(`]|\$\()(?:[^\s;|&()`'"]*[/\\])?git(?:\.exe)?(?=\s)""")
 
@@ -72,14 +73,22 @@ def approvals(project: str | None) -> list[dict]:
     """Unexpired ship approvals, from the project dir upwards (like the hook finds this script)."""
     d = Path(project) if project else None
     while d is not None:
-        f = d / APPROVALS
-        if f.is_file():
+        found_file = False
+        items: list[dict] = []
+        now = time.time()
+        for rel in APPROVAL_PATHS:
+            f = d / rel
+            if not f.is_file():
+                continue
+            found_file = True
             try:
                 data = json.loads(f.read_text(encoding="utf-8"))
             except (OSError, ValueError):
                 return []
-            now = time.time()
-            return [a for a in data.get("approvals", []) if isinstance(a, dict) and a.get("expiresAt", 0) > now]
+            if isinstance(data, dict):
+                items.extend(a for a in data.get("approvals", []) if isinstance(a, dict) and a.get("expiresAt", 0) > now)
+        if found_file:
+            return items
         d = d.parent if d.parent != d else None
     return []
 

@@ -23,12 +23,11 @@
       "via": "manual"
     },
     "steps": [
-      "sdlc ship-request --ticket <id> --repo <repo>",
-      "sdlc ship --ticket <id> --repo <repo> --approve <requestDigest>",
-      "/my-git:commit, /my-git:push; a person opens the MR from drafts/pr-body.md (my-git:pr is GitHub only)",
+      "sdlc ship-request --ticket <id> --repo <repo>  (show the full request to the user)",
+      "sdlc ship --ticket <id> --repo <repo> --approve <requestDigest>  (native-git commits and pushes; open the MR from drafts/pr-body.md or ship/<repo>-pr-body.md; with delivery.shipBackend: \"my-git\", stages and hands off to /my-git:commit + /my-git:push)",
       "sdlc ship-record --ticket <id> --repo <repo> --pr <url>"
     ],
-    "note": "my-git commits and pushes; the MR is opened by a person on GitLab with the approved PR body."
+    "note": "Commits and pushes as the profile identity; the MR is opened on GitLab with the approved PR body (or via glab when configured; my-git remains available via delivery.shipBackend: \"my-git\")."
   },
   "reship": {
     "requiresUserGo": true,
