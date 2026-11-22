@@ -1,0 +1,355 @@
+{
+  "title": "Kaneki Harness — Agent-Agnostic Architecture (v0.1.0)",
+  "description": "Four layers of the Kaneki SDLC harness: swappable AI hosts and UI, orchestration and host/model resolution, safety gates and shipping, and the pure data kernel.",
+  "lang": "en",
+  "lanes": [
+    {
+      "id": "hosts",
+      "label": "Agent hosts and UI · pluggable adapters",
+      "context": "Hosts and UI"
+    },
+    {
+      "id": "orch",
+      "label": "Orchestration",
+      "context": "Orchestration"
+    },
+    {
+      "id": "safety",
+      "label": "Safety · gates · ship · audit",
+      "context": "Safety and ship"
+    },
+    {
+      "id": "kernel",
+      "label": "Data kernel · no host or project hardcoding",
+      "context": "Data kernel"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "developer",
+      "lane": "hosts",
+      "col": 0,
+      "kind": "frontend",
+      "label": "Developer",
+      "sublabel": "Approves user gates",
+      "detail": "Answers ASK_USER prompts and closes user-boundary nodes (fix-plan, feature-plan, scope, deliverable-ready, triage-review, respond-review) with --actor user"
+    },
+    {
+      "id": "interactive",
+      "lane": "hosts",
+      "col": 1,
+      "kind": "frontend",
+      "label": "Interactive host",
+      "sublabel": "Antigravity · Claude",
+      "detail": "hosts/antigravity (default), claude, opencode: dispatchMode native · cursor: manual. Runs the composed preamble + playbooks as the controller."
+    },
+    {
+      "id": "headless",
+      "lane": "hosts",
+      "col": 2,
+      "kind": "external",
+      "label": "Headless CLIs",
+      "sublabel": "Codex · Gemini · generic",
+      "detail": "hosts/codex, gemini, generic: dispatchMode subprocess. Launched by sdlc dispatch with argv from build_argv() (no shell=True)."
+    },
+    {
+      "id": "installer",
+      "lane": "hosts",
+      "col": 3,
+      "kind": "backend",
+      "label": "install.py",
+      "sublabel": "7-host installer",
+      "detail": "sdlc install --host antigravity|claude|codex|gemini|cursor|opencode|generic [--dry-run] [--force] [--with-my-git]. Writes .sdlc/bin/sdlc (LF, 0o755), .sdlc/.harness-home, host.local.json and a SHA-256 manifest <hostRoot>/kaneki-harness.json (keeps user edits)."
+    },
+    {
+      "id": "board",
+      "lane": "hosts",
+      "col": 4,
+      "kind": "frontend",
+      "label": "Board and app",
+      "sublabel": "web.py · STATUS.md",
+      "detail": "web.py: read-only HTTP on 127.0.0.1 serving web_page.html. board.py builds STATUS.md, ticket-detail and gate-request JSON for the desktop app (contract.py CONTRACT_VERSION = 1)."
+    },
+    {
+      "id": "remote",
+      "lane": "hosts",
+      "col": 6,
+      "kind": "cloud",
+      "label": "Git remote",
+      "sublabel": "PR / MR · gh · glab",
+      "detail": "Delivery adapters github-pr, gitlab-mr, manual. PR comments come back through sdlc review-fetch."
+    },
+    {
+      "id": "playbooks",
+      "lane": "orch",
+      "col": 5,
+      "kind": "database",
+      "label": "Playbooks",
+      "sublabel": "5 intents · 20 nodes",
+      "detail": "playbooks/flow.md, onboarding.md, ship.md, packet-template.md, roles/{light,routine,deep}.md, nodes/ (20 host-neutral node cards). Intents: DRIVER_CALL, DISPATCH_UNIT, RESUME_UNIT, ASK_USER, INSPECT_CODE / RUN_CHECK."
+    },
+    {
+      "id": "driver",
+      "lane": "orch",
+      "col": 1,
+      "kind": "backend",
+      "label": "sdlc driver",
+      "sublabel": "cli.py · 32 commands",
+      "detail": "harness/cli.py: fail-closed JSON CLI, 32 subcommands (init, lane, status, plan, packet, dispatch, record, gate, worktree, git, ship-request, ship, ship-record, onboard-*, install, host, web …). HarnessError → exit 2."
+    },
+    {
+      "id": "dispatch",
+      "lane": "orch",
+      "col": 2,
+      "kind": "backend",
+      "label": "dispatch.py",
+      "sublabel": "Subprocess runner",
+      "detail": "sdlc dispatch --ticket T --node N --unit U: builds the packet, runs codex / claude / gemini / opencode / --command, saves logs/<dispatchId>.dispatch.log, extracts tokens + verdict, fails closed without a result file (G7), then record_unit()."
+    },
+    {
+      "id": "resolver",
+      "lane": "orch",
+      "col": 3,
+      "kind": "backend",
+      "label": "Host resolver",
+      "sublabel": "hosts.py · 3 layers",
+      "detail": "resolve_execution(): graph tier → profile nodeOverrides → local host binding. Host precedence: --host > $SDLC_HOST > host.local.json > profile. model_matches(): strict | alias-match | inherit-ok."
+    },
+    {
+      "id": "onboard",
+      "lane": "orch",
+      "col": 4,
+      "kind": "backend",
+      "label": "onboard.py",
+      "sublabel": "scan · verify · write",
+      "detail": "onboard-scan detects repos, stacks, surfaces, CI commands, trackers, DBs, git identities (+ q-host question); onboard-verify runs safe checks; onboard-write writes the profile, evidence sidecar, stack adapters, host.local.json and .gitignore."
+    },
+    {
+      "id": "gates",
+      "lane": "safety",
+      "col": 0,
+      "kind": "security",
+      "label": "Gates G0–G7",
+      "sublabel": "checks.py · rules.py",
+      "detail": "sdlc gate: section parsers, citations, locale checks, commit_message() CM003–CM016, rulepack filtering by phase. G0 boundary · G1 analysis doubt · G3 options · G4 loop cap (default 2) · G5 ambiguity · G6 shared state · G7 missing prerequisite."
+    },
+    {
+      "id": "state",
+      "lane": "safety",
+      "col": 1,
+      "kind": "database",
+      "label": "Ticket ledger",
+      "sublabel": "state.py · hash chain",
+      "detail": ".sdlc/tickets/<ID>/: state.json, append-only hash-chained decisions.jsonl, receipts, file locks, STATUS.md, logs/. usage.py keeps the per-round token ledger."
+    },
+    {
+      "id": "gitguard",
+      "lane": "safety",
+      "col": 2,
+      "kind": "security",
+      "label": "Git guards",
+      "sublabel": "hooks · policy · id",
+      "detail": "worktree_hooks.py installs scoped .sdlc/hooks/{pre-commit,pre-push} (extensions.worktreeConfig); gitpolicy.py blocks history / identity mutations in sdlc git; gitid.py pins git.user + SSH command."
+    },
+    {
+      "id": "approvals",
+      "lane": "safety",
+      "col": 5,
+      "kind": "security",
+      "label": "Ship approval",
+      "sublabel": "Lease · requestDigest",
+      "detail": "sdlc ship-request builds a deterministic preview + requestDigest; the user approves that exact digest; approvals.py writes a short-lived lease in .sdlc/ship-approvals.json (checkout + head)."
+    },
+    {
+      "id": "ship",
+      "lane": "safety",
+      "col": 6,
+      "kind": "backend",
+      "label": "ship.py",
+      "sublabel": "native-git | my-git",
+      "detail": "native-git (default): commit as git.user, push via pinned SSH / gh, open PR via gh / glab / manual. my-git (opt-in, install --with-my-git): emits /my-git:commit, push, pr; sdlc ship-record then verifies and records."
+    },
+    {
+      "id": "graph",
+      "lane": "kernel",
+      "col": 0,
+      "kind": "database",
+      "label": "lifecycle.json",
+      "sublabel": "full + lite lanes",
+      "detail": "graph/lifecycle.json + graph.py: 23 nodes, layers analysis / implementation / delivery / after-pr, lanes full and lite, @slot extension points, gates G0–G7, token-based invalidation of dependents."
+    },
+    {
+      "id": "contracts",
+      "lane": "kernel",
+      "col": 1,
+      "kind": "database",
+      "label": "11 schemas",
+      "sublabel": "contracts/ · schema.py",
+      "detail": "Draft 2020-12 subset validated by stdlib schema.py: project-profile, host-binding, state, decision-event, graph, adapter, rulepack, extension, facts, profile-evidence, onboarding-candidates."
+    },
+    {
+      "id": "adapters",
+      "lane": "kernel",
+      "col": 2,
+      "kind": "database",
+      "label": "Adapters",
+      "sublabel": "17 · rulepacks",
+      "detail": "adapters/: tracker 4 (github-issues, jira, backlog, local-file), stack 4 (node-ts, python, php-laravel, flutter-dart), surface 6, delivery 3. rulepacks/core.json + stack packs, templates/."
+    },
+    {
+      "id": "hostlocal",
+      "lane": "kernel",
+      "col": 3,
+      "kind": "database",
+      "label": "host.local.json",
+      "sublabel": "Axis 2 · per developer",
+      "detail": ".sdlc/host.local.json (git-ignored): host, dispatchMode native | subprocess | manual, tiers.{light,routine,deep} {model, effort, contextWindow, aliases}, enforcement, cross-host nodeOverrides. Presets: hosts/<host>/tiers.json."
+    },
+    {
+      "id": "profile",
+      "lane": "kernel",
+      "col": 4,
+      "kind": "database",
+      "label": "sdlc.profile.json",
+      "sublabel": "Axis 1 · team-shared",
+      "detail": "Checked in: tracker, stacks, surfaces, delivery + shipBackend, rulepacks, families, locale, git.user, gates.loopCap, portable nodeOverrides. Evidence in sdlc.profile.evidence.json."
+    }
+  ],
+  "edges": [
+    {
+      "from": "developer",
+      "to": "interactive",
+      "variant": "emphasis"
+    },
+    {
+      "from": "interactive",
+      "to": "driver",
+      "label": "DRIVER_CALL",
+      "variant": "emphasis"
+    },
+    {
+      "from": "driver",
+      "to": "dispatch",
+      "label": "dispatch"
+    },
+    {
+      "from": "headless",
+      "to": "dispatch",
+      "label": "result · verdict",
+      "variant": "dashed"
+    },
+    {
+      "from": "driver",
+      "to": "resolver",
+      "label": "resolve tier → model",
+      "route": "over"
+    },
+    {
+      "from": "driver",
+      "to": "state",
+      "label": "record · gate",
+      "variant": "emphasis"
+    },
+    {
+      "from": "state",
+      "to": "gates",
+      "label": "check",
+      "variant": "emphasis"
+    },
+    {
+      "from": "developer",
+      "to": "gates",
+      "label": "ASK_USER · --actor user",
+      "variant": "security",
+      "route": "side"
+    },
+    {
+      "from": "resolver",
+      "to": "hostlocal",
+      "label": "binding"
+    },
+    {
+      "from": "onboard",
+      "to": "profile",
+      "label": "onboard-write"
+    },
+    {
+      "from": "installer",
+      "to": "interactive",
+      "label": "preamble",
+      "route": "over"
+    },
+    {
+      "from": "state",
+      "to": "gitguard",
+      "label": "sdlc git"
+    },
+    {
+      "from": "approvals",
+      "to": "ship",
+      "label": "lease",
+      "variant": "security"
+    },
+    {
+      "from": "ship",
+      "to": "remote",
+      "label": "push · PR",
+      "variant": "emphasis"
+    }
+  ],
+  "edge_legend": [
+    {
+      "variant": "emphasis",
+      "label": "Main controller path"
+    },
+    {
+      "variant": "dashed",
+      "label": "Result returned to the driver"
+    },
+    {
+      "variant": "security",
+      "label": "User-approved hop"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Hosts and install · swappable AI host",
+      "items": [
+        "Interactive host — antigravity (default, flash_lite / flash / pro), claude (haiku / sonnet / opus), opencode: native dispatch; cursor: manual, inherit-ok",
+        "Headless CLIs — codex (strict, gpt-5.2-codex), gemini (strict, gemini-2.5-*), generic (inherit-ok): subprocess dispatch via sdlc dispatch",
+        "install.py — prepends hosts/<host>/preamble.md to the canonical playbooks; SHA-256 manifest keeps your edits on re-install; --with-my-git is opt-in",
+        "Board and app — web.py on 127.0.0.1 plus read-only app contract commands: tickets, status-of, ticket-detail, gate-request, contract"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Orchestration · one workflow for every host",
+      "items": [
+        "Playbooks — 5 intents (DRIVER_CALL, DISPATCH_UNIT, RESUME_UNIT, ASK_USER, INSPECT_CODE / RUN_CHECK) mapped to host tools by the preamble",
+        "sdlc driver — cli.py, 32 fail-closed JSON subcommands; packet inlines roles/{light,routine,deep}.md and warns above 25% of the tier contextWindow",
+        "Host resolver — tier from graph → profile nodeOverrides (+ escalateAfter) → host binding; --host > $SDLC_HOST > host.local.json > profile",
+        "dispatch.py — runs external CLIs, logs logs/<dispatchId>.dispatch.log, extracts tokens + verdict, G7 on a missing result file"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Safety and ship · work nodes never commit",
+      "items": [
+        "Gates G0–G7 — G0 boundary, G1 analysis doubt, G3 options / shared flow, G4 NEEDS CHANGES after loopCap 2, G5 ambiguity, G6 shared state / device, G7 missing prerequisite (exit 2)",
+        "Ticket ledger — state.json + hash-chained decisions.jsonl + receipts under ticket locks",
+        "Git guards — scoped worktree hooks, gitpolicy.py blocks history / identity mutations, gitid.py pins git.user + SSH",
+        "Ship approval → ship.py — user approves the exact requestDigest; native-git (default) or my-git backend; ship-record verifies the commit"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Data kernel · the project is data",
+      "items": [
+        "lifecycle.json — full lane (prepare → bug or feature analysis → coding → staged code-review → testcase → evidence → final-review → delivery) and lite lane (scope → change → check → drafts); promote with sdlc lane --set full",
+        "Two axes — sdlc.profile.json (team-shared project data) and .sdlc/host.local.json (git-ignored host binding) compose at runtime in cli.py",
+        "11 schemas, 17 adapters, rulepacks — validated by stdlib schema.py; Python 3.9+, no dependencies, 24 modules, 147 tests"
+      ]
+    }
+  ]
+}
