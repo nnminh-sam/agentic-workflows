@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "host": "opencode",
+  "dispatchMode": "native",
+  "modelSelection": "explicit",
+  "enforcement": "alias-match",
+  "runner": "opencode",
+  "tiers": {
+    "light": {
+      "model": "light",
+      "contextWindow": 200000,
+      "aliases": [
+        "light",
+        "haiku",
+        "flash_lite",
+        "inherit"
+      ]
+    },
+    "routine": {
+      "model": "routine",
+      "contextWindow": 200000,
+      "aliases": [
+        "routine",
+        "sonnet",
+        "flash",
+        "inherit"
+      ]
+    },
+    "deep": {
+      "model": "deep",
+      "contextWindow": 200000,
+      "aliases": [
+        "deep",
+        "opus",
+        "pro",
+        "inherit"
+      ]
+    }
+  }
+}

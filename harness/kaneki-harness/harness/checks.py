@@ -128,7 +128,8 @@ def citations(text: str, roots: list[Path]) -> list[str]:
             broken.append(f"`{rel}:{m.group(2)}` (file not found)")
             continue
         try:
-            n = sum(1 for _ in target.open("rb"))
+            with target.open("rb") as fh:
+                n = sum(1 for _ in fh)
         except OSError:
             n = 0
         if a < 1 or b < a or b > n:
@@ -164,3 +165,81 @@ def language_mismatch(text: str, expected: str) -> str | None:
     if got is None or got == family:
         return None
     return f"expected `{expected}`, the text reads as `{got}`"
+
+
+COMMIT_TYPES = ("feat", "fix", "docs", "style", "refactor", "perf", "test", "build", "ci", "chore", "revert")
+COMMIT_EXEMPT_RES = (re.compile(r"^Merge "), re.compile(r'^Revert "'), re.compile(r"^(fixup|squash|amend)! "))
+COMMIT_HEADER_RE = re.compile(r"^(?P<type>[^\s(:!]+)(?:\((?P<scope>[^)]*)\))?(?P<bang>!)?: (?P<subject>.*)$")
+COMMIT_SCOPE_RE = re.compile(r"^[a-z0-9][a-z0-9._/-]*$")
+COMMIT_FORBIDDEN_HEADER_RES = (re.compile(r"\bwip\b", re.I), re.compile(r"\bdo not merge\b", re.I),
+                               re.compile(r"\btmp commit\b", re.I))
+BREAKING_ANY_RE = re.compile(r"^breaking[ -]change\s*:", re.I)
+BREAKING_OK_RE = re.compile(r"^BREAKING[ -]CHANGE: \S")
+AI_TRAILER_KEYS = {"co-authored-by", "assisted-by", "generated-by", "ai-assisted"}
+AI_COAUTHOR_RE = re.compile(
+    r"\bclaude\b|anthropic|\bopenai\b|chatgpt|\bgpt-?\d|codex|copilot|gemini|\bbard\b"
+    r"|cursor(\.sh|\s*agent)?\b|devin|aider|windsurf|codeium|\bllm\b|\bai\b"
+    r"|noreply@anthropic\.com|noreply@openai\.com",
+    re.I,
+)
+AI_LINE_RE = re.compile(
+    r"generated (with|by) .*(claude|chatgpt|copilot|gemini|cursor|codex|\bai\b|llm)"
+    r"|🤖"
+    r"|(written|created|authored) (with|by) (claude|chatgpt|copilot|gemini|cursor|codex|an? ai|an? llm)",
+    re.I,
+)
+
+
+def _cleanup_commit_message(message: str) -> str:
+    """Mirror git's `whitespace` cleanup: strip trailing spaces, collapse blank runs, trim outer blanks."""
+    lines = [ln.rstrip() for ln in message.replace("\r\n", "\n").split("\n")]
+    out: list[str] = []
+    for ln in lines:
+        if ln == "" and (not out or out[-1] == ""):
+            continue
+        out.append(ln)
+    while out and out[-1] == "":
+        out.pop()
+    return "\n".join(out)
+
+
+def commit_message(message: str) -> list[str]:
+    """Validate Conventional Commits 1.0 + no AI attribution rules (`CM003`–`CM008`, `CM011`, `CM013`, `CM014`, `CM016`)."""
+    msg = _cleanup_commit_message(message)
+    if not msg:
+        return ["CM003: commit message is empty"]
+    lines = msg.split("\n")
+    header = lines[0]
+    if any(pat.search(header) for pat in COMMIT_EXEMPT_RES):
+        return []
+    problems: list[str] = []
+    if len(header) > 72:
+        problems.append(f"CM007: header is {len(header)} chars, max 72")
+    for pat in COMMIT_FORBIDDEN_HEADER_RES:
+        if pat.search(header):
+            problems.append(f"CM014: header matches forbidden pattern /{pat.pattern}/")
+            break
+    m = COMMIT_HEADER_RE.match(header)
+    if not m:
+        problems.append(f"CM003: header '{header}' is not '<type>(<scope>)!: <subject>'")
+    else:
+        typ, scope, subject = m.group("type"), m.group("scope"), m.group("subject")
+        if typ not in COMMIT_TYPES:
+            problems.append(f"CM004: type '{typ}' is not one of: {', '.join(COMMIT_TYPES)}")
+        if scope is not None and (not scope or not COMMIT_SCOPE_RE.match(scope)):
+            problems.append(f"CM005: scope '{scope}' must match {COMMIT_SCOPE_RE.pattern}")
+        if len(subject.strip()) < 3:
+            problems.append(f"CM006: subject '{subject}' is shorter than 3 chars")
+        if subject.rstrip().endswith("."):
+            problems.append("CM008: subject must not end with a period")
+    if len(lines) > 1 and lines[1].strip():
+        problems.append("CM011: the second line must be blank (separate header and body)")
+    for ln in lines[1:]:
+        if BREAKING_ANY_RE.match(ln) and not BREAKING_OK_RE.match(ln):
+            problems.append(f"CM013: write 'BREAKING CHANGE: <description>', not '{ln[:40]}'")
+        key, sep, val = ln.partition(":")
+        if sep and key.strip().lower() in AI_TRAILER_KEYS and AI_COAUTHOR_RE.search(val):
+            problems.append(f"CM016: AI co-author/attribution trailer is not allowed: '{ln.strip()[:80]}'")
+        elif AI_LINE_RE.search(ln):
+            problems.append(f"CM016: AI attribution line is not allowed: '{ln.strip()[:80]}'")
+    return problems

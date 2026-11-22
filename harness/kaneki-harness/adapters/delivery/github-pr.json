@@ -25,15 +25,13 @@
     "requiresUserGo": true,
     "push": true,
     "pr": {
-      "via": "my-git"
+      "via": "gh"
     },
     "steps": [
       "sdlc ship-request --ticket <id> --repo <repo>  (show the full request to the user)",
-      "sdlc ship --ticket <id> --repo <repo> --approve <requestDigest>  (only after the user approves that exact request; stages the files)",
-      "/my-git:commit, /my-git:push, /my-git:pr  (the `next` steps ship prints)",
-      "sdlc ship-record --ticket <id> --repo <repo> --pr <url>"
+      "sdlc ship --ticket <id> --repo <repo> --approve <requestDigest>  (native-git default commits, pushes, and opens the PR via gh; with delivery.shipBackend: \"my-git\", stages files and prints /my-git:commit, /my-git:push, /my-git:pr + sdlc ship-record)"
     ],
-    "note": "kaneki-ship stages exactly the reviewed files; my-git commits as the my-git profile identity (signed if set), pushes with the profile's credential and opens the PR (gh, or a prefilled browser link when pr_via is browser)."
+    "note": "native-git commits as the profile identity, pushes with the profile's SSH command, and opens the PR via gh; set delivery.shipBackend to \"my-git\" in the profile to hand off to the my-git Claude plugin instead."
   },
   "reship": {
     "requiresUserGo": true,

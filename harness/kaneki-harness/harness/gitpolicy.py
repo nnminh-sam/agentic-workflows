@@ -56,7 +56,7 @@ def refusal(args: list[str], via_wrapper: bool = True) -> str | None:
             or re.search(r"--author\b|--reset-author\b", joined):
         return "identity settings come from the project profile (git.user / git.sshCommand); never override them"
     if sub in HISTORY:
-        return f"`git {sub}` is not run by nodes: only kaneki-ship commits and pushes (through my-git, after the user approves)"
+        return f"`git {sub}` is not run by nodes: only kaneki-ship commits and pushes (after the user approves)"
     if destructive(sub, rest):
         return f"`git {sub} {joined}` can delete work; nodes never delete"
     if sub == "config" and not any(a in ("--get", "--get-all", "--list", "-l", "--get-regexp") for a in rest):

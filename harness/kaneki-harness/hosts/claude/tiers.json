@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "host": "claude",
+  "dispatchMode": "native",
+  "modelSelection": "explicit",
+  "enforcement": "alias-match",
+  "runner": "claude",
+  "tiers": {
+    "light": {
+      "model": "haiku",
+      "contextWindow": 200000,
+      "aliases": [
+        "haiku",
+        "claude-haiku-4-5",
+        "claude-3-5-haiku"
+      ]
+    },
+    "routine": {
+      "model": "sonnet",
+      "contextWindow": 200000,
+      "aliases": [
+        "sonnet",
+        "claude-sonnet-4-5",
+        "claude-sonnet-4-6"
+      ]
+    },
+    "deep": {
+      "model": "opus",
+      "contextWindow": 200000,
+      "aliases": [
+        "opus",
+        "claude-opus-4-5",
+        "claude-opus-4-6",
+        "claude-opus-4-7"
+      ]
+    }
+  }
+}

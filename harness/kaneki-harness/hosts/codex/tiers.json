@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "host": "codex",
+  "dispatchMode": "subprocess",
+  "modelSelection": "explicit",
+  "enforcement": "strict",
+  "runner": "codex",
+  "tiers": {
+    "light": {
+      "model": "gpt-5-codex-mini",
+      "effort": "low",
+      "contextWindow": 200000,
+      "aliases": [
+        "gpt-5-codex-mini",
+        "gpt-5.1-codex-mini"
+      ]
+    },
+    "routine": {
+      "model": "gpt-5.2-codex",
+      "effort": "medium",
+      "contextWindow": 200000,
+      "aliases": [
+        "gpt-5.2-codex",
+        "gpt-5.3-codex",
+        "gpt-5-codex"
+      ]
+    },
+    "deep": {
+      "model": "gpt-5.2-codex",
+      "effort": "high",
+      "contextWindow": 200000,
+      "aliases": [
+        "gpt-5.2-codex",
+        "gpt-5.3-codex",
+        "gpt-5-codex"
+      ]
+    }
+  }
+}

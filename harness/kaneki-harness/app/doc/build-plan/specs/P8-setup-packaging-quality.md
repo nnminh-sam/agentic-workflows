@@ -7,12 +7,13 @@ Not in the mock yet: first-run setup, settings, new ticket / onboarding, worktre
 Also nobody owns the overall quality story (tests, CI, release) across parts.
 
 ## Plan must cover
-1. **First run & settings**: pick workspace (`sdlc.profile.json`), harness home, Python, editor (Zed path), prices
+1. **First run & settings**: pick workspace (`sdlc.profile.json`), active host binding (`.sdlc/host.local.json` / `sdlc host`),
+   harness home, Python, configurable external `editor` (VS Code, Cursor, Antigravity, Zed, or custom path), prices
    (link to P7), theme, notifications; config file schema and location; multi-workspace (plan Q6) recommendation.
 2. **New ticket**: what `sdlc init` needs (read `cli.py` `init` parser and the tracker adapters in
    `harness/kaneki-harness/adapters/tracker/`); form design using design-system components; preview/confirm (D2).
-3. **Onboarding a repo**: the `kaneki-onboarding` skill flow (`onboard-scan` → verify → `onboard-write`): which steps
-   the app can drive vs. which stay in a Claude session; recommend v1 scope.
+3. **Onboarding a repo**: the `kaneki-onboarding` workflow (`onboard-scan` → verify → `onboard-write`, including `q-host`
+   and full option lists): which steps the app can drive directly vs. via an active `AgentBackend` session; recommend v1 scope.
 4. **Worktrees**: list ticket worktrees (`sdlc worktree`, `git worktree list`), cleanup **only with
    `git worktree remove`**; the app must **never delete a branch** (user rule) — design the UI so there is no
    such button, and show branches as "kept".

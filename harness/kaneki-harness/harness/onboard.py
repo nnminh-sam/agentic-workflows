@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from . import hosts as H
 from .errors import HarnessError
 
 GENERATOR = "kaneki-onboarding@0.1.0"
@@ -555,7 +556,7 @@ def scan(root: Path, extra_repos: list[str]) -> dict[str, Any]:
     if tconf != "high":
         opts = [{"label": t, "value": t} for t in dict.fromkeys([tracker, "github-issues", "jira", "backlog", "local-file"])]
         Q.append({"id": "q-tracker", "field": "tracker.adapter", "question": "Which tracker holds this project's tickets?",
-                  "options": opts[:4], "recommended": tracker, "why": "; ".join(E["tracker.adapter"]["evidence"])})
+                  "options": opts, "recommended": tracker, "why": "; ".join(E["tracker.adapter"]["evidence"])})
     if tracker in ("jira", "backlog"):
         need = "site URL" if tracker == "jira" else "space and the API key env var name (apiKeyEnv)"
         gaps.append(f"tracker.config for {tracker} needs the {need}; see adapters/tracker/{tracker}.json")
@@ -608,7 +609,7 @@ def scan(root: Path, extra_repos: list[str]) -> dict[str, Any]:
     if dbs:
         Q.append({"id": "q-shared", "field": "environment.sharedState", "multiSelect": True,
                   "question": "Which of these data stores are shared with other people (writes to them will need your go)?",
-                  "options": [{"label": s["name"], "value": s["name"]} for s in dbs][:3] + [{"label": "None (all local)", "value": None}],
+                  "options": [{"label": s["name"], "value": s["name"]} for s in dbs] + [{"label": "None (all local)", "value": None}],
                   "recommended": "None (all local)",
                   "why": "Compose services are usually local containers; " + "; ".join(E["environment.sharedState"]["evidence"][:3])})
     elif db_keys:
@@ -657,7 +658,7 @@ def scan(root: Path, extra_repos: list[str]) -> dict[str, Any]:
         gaps.append(f"repo-local git identity differs in {sorted(differing)}; set repositories.<id>.git.user if those repos must use another account")
     Q.append({"id": "q-git-identity", "field": "git.user", "question": "Which git account (name and email) must every commit of this project use?",
               "options": [{"label": f"{c['name']} <{c['email']}>", "value": {"name": c["name"], "email": c["email"]},
-                           "description": c["source"]} for c in ident_cands[:3]] or
+                           "description": c["source"]} for c in ident_cands] or
                          [{"label": "Type it (Other)", "value": None, "description": "no identity detected"}],
               "recommended": f"{ident_cands[0]['name']} <{ident_cands[0]['email']}>" if ident_cands else "Type it (Other)",
               "why": "Applied to every git command the nodes run (commits, worktrees, push); commits by anyone else fail the gate."})
@@ -684,8 +685,8 @@ def scan(root: Path, extra_repos: list[str]) -> dict[str, Any]:
                   "recommended": "xlsx", "why": "; ".join(docs[:3])})
 
     # defaults
-    for key, val in (("paths.ticketRoot", ".sdlc/tickets"), ("paths.branchPrefix", "ticket/"), ("models.routine", "sonnet"),
-                     ("models.deep", "opus"), ("rulepacks", ["core"]), ("delivery.receiptTtlHours", 72),
+    for key, val in (("paths.ticketRoot", ".sdlc/tickets"), ("paths.branchPrefix", "ticket/"), ("models.routine", "routine"),
+                     ("models.deep", "deep"), ("rulepacks", ["core"]), ("delivery.receiptTtlHours", 72),
                      ("delivery.minHoursLeft", 24), ("gates.loopCap", 2), ("gates.autoSkipPlanApproval", False)):
         P[key], E[key] = val, ev("high", "harness default", status="default")
     # ticket worktrees go together in one folder outside every repository (never loose next to the repos)
@@ -702,9 +703,13 @@ def scan(root: Path, extra_repos: list[str]) -> dict[str, Any]:
     gi = root / ".gitignore"
     ignored = gi.exists() and re.search(r"^/?\.sdlc(/|/tickets/?)?\s*$", _read(gi), re.M)
     if not ignored:
-        Q.append({"id": "q-gitignore", "field": "_gitignore", "question": "Add `.sdlc/tickets/` to the project .gitignore? Ticket folders can hold customer data.",
-                  "options": [{"label": "Yes, ignore it", "value": True}, {"label": "No, commit ticket folders", "value": False}],
-                  "recommended": "Yes, ignore it", "why": ".gitignore has no .sdlc entry" if gi.exists() else "no .gitignore at the root"})
+        Q.append({"id": "q-gitignore", "field": "_gitignore", "question": "Add `.sdlc/tickets/`, `.sdlc/host.local.json`, and `.sdlc/ship-approvals.json` to .gitignore?",
+                  "options": [{"label": "Yes, ignore them", "value": True}, {"label": "No, keep untracked", "value": False}],
+                  "recommended": "Yes, ignore them", "why": ".gitignore has no .sdlc entry" if gi.exists() else "no .gitignore at the root"})
+    Q.append({"id": "q-host", "field": "_host", "question": "Which AI host binds tiers to concrete models on this machine?",
+              "options": [{"label": h, "value": h} for h in H.KNOWN_HOSTS],
+              "recommended": "antigravity",
+              "why": "Written locally to .sdlc/host.local.json (never shared in sdlc.profile.json)."})
 
     return {"schemaVersion": 1, "generator": GENERATOR, "scannedAt": now(), "root": str(root),
             "proposal": P, "evidence": E, "repos": repos_info, "services": all_services,
@@ -862,10 +867,18 @@ def write(cand: dict[str, Any], answers: dict[str, Any], profile_path: Path, hom
 
     # answers: user decisions win and are marked as user-owned
     actions: list[str] = []
+    selected_host: str | None = None
     for key, val in answers.items():
         if val is None and key in OPTIONAL_ANSWER_FIELDS:  # "use the default": drop the field
             proposed.pop(key, None)
             evidence.pop(key, None)
+            continue
+        if key == "_host":
+            if val:
+                selected_host = str(val)
+                if selected_host not in H.KNOWN_HOSTS:
+                    raise HarnessError(f"unknown _host {selected_host!r}; known: {', '.join(H.KNOWN_HOSTS)}")
+                actions.append(f"host:{selected_host}")
             continue
         if key == "_gitignore":
             if val:
@@ -963,14 +976,25 @@ def write(cand: dict[str, Any], answers: dict[str, Any], profile_path: Path, hom
                "verification": cand.get("verification", []), "files": files, "gaps": cand.get("gaps", []), "diff": diff}
     sidecar["open"] = sorted(k for k, v in sidecar["fields"].items() if v["status"] == "default" or v["confidence"] == "low")
 
+    host_binding_path: str | None = None
     if not dry_run:
         profile_path.write_text(json.dumps(profile, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         sidecar_path.write_text(json.dumps(sidecar, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        if selected_host:
+            bpath, _ = H.write_local_binding(home, profile_path.parent, selected_host, overwrite=True)
+            host_binding_path = str(bpath)
         if "gitignore" in actions:
             gi = root / ".gitignore"
             text = _read(gi) if gi.exists() else ""
-            if ".sdlc/tickets/" not in text:
-                gi.write_text(text + ("" if text.endswith("\n") or not text else "\n") + ".sdlc/tickets/\n", encoding="utf-8")
-    return {"profile": str(profile_path), "evidenceFile": str(sidecar_path), "dryRun": dry_run, "diff": diff,
-            "adapters": files, "adapterNotes": adapter_notes, "open": sidecar["open"], "gaps": sidecar["gaps"],
-            "actions": actions, "_profile": profile}
+            existing_lines = {ln.strip() for ln in text.splitlines()}
+            missing_entries = [e for e in (".sdlc/tickets/", ".sdlc/host.local.json", ".sdlc/ship-approvals.json")
+                               if e not in existing_lines]
+            if missing_entries:
+                prefix = "" if text.endswith("\n") or not text else "\n"
+                gi.write_text(text + prefix + "\n".join(missing_entries) + "\n", encoding="utf-8")
+    out_res = {"profile": str(profile_path), "evidenceFile": str(sidecar_path), "dryRun": dry_run, "diff": diff,
+               "adapters": files, "adapterNotes": adapter_notes, "open": sidecar["open"], "gaps": sidecar["gaps"],
+               "actions": actions, "_profile": profile}
+    if host_binding_path:
+        out_res["hostBinding"] = host_binding_path
+    return out_res

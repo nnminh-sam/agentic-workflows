@@ -239,76 +239,121 @@ window.KanekiTokens = {
     "usage": "Work in progress: running node ring, busy dot, live progress. Alias of accent so they can diverge later."
    },
    {
-    "name": "haiku",
+    "name": "tier-light",
     "value": {
      "light": "#0e8a7b",
      "dark": "#3fd0bd"
     },
-    "usage": "haiku model mark: cost bars, tier dot."
+    "usage": "light tier mark: cost bars, tier dot."
    },
    {
-    "name": "haiku-soft",
+    "name": "tier-light-soft",
     "value": {
      "light": "#e6f6f3",
      "dark": "#0f2724"
     },
-    "usage": "Tier badge fill for haiku."
+    "usage": "Tier badge fill for light tier."
    },
    {
-    "name": "haiku-text",
+    "name": "tier-light-text",
     "value": {
      "light": "#0a6b60",
      "dark": "#5fe0cf"
     },
-    "usage": "Tier badge text for haiku."
+    "usage": "Tier badge text for light tier."
    },
    {
-    "name": "sonnet",
+    "name": "tier-routine",
     "value": {
      "light": "#7a52db",
      "dark": "#b39cff"
     },
-    "usage": "sonnet model mark: cost bars, tier dot."
+    "usage": "routine tier mark: cost bars, tier dot."
    },
    {
-    "name": "sonnet-soft",
+    "name": "tier-routine-soft",
     "value": {
      "light": "#f2eefe",
      "dark": "#1f1936"
     },
-    "usage": "Tier badge fill for sonnet."
+    "usage": "Tier badge fill for routine tier."
    },
    {
-    "name": "sonnet-text",
+    "name": "tier-routine-text",
     "value": {
      "light": "#5b37b8",
      "dark": "#c4b2ff"
     },
-    "usage": "Tier badge text for sonnet."
+    "usage": "Tier badge text for routine tier."
    },
    {
-    "name": "opus",
+    "name": "tier-deep",
     "value": {
      "light": "#d1621c",
      "dark": "#ff9d5c"
     },
-    "usage": "opus model mark: cost bars, tier dot."
+    "usage": "deep tier mark: cost bars, tier dot."
    },
    {
-    "name": "opus-soft",
+    "name": "tier-deep-soft",
     "value": {
      "light": "#fdf0e7",
      "dark": "#2d1c10"
     },
-    "usage": "Tier badge fill for opus."
+    "usage": "Tier badge fill for deep tier."
    },
    {
-    "name": "opus-text",
+    "name": "tier-deep-text",
     "value": {
      "light": "#9c4410",
      "dark": "#ffb27f"
     },
-    "usage": "Tier badge text for opus."
+    "usage": "Tier badge text for deep tier."
+   },
+   {
+    "name": "haiku",
+    "value": "{tier-light}",
+    "usage": "Legacy alias for tier-light."
+   },
+   {
+    "name": "haiku-soft",
+    "value": "{tier-light-soft}",
+    "usage": "Legacy alias for tier-light-soft."
+   },
+   {
+    "name": "haiku-text",
+    "value": "{tier-light-text}",
+    "usage": "Legacy alias for tier-light-text."
+   },
+   {
+    "name": "sonnet",
+    "value": "{tier-routine}",
+    "usage": "Legacy alias for tier-routine."
+   },
+   {
+    "name": "sonnet-soft",
+    "value": "{tier-routine-soft}",
+    "usage": "Legacy alias for tier-routine-soft."
+   },
+   {
+    "name": "sonnet-text",
+    "value": "{tier-routine-text}",
+    "usage": "Legacy alias for tier-routine-text."
+   },
+   {
+    "name": "opus",
+    "value": "{tier-deep}",
+    "usage": "Legacy alias for tier-deep."
+   },
+   {
+    "name": "opus-soft",
+    "value": "{tier-deep-soft}",
+    "usage": "Legacy alias for tier-deep-soft."
+   },
+   {
+    "name": "opus-text",
+    "value": "{tier-deep-text}",
+    "usage": "Legacy alias for tier-deep-text."
    },
    {
     "name": "scrim",
@@ -810,6 +855,21 @@ window.KanekiTokens = {
     4.5
    ],
    [
+    "tier-light-text",
+    "tier-light-soft",
+    4.5
+   ],
+   [
+    "tier-routine-text",
+    "tier-routine-soft",
+    4.5
+   ],
+   [
+    "tier-deep-text",
+    "tier-deep-soft",
+    4.5
+   ],
+   [
     "haiku-text",
     "haiku-soft",
     4.5
@@ -855,17 +915,17 @@ window.KanekiTokens = {
     3
    ],
    [
-    "haiku",
+    "tier-light",
     "surface",
     3
    ],
    [
-    "sonnet",
+    "tier-routine",
     "surface",
     3
    ],
    [
-    "opus",
+    "tier-deep",
     "surface",
     3
    ],

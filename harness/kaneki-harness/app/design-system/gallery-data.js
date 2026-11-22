@@ -34,9 +34,9 @@
     dos: ['Keep groups to 2–4 buttons of the same size.'], donts: ['Mix primary and secondary buttons in one group.'] });
 
   add({ id: 'link', group: 'Actions', name: 'Link', classes: ['k-link'],
-    desc: 'Inline navigation: open a file in Zed, jump to a node.',
+    desc: 'Inline navigation: open a file in your editor, jump to a node.',
     examples: [{ title: 'Inline', html:
-'<p style="margin:0">Evidence is in <a class="k-link" href="#">run-report.md</a>; open it in <a class="k-link is-hover" href="#">Zed ' + I('external', 'k-icon--sm') + '</a>.</p>' }],
+'<p style="margin:0">Evidence is in <a class="k-link" href="#">run-report.md</a>; open it in <a class="k-link is-hover" href="#">Editor ' + I('external', 'k-icon--sm') + '</a>.</p>' }],
     dos: ['Use links for navigation, buttons for actions.'], donts: ['Links that run commands.'] });
 
   add({ id: 'kbd', group: 'Actions', name: 'Kbd and command trigger', classes: ['k-kbd', 'k-cmdk'],
@@ -45,7 +45,7 @@
       { title: 'Keys', html: '<div class="g-row"><span class="k-kbd">Ctrl</span><span class="k-kbd">K</span><span class="k-kbd">↵</span><span class="k-kbd">Esc</span><span class="k-kbd">⇧</span></div>' },
       { title: 'Command trigger', html:
 '<div class="g-row">\n  <button class="k-cmdk">' + I('search') + '<span class="k-cmdk__text">Search or run a command</span><span class="k-kbd">Ctrl</span><span class="k-kbd">K</span></button>\n  <button class="k-cmdk is-hover">' + I('search') + '<span class="k-cmdk__text">Hover</span><span class="k-kbd">Ctrl</span><span class="k-kbd">K</span></button>\n</div>' }],
-    dos: ['Show the shortcut wherever the action has one.'], donts: ['Invent shortcuts that clash with Zed or Windows.'] });
+    dos: ['Show the shortcut wherever the action has one.'], donts: ['Invent shortcuts that clash with the OS or editor.'] });
 
   /* ------------------------------------------------------------------ Inputs */
   add({ id: 'input', group: 'Inputs', name: 'Text input', classes: ['k-field', 'k-label', 'k-input', 'k-input-wrap', 'k-hint', 'k-error'],
@@ -103,11 +103,11 @@
 '<div class="g-row">\n  <span class="k-badge">full lane</span>\n  <span class="k-badge k-badge--outline">generation 2</span>\n  <span class="k-badge k-badge--accent">record</span>\n  <span class="k-badge k-badge--ok">gate approved</span>\n  <span class="k-badge k-badge--warn"><span class="k-dot k-dot--attention"></span>needs you</span>\n  <span class="k-badge k-badge--bad">invalidate</span>\n</div>' }],
     dos: ['One or two words.'], donts: ['Badges as buttons.'] });
 
-  add({ id: 'tier', group: 'Status', name: 'Tier badge', classes: ['k-tier', 'k-tier--haiku', 'k-tier--sonnet', 'k-tier--opus', 'k-tier__model'],
-    desc: 'Which tier ran a unit and which model the profile mapped it to. Tier first, model second.',
+  add({ id: 'tier', group: 'Status', name: 'Tier badge', classes: ['k-tier', 'k-tier--light', 'k-tier--routine', 'k-tier--deep', 'k-tier__model'],
+    desc: 'Which capability tier ran a unit and which model the active host binding mapped it to. Tier first, model second.',
     examples: [{ title: 'Tiers', html:
-'<div class="g-row">\n  <span class="k-tier k-tier--haiku">light <span class="k-tier__model">· haiku</span></span>\n  <span class="k-tier k-tier--sonnet">routine <span class="k-tier__model">· sonnet</span></span>\n  <span class="k-tier k-tier--opus">deep <span class="k-tier__model">· opus</span></span>\n</div>' }],
-    dos: ['Read <code>tier · model</code>.'], donts: ['Use model colours for anything else but tiers and cost.'] });
+'<div class="g-row">\n  <span class="k-tier k-tier--light">light <span class="k-tier__model">· flash_lite</span></span>\n  <span class="k-tier k-tier--routine">routine <span class="k-tier__model">· sonnet</span></span>\n  <span class="k-tier k-tier--deep">deep <span class="k-tier__model">· pro</span></span>\n</div>' }],
+    dos: ['Read <code>tier · model</code>.'], donts: ['Use tier colours for anything else but tiers and cost.'] });
 
   add({ id: 'status', group: 'Status', name: 'Status dot and label', classes: ['k-dot', 'k-dot--attention', 'k-dot--run', 'k-dot--ok', 'k-dot--bad', 'k-dot--idle', 'k-status'],
     desc: 'Where a ticket or session stands. The dot is never alone: a label always says the state.',
@@ -175,7 +175,7 @@
   add({ id: 'table', group: 'Data display', name: 'Table', classes: ['k-table-wrap', 'k-table', 'k-table--compact', 'is-num', 'is-selected'],
     desc: 'Rows of the same kind with comparable columns. Numbers right-aligned in tabular figures; header sticks while scrolling.',
     examples: [{ title: 'Units of a node', wide: true, html:
-'<div class="k-table-wrap">\n<table class="k-table">\n  <thead><tr><th>Unit</th><th>Tier · model</th><th>Verdict</th><th class="is-num">Tokens</th><th class="is-num">Rounds</th></tr></thead>\n  <tbody>\n    <tr><td>worker</td><td><span class="k-tier k-tier--sonnet">routine <span class="k-tier__model">· sonnet</span></span></td><td><span class="k-verdict k-verdict--pending">' + I('clock', 'k-icon--sm') + 'recorded</span></td><td class="is-num">157,309</td><td class="is-num">2</td></tr>\n    <tr class="is-selected"><td>reviewer</td><td><span class="k-tier k-tier--sonnet">routine <span class="k-tier__model">· sonnet</span></span></td><td><span class="k-verdict k-verdict--pass">' + I('check-circle', 'k-icon--sm') + 'PASS</span></td><td class="is-num">45,401</td><td class="is-num">1</td></tr>\n    <tr class="is-hover"><td>semantic-review</td><td><span class="k-tier k-tier--opus">deep <span class="k-tier__model">· opus</span></span></td><td><span class="k-verdict k-verdict--fail">' + I('x-circle', 'k-icon--sm') + 'FAIL</span></td><td class="is-num">154,030</td><td class="is-num">2</td></tr>\n  </tbody>\n</table>\n</div>' },
+'<div class="k-table-wrap">\n<table class="k-table">\n  <thead><tr><th>Unit</th><th>Tier · model</th><th>Verdict</th><th class="is-num">Tokens</th><th class="is-num">Rounds</th></tr></thead>\n  <tbody>\n    <tr><td>worker</td><td><span class="k-tier k-tier--routine">routine <span class="k-tier__model">· sonnet</span></span></td><td><span class="k-verdict k-verdict--pending">' + I('clock', 'k-icon--sm') + 'recorded</span></td><td class="is-num">157,309</td><td class="is-num">2</td></tr>\n    <tr class="is-selected"><td>reviewer</td><td><span class="k-tier k-tier--routine">routine <span class="k-tier__model">· sonnet</span></span></td><td><span class="k-verdict k-verdict--pass">' + I('check-circle', 'k-icon--sm') + 'PASS</span></td><td class="is-num">45,401</td><td class="is-num">1</td></tr>\n    <tr class="is-hover"><td>semantic-review</td><td><span class="k-tier k-tier--deep">deep <span class="k-tier__model">· pro</span></span></td><td><span class="k-verdict k-verdict--fail">' + I('x-circle', 'k-icon--sm') + 'FAIL</span></td><td class="is-num">154,030</td><td class="is-num">2</td></tr>\n  </tbody>\n</table>\n</div>' },
       { title: 'Compare runs (compact)', wide: true, html:
 '<div class="k-table-wrap">\n<table class="k-table k-table--compact">\n  <thead><tr><th>Measure</th><th class="is-num">TODO-1</th><th class="is-num">TODO-1-2</th><th class="is-num">Change</th></tr></thead>\n  <tbody>\n    <tr><td>Cost to first coding gate</td><td class="is-num">$4.93</td><td class="is-num">$4.03</td><td class="is-num"><span class="k-delta k-delta--better">−18%</span></td></tr>\n    <tr><td>Tokens to first coding gate</td><td class="is-num">8.0M</td><td class="is-num">16.2M</td><td class="is-num"><span class="k-delta k-delta--worse">+103%</span></td></tr>\n    <tr><td>Fix loops</td><td class="is-num">3</td><td class="is-num">1</td><td class="is-num">—</td></tr>\n  </tbody>\n</table>\n</div>' }],
     dos: ['First column is the row\'s name, in ink.'], donts: ['Zebra stripes; hairlines are enough.'] });
@@ -187,9 +187,9 @@
     dos: ['Values that are ids go in mono.'], donts: ['Long paragraphs as values.'] });
 
   add({ id: 'bars', group: 'Data display', name: 'Cost bars', classes: ['k-bars', 'k-bar', 'k-bar__label', 'k-bar__track', 'k-bar__fill', 'k-bar__value'],
-    desc: 'Compares a few amounts. The fill uses the model colour; the value is always printed.',
-    examples: [{ title: 'Cost by model (sample)', html:
-'<div class="k-bars" style="max-width:520px">\n  <div class="k-bar"><span class="k-bar__label"><span class="k-dot" style="background:var(--opus)"></span>opus</span><span class="k-bar__track"><i class="k-bar__fill" style="width:100%;background:var(--opus)"></i></span><span class="k-bar__value">$2.31</span></div>\n  <div class="k-bar"><span class="k-bar__label"><span class="k-dot" style="background:var(--sonnet)"></span>sonnet</span><span class="k-bar__track"><i class="k-bar__fill" style="width:71%;background:var(--sonnet)"></i></span><span class="k-bar__value">$1.64</span></div>\n  <div class="k-bar"><span class="k-bar__label"><span class="k-dot" style="background:var(--haiku)"></span>haiku</span><span class="k-bar__track"><i class="k-bar__fill" style="width:37%;background:var(--haiku)"></i></span><span class="k-bar__value">$0.86</span></div>\n</div>' }],
+    desc: 'Compares a few amounts. The fill uses the tier colour; the value is always printed.',
+    examples: [{ title: 'Cost by tier (sample)', html:
+'<div class="k-bars" style="max-width:520px">\n  <div class="k-bar"><span class="k-bar__label"><span class="k-dot" style="background:var(--tier-deep)"></span>deep</span><span class="k-bar__track"><i class="k-bar__fill" style="width:100%;background:var(--tier-deep)"></i></span><span class="k-bar__value">$2.31</span></div>\n  <div class="k-bar"><span class="k-bar__label"><span class="k-dot" style="background:var(--tier-routine)"></span>routine</span><span class="k-bar__track"><i class="k-bar__fill" style="width:71%;background:var(--tier-routine)"></i></span><span class="k-bar__value">$1.64</span></div>\n  <div class="k-bar"><span class="k-bar__label"><span class="k-dot" style="background:var(--tier-light)"></span>light</span><span class="k-bar__track"><i class="k-bar__fill" style="width:37%;background:var(--tier-light)"></i></span><span class="k-bar__value">$0.86</span></div>\n</div>' }],
     dos: ['Sort largest first.'], donts: ['Bars without values.'] });
 
   add({ id: 'events', group: 'Data display', name: 'Event timeline', classes: ['k-events', 'k-event', 'k-event__time', 'k-event__who'],
@@ -208,7 +208,7 @@
     desc: 'A read-only preview of a file or output (the inspector).',
     examples: [{ title: 'run-report.md preview', html:
 '<pre class="k-code"><span class="t-h">## Summary</span>\nPlanned 139 · run 138 · <span class="t-ok">OK 136</span> · <span class="t-bad">NG 2</span> · N/A 1\n\n<span class="t-h">## NG</span>\n<span class="t-bad">TC-TOOL-11</span>  grep "Todo" hits Swagger title  <span class="t-dim">src/app.setup.ts:60</span>\n<span class="t-bad">TC-DOCK-04</span>  /missing/x.db created by root</pre>' }],
-    dos: ['Offer "Open in Zed" next to every preview.'], donts: ['Editing in the preview.'] });
+    dos: ['Offer "Open in Editor" next to every preview.'], donts: ['Editing in the preview.'] });
 
   add({ id: 'command', group: 'Data display', name: 'Command preview', classes: ['k-command', 'k-command__head', 'k-command__body'],
     desc: 'The exact CLI command a confirm button will run. Every state change shows one first.',
@@ -249,14 +249,14 @@
 
   add({ id: 'tooltip', group: 'Feedback', name: 'Tooltip', classes: ['k-tooltip'],
     desc: 'The name of an icon button, or a short explanation, on hover or focus.',
-    examples: [{ title: 'Default', html: '<div style="padding-top:8px"><span class="k-tooltip">Stop the claude process (PID 18324)</span></div>' }],
+    examples: [{ title: 'Default', html: '<div style="padding-top:8px"><span class="k-tooltip">Stop the agent session (PID 18324)</span></div>' }],
     dos: ['One short line.'], donts: ['Information that is only in a tooltip.'] });
 
   /* ------------------------------------------------------------------ Overlays */
   add({ id: 'menu', group: 'Overlays', name: 'Menu', classes: ['k-menu', 'k-menu__item', 'k-menu__item--danger', 'k-menu__hint', 'k-menu__sep', 'k-menu__label'],
     desc: 'Secondary actions for one object, opened from a "more" button.',
     examples: [{ title: 'Node actions', html:
-'<div class="k-menu" style="width:260px">\n  <div class="k-menu__label">execute-and-evidence</div>\n  <button class="k-menu__item">' + I('file') + 'Open packet<span class="k-menu__hint">P</span></button>\n  <button class="k-menu__item is-hover">' + I('external') + 'Open in Zed<span class="k-menu__hint">Ctrl O</span></button>\n  <button class="k-menu__item">' + I('copy') + 'Copy dispatch id</button>\n  <div class="k-menu__sep"></div>\n  <button class="k-menu__item k-menu__item--danger">' + I('reopen') + 'Reopen this node…</button>\n</div>' }],
+'<div class="k-menu" style="width:260px">\n  <div class="k-menu__label">execute-and-evidence</div>\n  <button class="k-menu__item">' + I('file') + 'Open packet<span class="k-menu__hint">P</span></button>\n  <button class="k-menu__item is-hover">' + I('external') + 'Open in Editor<span class="k-menu__hint">Ctrl O</span></button>\n  <button class="k-menu__item">' + I('copy') + 'Copy dispatch id</button>\n  <div class="k-menu__sep"></div>\n  <button class="k-menu__item k-menu__item--danger">' + I('reopen') + 'Reopen this node…</button>\n</div>' }],
     dos: ['End destructive items with "…" when they open a confirm.'], donts: ['Nested menus.'] });
 
   add({ id: 'dialog', group: 'Overlays', name: 'Dialog (gate)', classes: ['k-scrim', 'k-dialog', 'k-dialog__head', 'k-dialog__icon', 'k-dialog__title', 'k-dialog__sub', 'k-dialog__body', 'k-dialog__foot', 'k-evidence', 'k-stale-list'],
@@ -285,7 +285,7 @@
     dos: ['Keep the attention pill in the same place on every screen.'], donts: ['Put ticket actions in the top bar.'] });
 
   add({ id: 'session', group: 'Layout', name: 'Session row', classes: ['k-session', 'k-session__name', 'k-session__node', 'k-session__acts'],
-    desc: 'One supervised Claude session in the dock: state, name, node, status and actions.',
+    desc: 'One supervised agent session in the dock: state, name, node, status and actions.',
     examples: [{ title: 'States', wide: true, html:
 '<div style="display:grid;gap:2px">\n  <div class="k-session"><span class="k-dot k-dot--attention"></span><span class="k-session__name">todo12-evidence2</span><span class="k-session__node">execute-and-evidence g2</span><span class="k-status k-status--attention">Waiting: your gate decision · 14m</span><span class="k-session__acts"><button class="k-btn k-btn--sm">Focus</button><button class="k-btn k-btn--sm k-btn--ghost">Stop</button></span></div>\n  <div class="k-session is-hover"><span class="k-dot k-dot--run"></span><span class="k-session__name">haise-eb</span><span class="k-session__node">driver / monitor</span><span class="k-status k-status--run">Busy · 2h 41m</span><span class="k-session__acts"><button class="k-btn k-btn--sm">Focus</button><button class="k-btn k-btn--sm k-btn--ghost">Stop</button></span></div>\n  <div class="k-session"><span class="k-dot k-dot--idle"></span><span class="k-session__name">todo12-review2</span><span class="k-session__node">code-review g2</span><span class="k-status">Stopped after gate</span><span class="k-session__acts"><button class="k-btn k-btn--sm">Focus</button><button class="k-btn k-btn--sm k-btn--ghost" disabled>Stop</button></span></div>\n</div>' }],
     dos: ['Say what the session waits for.'], donts: ['Stop without a confirm when the session is busy.'] });
@@ -293,7 +293,7 @@
   add({ id: 'inspector', group: 'Layout', name: 'Inspector', classes: ['k-inspector', 'k-inspector__head', 'k-inspector__body'],
     desc: 'The right column: a preview of the file chosen in the node card.',
     examples: [{ title: 'Default', html:
-'<aside class="k-inspector" style="border:1px solid var(--border);border-radius:12px;max-width:380px">\n  <header class="k-inspector__head">' + I('file') + '<b>run-report.md</b><span class="k-badge k-badge--outline">g2</span><span class="k-spacer"></span><button class="k-btn k-btn--sm">' + I('external', 'k-icon--sm') + 'Open in Zed</button></header>\n  <div class="k-inspector__body"><pre class="k-code" style="border:0;padding:0;background:none"><span class="t-h">## Summary</span>\nPlanned 139 · <span class="t-ok">OK 136</span> · <span class="t-bad">NG 2</span> · N/A 1</pre></div>\n</aside>' }],
+'<aside class="k-inspector" style="border:1px solid var(--border);border-radius:12px;max-width:380px">\n  <header class="k-inspector__head">' + I('file') + '<b>run-report.md</b><span class="k-badge k-badge--outline">g2</span><span class="k-spacer"></span><button class="k-btn k-btn--sm">' + I('external', 'k-icon--sm') + 'Open in Editor</button></header>\n  <div class="k-inspector__body"><pre class="k-code" style="border:0;padding:0;background:none"><span class="t-h">## Summary</span>\nPlanned 139 · <span class="t-ok">OK 136</span> · <span class="t-bad">NG 2</span> · N/A 1</pre></div>\n</aside>' }],
     dos: ['Show the generation of the file.'], donts: ['Editing.'] });
 
   window.KanekiGallery = C;

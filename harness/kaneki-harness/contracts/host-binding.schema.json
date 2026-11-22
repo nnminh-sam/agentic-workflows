@@ -1,0 +1,279 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Kaneki host binding",
+  "description": "Developer-local agent host binding (.sdlc/host.local.json) and bundled host preset (hosts/<host>/tiers.json).",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "host",
+    "tiers"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "host": {
+      "type": "string",
+      "enum": [
+        "antigravity",
+        "claude",
+        "codex",
+        "gemini",
+        "cursor",
+        "opencode",
+        "generic"
+      ]
+    },
+    "dispatchMode": {
+      "type": "string",
+      "enum": [
+        "native",
+        "subprocess",
+        "manual"
+      ],
+      "default": "native"
+    },
+    "modelSelection": {
+      "type": "string",
+      "enum": [
+        "explicit",
+        "enum",
+        "inherit-only"
+      ],
+      "default": "explicit"
+    },
+    "enforcement": {
+      "type": "string",
+      "enum": [
+        "strict",
+        "alias-match",
+        "inherit-ok"
+      ],
+      "default": "alias-match"
+    },
+    "runner": {
+      "type": "string",
+      "enum": [
+        "codex",
+        "claude",
+        "gemini",
+        "opencode",
+        "custom"
+      ]
+    },
+    "commandTemplate": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "tiers": {
+      "type": "object",
+      "required": [
+        "routine",
+        "deep"
+      ],
+      "properties": {
+        "light": {
+          "type": "object",
+          "required": [
+            "model"
+          ],
+          "properties": {
+            "model": {
+              "type": "string",
+              "minLength": 1
+            },
+            "effort": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                null
+              ]
+            },
+            "contextWindow": {
+              "type": "integer",
+              "minimum": 10000
+            },
+            "aliases": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "routine": {
+          "type": "object",
+          "required": [
+            "model"
+          ],
+          "properties": {
+            "model": {
+              "type": "string",
+              "minLength": 1
+            },
+            "effort": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                null
+              ]
+            },
+            "contextWindow": {
+              "type": "integer",
+              "minimum": 10000
+            },
+            "aliases": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "deep": {
+          "type": "object",
+          "required": [
+            "model"
+          ],
+          "properties": {
+            "model": {
+              "type": "string",
+              "minLength": 1
+            },
+            "effort": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                null
+              ]
+            },
+            "contextWindow": {
+              "type": "integer",
+              "minimum": 10000
+            },
+            "aliases": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "nodeOverrides": {
+      "type": "object",
+      "description": "Per-node or per-unit ('node' or 'node/unit') execution binding overrides, e.g. cross-host subprocess dispatch.",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "host": {
+            "type": "string",
+            "enum": [
+              "antigravity",
+              "claude",
+              "codex",
+              "gemini",
+              "cursor",
+              "opencode",
+              "generic"
+            ]
+          },
+          "dispatchMode": {
+            "type": "string",
+            "enum": [
+              "native",
+              "subprocess",
+              "manual"
+            ]
+          },
+          "runner": {
+            "type": "string",
+            "enum": [
+              "codex",
+              "claude",
+              "gemini",
+              "opencode",
+              "custom"
+            ]
+          },
+          "commandTemplate": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "model": {
+            "type": "string",
+            "minLength": 1
+          },
+          "effort": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              null
+            ]
+          },
+          "contextWindow": {
+            "type": "integer",
+            "minimum": 10000
+          },
+          "enforcement": {
+            "type": "string",
+            "enum": [
+              "strict",
+              "alias-match",
+              "inherit-ok"
+            ]
+          },
+          "modelSelection": {
+            "type": "string",
+            "enum": [
+              "explicit",
+              "enum",
+              "inherit-only"
+            ]
+          },
+          "aliases": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}
