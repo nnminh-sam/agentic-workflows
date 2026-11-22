@@ -173,7 +173,7 @@ async function renderPreview() {
   const r = await fetch(`/api/file?id=${encodeURIComponent(selected)}&name=${encodeURIComponent(preview.name)}`, { cache: "no-store" });
   const text = r.ok ? await r.text() : "(cannot read this file)";
   el.innerHTML = `<div id="preview"><div class="bar"><span class="name">${esc(preview.name)}</span><span class="spacer"></span>
-    <button data-open="${esc(preview.path)}">Open in Zed</button><button data-close>Close</button></div><pre>${esc(text)}</pre></div>`;
+    <button data-open="${esc(preview.path)}">Open in Editor</button><button data-close>Close</button></div><pre>${esc(text)}</pre></div>`;
 }
 
 document.addEventListener("click", e => {

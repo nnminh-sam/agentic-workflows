@@ -175,8 +175,30 @@ def validate_profile(p: dict[str, Any]) -> None:
             errors.append(f"locale.{key} is unknown (keys: {', '.join(LOCALE_KEYS)})")
         elif not isinstance(val, str) or not LANG_RE.match(val):
             errors.append(f"locale.{key} must be a language tag such as en, vi, ja, pt-BR")
+    node_overrides = p.get("nodeOverrides")
+    if node_overrides is not None:
+        if not isinstance(node_overrides, dict):
+            errors.append("nodeOverrides must be an object")
+        else:
+            for node_id, cfg in node_overrides.items():
+                if not isinstance(cfg, dict):
+                    errors.append(f"nodeOverrides.{node_id} must be an object")
+                    continue
+                if "tier" in cfg and cfg["tier"] not in ALL_TIERS:
+                    errors.append(f"nodeOverrides.{node_id}.tier must be one of {', '.join(ALL_TIERS)}")
+                units_cfg = cfg.get("units")
+                if units_cfg is not None:
+                    if not isinstance(units_cfg, dict):
+                        errors.append(f"nodeOverrides.{node_id}.units must be an object")
+                    else:
+                        for uid, ucfg in units_cfg.items():
+                            if not isinstance(ucfg, dict):
+                                errors.append(f"nodeOverrides.{node_id}.units.{uid} must be an object")
+                            elif "tier" in ucfg and ucfg["tier"] not in ALL_TIERS:
+                                errors.append(f"nodeOverrides.{node_id}.units.{uid}.tier must be one of {', '.join(ALL_TIERS)}")
     known = {"schemaVersion", "meta", "project", "locale", "paths", "models", "tracker", "repositories", "rulepacks",
-             "testcase", "evidence", "delivery", "families", "gates", "environment", "git", "contextWindow"}
+             "testcase", "evidence", "delivery", "families", "gates", "environment", "git", "contextWindow",
+             "nodeOverrides"}
     extra = sorted(k for k in p if k not in known and not k.startswith("_"))
     if extra:
         errors.append(f"unknown top-level keys {extra}")

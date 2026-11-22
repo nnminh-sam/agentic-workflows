@@ -429,6 +429,55 @@
           "minimum": 10000
         }
       }
+    },
+    "nodeOverrides": {
+      "type": "object",
+      "description": "Portable per-node (and per-unit) policy overrides, keyed by graph node id. Concrete host models remain in .sdlc/host.local.json.",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "tier": {
+            "type": "string",
+            "enum": [
+              "light",
+              "routine",
+              "deep"
+            ]
+          },
+          "escalateAfter": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "preferCrossHost": {
+            "type": "boolean"
+          },
+          "units": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "tier": {
+                  "type": "string",
+                  "enum": [
+                    "light",
+                    "routine",
+                    "deep"
+                  ]
+                },
+                "escalateAfter": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "preferCrossHost": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      }
     }
   },
   "additionalProperties": false

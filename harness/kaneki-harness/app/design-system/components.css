@@ -131,9 +131,9 @@ code.k-code-inline{background:var(--surface-3);border-radius:var(--radius-xs);pa
 .k-badge--ok{background:var(--ok-soft);color:var(--ok-text)}
 .k-badge--warn{background:var(--warn-soft);color:var(--warn-text)}
 .k-badge--bad{background:var(--bad-soft);color:var(--bad-text)}
-.k-badge--haiku{background:var(--haiku-soft);color:var(--haiku-text)}
-.k-badge--sonnet{background:var(--sonnet-soft);color:var(--sonnet-text)}
-.k-badge--opus{background:var(--opus-soft);color:var(--opus-text)}
+.k-badge--light,.k-badge--haiku{background:var(--tier-light-soft);color:var(--tier-light-text)}
+.k-badge--routine,.k-badge--sonnet{background:var(--tier-routine-soft);color:var(--tier-routine-text)}
+.k-badge--deep,.k-badge--opus{background:var(--tier-deep-soft);color:var(--tier-deep-text)}
 .k-badge .k-dot{width:6px;height:6px}
 .k-pill{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px 0 8px;border-radius:var(--radius-full);border:0;font-size:12px;font-weight:600;cursor:pointer}
 .k-pill--attention{background:var(--warn-soft);color:var(--warn-text);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--warn) 35%,transparent)}
@@ -157,9 +157,9 @@ code.k-code-inline{background:var(--surface-3);border-radius:var(--radius-xs);pa
 .k-delta--worse{color:var(--bad-text)}
 .k-tier{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 8px 0 7px;border-radius:var(--radius-full);font-size:11px;font-weight:600}
 .k-tier::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
-.k-tier--haiku{background:var(--haiku-soft);color:var(--haiku-text)}
-.k-tier--sonnet{background:var(--sonnet-soft);color:var(--sonnet-text)}
-.k-tier--opus{background:var(--opus-soft);color:var(--opus-text)}
+.k-tier--light,.k-tier--haiku{background:var(--tier-light-soft);color:var(--tier-light-text)}
+.k-tier--routine,.k-tier--sonnet{background:var(--tier-routine-soft);color:var(--tier-routine-text)}
+.k-tier--deep,.k-tier--opus{background:var(--tier-deep-soft);color:var(--tier-deep-text)}
 .k-tier__model{font-weight:500;opacity:.85}
 
 /* =========================================================== progress */

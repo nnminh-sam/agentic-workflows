@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "host": "generic",
+  "dispatchMode": "subprocess",
+  "modelSelection": "inherit-only",
+  "enforcement": "inherit-ok",
+  "tiers": {
+    "light": {
+      "model": "inherit",
+      "contextWindow": 200000
+    },
+    "routine": {
+      "model": "inherit",
+      "contextWindow": 200000
+    },
+    "deep": {
+      "model": "inherit",
+      "contextWindow": 200000
+    }
+  }
+}

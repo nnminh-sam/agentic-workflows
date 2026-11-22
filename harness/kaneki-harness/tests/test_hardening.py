@@ -545,7 +545,7 @@ class InstallTests(unittest.TestCase):
     def test_install_and_keep_user_edits(self) -> None:
         target = Path(tempfile.mkdtemp(prefix="sdlc-install-"))
         self.addCleanup(lambda: __import__("shutil").rmtree(target, ignore_errors=True))
-        code, res = run("install", "--target", str(target))
+        code, res = run("install", "--target", str(target), "--host", "claude")
         self.assertEqual(code, 0, res)
         claude = target / ".claude"
         for f in ("skills/kaneki-flow/SKILL.md", "skills/kaneki-ship/SKILL.md", "skills/kaneki-onboarding/SKILL.md",
@@ -558,9 +558,21 @@ class InstallTests(unittest.TestCase):
         self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
         card = claude / "skills/kaneki-flow/SKILL.md"
         card.write_text(card.read_text(encoding="utf-8") + "\n<!-- my note -->\n", encoding="utf-8")
-        code, res = run("install", "--target", str(target))
+        code, res = run("install", "--target", str(target), "--host", "claude")
         self.assertIn("skills/kaneki-flow/SKILL.md", res["keptYourEdits"])
         self.assertIn("my note", card.read_text(encoding="utf-8"))
+
+    def test_install_claude_without_my_git_succeeds(self) -> None:
+        target = Path(tempfile.mkdtemp(prefix="sdlc-install-"))
+        self.addCleanup(lambda: __import__("shutil").rmtree(target, ignore_errors=True))
+        os.environ["SDLC_MYGIT"] = str(target / "missing")
+        self.addCleanup(os.environ.pop, "SDLC_MYGIT", None)
+        code, res = run("install", "--target", str(target), "--host", "claude")
+        self.assertEqual(code, 0, res)
+        self.assertNotIn("myGit", res)
+        self.assertTrue((target / ".claude" / "skills/kaneki-flow/SKILL.md").is_file())
+        self.assertTrue((target / ".sdlc" / "bin" / "sdlc").is_file())
+        self.assertTrue((target / ".sdlc" / "host.local.json").is_file())
 
     def test_install_registers_the_my_git_of_the_same_checkout(self) -> None:
         from harness import mygit
@@ -572,7 +584,7 @@ class InstallTests(unittest.TestCase):
         stale = {"extraKnownMarketplaces": {"my-git-local": {"source": {"source": "directory", "path": "/old/my-git"}}},
                  "enabledPlugins": {"my-git@my-git-local": True}}
         (target / ".claude" / "settings.local.json").write_text(json.dumps(stale), encoding="utf-8")
-        code, res = run("install", "--target", str(target))
+        code, res = run("install", "--target", str(target), "--host", "claude", "--with-my-git")
         self.assertEqual(code, 0, res)
         self.assertEqual(res["myGit"]["version"], mygit.version(root))
         for name in ("settings.json", "settings.local.json"):
@@ -587,7 +599,7 @@ class InstallTests(unittest.TestCase):
         self.addCleanup(lambda: __import__("shutil").rmtree(target, ignore_errors=True))
         os.environ["SDLC_MYGIT"] = str(target / "missing")
         self.addCleanup(os.environ.pop, "SDLC_MYGIT", None)
-        code, res = run("install", "--target", str(target))
+        code, res = run("install", "--target", str(target), "--host", "claude", "--with-my-git")
         self.assertEqual(code, 2)
         self.assertIn("my-git", res["error"])
         self.assertFalse((target / ".claude" / "skills").exists())

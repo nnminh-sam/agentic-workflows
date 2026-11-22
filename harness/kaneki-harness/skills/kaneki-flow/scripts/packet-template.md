@@ -5,9 +5,13 @@ the dispatch facts at the end are yours.
 
 ## Unit contract
 
-- Node `{{node}}`, unit `{{unit}}`, role **{{role}}**.
+- Node `{{node}}`, unit `{{unit}}`, role **{{role}}** (tier **{{tier}}**, host **{{host}}**, model **{{model}}**).
 - Purpose: {{purpose}}
 - Node card (read first, it is the procedure): `{{card}}`
+
+## Role card
+
+{{roleCard}}
 
 ## Languages
 
@@ -42,16 +46,16 @@ node, unit ids) into code, test names or customer-facing text.
 
 - Every load-bearing claim is OBSERVED (cite `repo-relative/path:line`, or a command you ran and its
   exit/result), DERIVED (name what it is derived from) or ASSUMED (say so). No source → `UNKNOWN`.
-- Line numbers come from Grep-with-line-numbers or Read on the file itself, never from a piped range.
+- Line numbers come from a line-numbered search tool or direct ranged file read on the file itself, never from a piped range.
 - "Verified" means you named, ran and read the check.
-- Locate with Grep first, then Read with offset/limit. Do not read whole large files.
+- Locate symbols with search first, then read only targeted line ranges (`StartLine`/`EndLine` or `offset`/`limit`). Do not read whole large files.
 
 ## Context budget
 
 Assume a context window of about **{{contextWindow}} tokens**, and spend it on judgment, not on output.
 
 - Send long command output (tests, builds, installs, container and server logs) to a file under
-  `{{logsDir}}` and read it with `rg` (or the last lines only), never the whole stream:
+  `{{logsDir}}` and inspect it with search (or the last lines only), never the whole stream:
   `<command> > "{{logsDir}}/<name>.log" 2>&1; echo "exit $?"`.
 - Do not read dependency folders (`node_modules`, `vendor`, `.venv`, build output) except one targeted
   file when a framework behaviour is the question.

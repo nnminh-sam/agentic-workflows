@@ -13,12 +13,13 @@ from . import checks as C
 from . import ship as SHIP
 from . import gitid
 from . import graph as G
+from . import hosts as H
 from . import onboard as OB
 from . import rules as R
 from . import usage as U
 from .errors import HarnessError
-from .profile import (LOCALE_KEYS, _abs, artifact_languages, build_context, context_window, language, language_source,
-                      load_profile, parse_lang_settings, resolve_adapters, tier_model, worktree_path, worktree_root,
+from .profile import (LOCALE_KEYS, _abs, artifact_languages, build_context, language, language_source,
+                      load_profile, parse_lang_settings, resolve_adapters, worktree_path, worktree_root,
                       worktree_root_errors)
 from .state import (Ticket, check_receipts, issue_receipts, missing_prerequisites, new_node_record,
                     next_pending, now, repo_subject, settled, sha256_file, sha256_text)
@@ -59,6 +60,7 @@ class Session:
         # state are only a cache: repository paths come from the profile, worktrees from `worktreeRel`.
         self.ppath = profile_path(args)
         self.pdir = self.ppath.parent
+        self.cli_host = getattr(args, "host", None)
         self.profile = load_profile(self.ppath)
         self.ticket = Ticket(ticket_root(self.profile, self.pdir), args.ticket)
         # harness folders inside a repo never count as shipped content (they change on every command)
@@ -95,7 +97,11 @@ class Session:
         return names
 
     def model(self, tier: str) -> str:
-        return tier_model(self.profile, tier)
+        return self.execution("_tier", "_tier", tier)["model"]
+
+    def execution(self, node: str, unit_id: str, tier: str | None = None) -> dict[str, Any]:
+        eff_tier = tier if tier is not None else self.tier(node, unit_id)[0]
+        return H.resolve_execution(HOME, self.pdir, self.profile, node, unit_id, eff_tier, cli_host=self.cli_host)
 
     def units(self, node: str) -> list[dict[str, Any]]:
         """Planned units of a node, the reviewer included, as graph specs."""
@@ -117,18 +123,9 @@ class Session:
         return len({u["generation"] for u in rec["units"] if u.get("verdict") in ("FAIL", "NEEDS CHANGES")})
 
     def tier(self, node: str, unit_id: str) -> tuple[str, str | None]:
-        """Effective tier of a unit and, when it moved up, why. A unit with `escalate` runs on the stronger tier once
-        its review node has failed it `afterFails` rounds (light coding that keeps failing review moves to routine)."""
+        """Effective tier of a unit and, when it moved up, why. Combines `profile.nodeOverrides` and graph escalation."""
         u = self.unit(node, unit_id)
-        esc = u.get("escalate")
-        if not esc:
-            return u["tier"], None
-        review = esc.get("reviewNode") or next((n for n in self.order if self.graph["nodes"][n].get("loopBackTo") == node), None)
-        after = esc.get("afterFails") or self.profile.get("gates", {}).get("escalateAfter", 2)
-        fails = self.failed_rounds(review) if review else 0
-        if fails >= after:
-            return esc["tier"], f"{review} failed {fails} round(s) (escalates after {after})"
-        return u["tier"], None
+        return H.effective_tier(self.profile, u, node, self.failed_rounds, self.graph["nodes"], self.order)
 
     def stage_problem(self, node: str, unit_id: str) -> str | None:
         """A staged unit (`after`) runs only once its predecessor recorded PASS at the current generation."""
@@ -328,10 +325,37 @@ def cmd_status(args: argparse.Namespace) -> None:
 
 
 AGENT_TYPES = {"light": "kaneki-light", "routine": "kaneki-worker", "deep": "kaneki-deep"}
+_PUBLIC_EXEC_KEYS = ("host", "dispatchMode", "model", "modelSelection", "effort", "enforcement", "aliases", "contextWindow")
 
 
 def agent_type(tier: str) -> str:
     return AGENT_TYPES[tier]
+
+
+def _public_execution(exe: dict[str, Any]) -> dict[str, Any]:
+    out_exe = {k: exe[k] for k in _PUBLIC_EXEC_KEYS if k in exe}
+    if exe.get("runner"):
+        out_exe["runner"] = exe["runner"]
+    return out_exe
+
+
+def _node_card_path(card_rel: str) -> Path:
+    if card_rel.startswith("references/nodes/"):
+        canonical = HOME / "playbooks" / "nodes" / Path(card_rel).name
+        if canonical.is_file():
+            return canonical
+    return HOME / "skills" / "kaneki-flow" / card_rel
+
+
+def _role_card_path(tier: str) -> Path:
+    return HOME / "playbooks" / "roles" / f"{tier}.md"
+
+
+def _packet_template() -> str:
+    canonical = HOME / "playbooks" / "packet-template.md"
+    if canonical.is_file():
+        return canonical.read_text(encoding="utf-8")
+    return (HOME / "skills" / "kaneki-flow" / "scripts" / "packet-template.md").read_text(encoding="utf-8")
 
 
 def cmd_plan(args: argparse.Namespace) -> None:
@@ -346,8 +370,16 @@ def cmd_plan(args: argparse.Namespace) -> None:
     units = []
     for u in s.units(node):
         tier, why = s.tier(node, u["id"])
+        exe = s.execution(node, u["id"], tier)
+        role_path = _role_card_path(tier)
         row = {k: v for k, v in u.items() if k != "escalate"}
-        row.update({"tier": tier, "model": s.model(tier), "agentType": agent_type(tier)})
+        row.update({
+            "tier": tier,
+            "model": exe["model"],
+            "agentType": agent_type(tier),
+            "roleCard": portable(role_path, HOME) if role_path.is_file() else f"playbooks/roles/{tier}.md",
+            "execution": _public_execution(exe),
+        })
         if why:
             row["escalated"] = {"from": u["tier"], "why": why}
         if u.get("after"):
@@ -390,50 +422,55 @@ def _adapters_for(node: str, spec: dict[str, Any], adapters: dict[str, Any]) -> 
     return picked
 
 
-def cmd_packet(args: argparse.Namespace) -> None:
-    s = Session(args)
-    spec = s.spec(args.node)
-    rec = s.state["nodes"][args.node]
-    unit = s.unit(args.node, args.unit)
-    staged = s.stage_problem(args.node, args.unit)
+def build_packet(s: Session, node: str, unit_id: str, facts_arg: str | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Render one dispatch packet and return `(packet_payload, resolved_execution)`."""
+    spec = s.spec(node)
+    rec = s.state["nodes"][node]
+    unit = s.unit(node, unit_id)
+    staged = s.stage_problem(node, unit_id)
     if staged:
         raise HarnessError(staged)
-    tier, escalated = s.tier(args.node, args.unit)
-    facts = json.loads(Path(args.facts).read_text(encoding="utf-8")) if args.facts else {}
+    tier, escalated = s.tier(node, unit_id)
+    exe = s.execution(node, unit_id, tier)
+    facts = json.loads(Path(facts_arg).read_text(encoding="utf-8")) if facts_arg else {}
     from . import schema
-    schema.validate(facts, "facts.schema.json", f"facts {args.facts}")
+    schema.validate(facts, "facts.schema.json", f"facts {facts_arg}")
     rules = R.select(R.load_rulepacks(HOME, s.pdir, s.profile, s.ctx), s.ctx, spec.get("rulePhases", []))
     pdir = s.ticket.dir / "packets"
     pdir.mkdir(parents=True, exist_ok=True)
-    round_no = 1 + sum(1 for u in rec["units"] if u["unit"] == args.unit and u["generation"] == rec["generation"])
-    dispatch = f"{args.node}.g{rec['generation']}.{args.unit}.r{round_no}"
+    round_no = 1 + sum(1 for u in rec["units"] if u["unit"] == unit_id and u["generation"] == rec["generation"])
+    dispatch = f"{node}.g{rec['generation']}.{unit_id}.r{round_no}"
     rules_path = pdir / f"{dispatch}.rules.json"
     rules_path.write_text(json.dumps(rules, indent=2, ensure_ascii=False), encoding="utf-8")
     result_path = s.ticket.dir / "results" / f"{dispatch}.md"
-    adapters = _adapters_for(args.node, spec, resolve_adapters(HOME, s.pdir, s.profile, s.ctx))
-    inputs = packet_inputs(s, args.node, pdir / f"{dispatch}.inputs")
-    window = context_window(s.profile, tier)
+    adapters = _adapters_for(node, spec, resolve_adapters(HOME, s.pdir, s.profile, s.ctx))
+    inputs = packet_inputs(s, node, pdir / f"{dispatch}.inputs")
+    window = exe["contextWindow"]
     logs_dir = s.ticket.dir / "logs"
     logs_dir.mkdir(exist_ok=True)
-    template = (HOME / "skills" / "kaneki-flow" / "scripts" / "packet-template.md").read_text(encoding="utf-8")
+    card_path = _node_card_path(spec["card"])
+    role_path = _role_card_path(tier)
+    role_card_text = role_path.read_text(encoding="utf-8").strip() if role_path.is_file() else ""
+    template = _packet_template()
     values = {
-        "ticket": s.ctx["ticket"], "node": args.node, "generation": str(rec["generation"]), "unit": args.unit,
-        "role": unit["role"], "round": str(round_no), "dispatchId": dispatch, "purpose": spec["purpose"],
-        "card": str(HOME / "skills" / "kaneki-flow" / spec["card"]),
-        "artifacts": "\n".join(f"- `{s.ticket.dir / a}`" for a in s.artifacts(args.node)) or "- none (findings only)",
+        "ticket": s.ctx["ticket"], "node": node, "generation": str(rec["generation"]), "unit": unit_id,
+        "role": unit["role"], "tier": tier, "host": exe["host"], "model": exe["model"],
+        "round": str(round_no), "dispatchId": dispatch, "purpose": spec["purpose"],
+        "card": str(card_path), "roleCard": role_card_text,
+        "artifacts": "\n".join(f"- `{s.ticket.dir / a}`" for a in s.artifacts(node)) or "- none (findings only)",
         "rulesPath": str(rules_path), "ruleCount": str(len(rules)), "resultPath": str(result_path),
         "adapters": json.dumps(adapters, indent=2, ensure_ascii=False),
         "inputs": NL.join(f"- `{i['file']}` ({i['token']}, from `{i['from']}`, sha256 `{i['sha256'][:12]}`)"
                           + (f" — live round only; full history in `{i['original']}`" if i.get("original") else "")
                           for i in inputs) or "- none (first node, or only the ticket and the repositories)",
         "contextWindow": f"{window:,}", "logsDir": str(logs_dir),
-        "checks": _checks_block(s.spec(args.node)),
+        "checks": _checks_block(s.spec(node)),
         "repositories": _repositories_block(s),
         "weakestClaim": facts.get("weakestClaim", "(controller: name it)"),
         "observed": _bullets(facts.get("observed")), "doubts": _bullets(facts.get("doubts")),
         "settled": _bullets(facts.get("settled")), "authorizedPaths": _bullets(facts.get("authorizedPaths")),
         "findingsToFix": _bullets(facts.get("findingsToFix")),
-        "languages": _languages_block(s, args.node),
+        "languages": _languages_block(s, node),
         "git": _git_block(s),
     }
     text = template
@@ -441,18 +478,33 @@ def cmd_packet(args: argparse.Namespace) -> None:
         text = text.replace("{{" + key + "}}", val)
     path = pdir / f"{dispatch}.md"
     path.write_text(text, encoding="utf-8")
-    # what the harness hands the unit, in tokens (~4 chars each): the packet, its inputs, the rules and the card
-    handed = [path, rules_path, Path(values["card"])] + [Path(i["file"]) for i in inputs]
+    # what the harness hands the unit, in tokens (~4 chars each): the packet (which includes roleCard),
+    # its inputs, the rules and the node card
+    handed = [path, rules_path, card_path] + [Path(i["file"]) for i in inputs]
     estimate = sum(f.stat().st_size for f in handed if f.is_file()) // 4
     res = {"path": str(path), "packetDigest": sha256_file(path), "agentType": agent_type(tier), "tier": tier,
-           "model": s.model(tier), "resultPath": str(result_path), "dispatchId": dispatch,
+           "model": exe["model"], "resultPath": str(result_path), "dispatchId": dispatch,
+           "roleCard": str(role_path), "execution": _public_execution(exe),
            "handedTokens": estimate, "contextWindow": window}
     if escalated:
         res["escalated"] = {"from": unit["tier"], "why": escalated}
     if estimate > window // 4:
         res["contextWarning"] = (f"the packet and its inputs are ~{estimate:,} tokens, over a quarter of the {window:,}-token "
                                  f"window assumed for {tier}; trim the inputs or split the unit before dispatching")
+    return res, exe
+
+
+def cmd_packet(args: argparse.Namespace) -> None:
+    s = Session(args)
+    res, _ = build_packet(s, args.node, args.unit, args.facts)
     out(res)
+
+
+def cmd_dispatch(args: argparse.Namespace) -> None:
+    from .dispatch import run_dispatch
+    s = Session(args)
+    out(run_dispatch(s, args.node, args.unit, facts=args.facts, runner=args.runner, command=args.command,
+                     timeout=args.timeout, dry_run=args.dry_run, no_record=args.no_record))
 
 
 def _repositories_block(s: Session) -> str:
@@ -480,8 +532,9 @@ def _checks_block(spec: dict[str, Any]) -> str:
 
 
 def launcher_cmd(profile_file: Path) -> str:
-    """How a unit calls the driver: the OS-agnostic sh launcher, with the profile pinned."""
-    launcher = (HOME / "skills" / "kaneki-flow" / "scripts" / "sdlc").as_posix()
+    """How a unit calls the driver: project `.sdlc/bin/sdlc` shim when installed, else bundled `sdlc`."""
+    shim = profile_file.parent / ".sdlc" / "bin" / "sdlc"
+    launcher = shim.as_posix() if shim.is_file() else (HOME / "skills" / "kaneki-flow" / "scripts" / "sdlc").as_posix()
     return f'sh "{launcher}" --profile "{profile_file.as_posix()}"'
 
 
@@ -517,29 +570,50 @@ def _bullets(items: Any) -> str:
     return "\n".join(f"- {i}" for i in items)
 
 
-def cmd_record(args: argparse.Namespace) -> None:
-    s = Session(args)
-    spec = s.spec(args.node)
-    rec = s.state["nodes"][args.node]
-    s.unit(args.node, args.unit)
-    result = Path(args.result)
-    if not result.is_file():
-        raise HarnessError(f"G7: result file missing: {result} (the controller never fills a missing unit)")
-    staged = s.stage_problem(args.node, args.unit)
+def record_unit(s: Session, node: str, unit_id: str, result_path: Path, model: str, *,
+                status: str = "ok", tokens: int | None = None, verdict: str | None = None,
+                failure_class: str | None = None) -> dict[str, Any]:
+    s.spec(node)
+    rec = s.state["nodes"][node]
+    s.unit(node, unit_id)
+    if not result_path.is_file():
+        raise HarnessError(f"G7: result file missing: {result_path} (the controller never fills a missing unit)")
+    staged = s.stage_problem(node, unit_id)
     if staged:
         raise HarnessError(staged)
-    tier, _ = s.tier(args.node, args.unit)
-    if args.model != s.model(tier):
-        raise HarnessError(f"{args.node}/{args.unit} is planned on {s.model(tier)} ({tier}); a {args.model} record is refused")
-    entry = {"unit": args.unit, "generation": rec["generation"], "model": args.model, "tier": tier, "status": args.status,
-             "result": str(result), "resultDigest": sha256_file(result), "tokens": args.tokens,
-             "verdict": args.verdict, "failureClass": args.failure_class, "at": now()}
+    tier, _ = s.tier(node, unit_id)
+    exe = s.execution(node, unit_id, tier)
+    accepted, mismatch, warn = H.model_matches(model, exe)
+    if not accepted:
+        raise HarnessError(f"{node}/{unit_id} is planned on {exe['model']} ({tier}); a {model} record is refused")
+    entry: dict[str, Any] = {
+        "unit": unit_id, "generation": rec["generation"], "model": model, "tier": tier, "status": status,
+        "result": str(result_path), "resultDigest": sha256_file(result_path), "tokens": tokens,
+        "verdict": verdict, "failureClass": failure_class, "at": now(),
+    }
+    if exe["host"] != "profile":
+        entry["host"] = exe["host"]
+    if exe.get("effort"):
+        entry["effort"] = exe["effort"]
+    if model != exe["model"]:
+        entry["plannedModel"] = exe["model"]
+    if mismatch:
+        entry["modelMismatch"] = True
     rec["units"].append(entry)
     rec["status"] = "in_progress" if rec["status"] in ("pending", "stale") else rec["status"]
     s.save()
-    s.ticket.log({"event": "record", "node": args.node, **entry})
+    s.ticket.log({"event": "record", "node": node, **entry})
     U.write_ticket_file(s.ticket.dir, s.ctx["ticket"], s.order, s.state["nodes"])
-    out({"ok": True, "recorded": entry, "nodeTokens": U.node_usage(rec)["total"]})
+    payload: dict[str, Any] = {"ok": True, "recorded": entry, "nodeTokens": U.node_usage(rec)["total"]}
+    if warn:
+        payload["warning"] = warn
+    return payload
+
+
+def cmd_record(args: argparse.Namespace) -> None:
+    s = Session(args)
+    out(record_unit(s, args.node, args.unit, Path(args.result), args.model, status=args.status,
+                    tokens=args.tokens, verdict=args.verdict, failure_class=args.failure_class))
 
 
 def _readiness_walk(s: "Session", node: str, status: str, reopen: str | None, notes: dict[str, Any] | None = None,
@@ -1067,7 +1141,47 @@ def cmd_lang(args: argparse.Namespace) -> None:
 
 def cmd_install(args: argparse.Namespace) -> None:
     from .install import install
-    out(install(HOME, Path(args.target).resolve(), force=args.force, dry_run=args.dry_run))
+    out(install(HOME, Path(args.target).resolve(), host=args.host, force=args.force,
+                dry_run=args.dry_run, with_my_git=args.with_my_git))
+
+
+def cmd_host(args: argparse.Namespace) -> None:
+    ppath = profile_path(args)
+    pdir = ppath.parent
+    if args.set:
+        if args.set not in H.KNOWN_HOSTS:
+            raise HarnessError(f"unknown host {args.set!r}; known: {', '.join(H.KNOWN_HOSTS)}")
+        written_path, _ = H.write_local_binding(HOME, pdir, args.set, overwrite=True)
+        local = H.load_local_binding(pdir)
+        out({"ok": True, "host": args.set, "bindingPath": str(written_path), "tiers": (local or {}).get("tiers", {})})
+        return
+    prof = load_profile(ppath)
+    local = H.load_local_binding(pdir)
+    active, source = H.active_host(pdir, cli_host=args.host, binding=local)
+    res: dict[str, Any] = {
+        "activeHost": active or "profile",
+        "source": source,
+        "localBindingPath": str(H.local_binding_path(pdir)),
+        "localBindingExists": H.local_binding_path(pdir).is_file(),
+        "tiers": {t: _public_execution(H.resolve_execution(HOME, pdir, prof, "_host", "_host", t, cli_host=args.host))
+                  for t in ("light", "routine", "deep")},
+    }
+    if args.node:
+        unit_id = args.unit or "worker"
+        graph = G.load_graph(HOME, prof, pdir)
+        spec = graph["nodes"].get(args.node)
+        if not spec:
+            raise HarnessError(f"unknown node {args.node!r}")
+        tier = next((u["tier"] for u in spec.get("units", []) if u["id"] == unit_id), None)
+        if tier is None and unit_id == "reviewer" and spec.get("reviewer"):
+            tier = spec["reviewer"]["tier"]
+        if tier is None:
+            tier = "routine"
+        fake_unit = {"id": unit_id, "tier": tier}
+        eff_tier, _ = H.effective_tier(prof, fake_unit, args.node, lambda _: 0, graph["nodes"], [])
+        res["unitExecution"] = _public_execution(H.resolve_execution(HOME, pdir, prof, args.node, unit_id, eff_tier, cli_host=args.host))
+        res["unitExecution"]["tier"] = eff_tier
+    out(res)
 
 
 def cmd_tickets(args: argparse.Namespace) -> None:
@@ -1153,6 +1267,8 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="sdlc", description="Generic SDLC ticket harness driver")
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--profile", help="project profile (default: $SDLC_PROFILE or ./sdlc.profile.json)")
+    common.add_argument("--host", choices=[*H.KNOWN_HOSTS, "profile"],
+                        help="agent host binding override (default: $SDLC_HOST, .sdlc/host.local.json, or profile)")
     ticketed = argparse.ArgumentParser(add_help=False, parents=[common])
     ticketed.add_argument("--ticket", required=True)
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -1191,6 +1307,19 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--unit", required=True)
     x.add_argument("--facts", help="facts JSON: weakestClaim, observed, doubts, settled, authorizedPaths, findingsToFix")
     x.set_defaults(fn=cmd_packet)
+
+    x = sub.add_parser("dispatch", parents=[ticketed],
+                       help="build packet, spawn an external CLI runner, verify output, and record the unit")
+    x.add_argument("--node", required=True)
+    x.add_argument("--unit", required=True)
+    x.add_argument("--facts", help="facts JSON passed to packet")
+    x.add_argument("--runner", choices=["codex", "claude", "gemini", "opencode"],
+                   help="override runner CLI template from .sdlc/host.local.json")
+    x.add_argument("--command", help="custom command template string (tokenized with shlex.split; placeholders {prompt},{packet},{result},{model},{effort},{tier})")
+    x.add_argument("--timeout", type=int, default=900, help="subprocess timeout in seconds (default: 900)")
+    x.add_argument("--dry-run", action="store_true", help="render packet and print resolved argv without executing")
+    x.add_argument("--no-record", action="store_true", help="execute subprocess without calling sdlc record")
+    x.set_defaults(fn=cmd_dispatch)
 
     x = sub.add_parser("record", parents=[ticketed], help="record one unit result (worker or reviewer)")
     x.add_argument("--node", required=True)
@@ -1285,9 +1414,13 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--reason", help="the user's words that asked for the change")
     x.set_defaults(fn=cmd_lang)
 
-    x = sub.add_parser("install", help="install the kaneki skills, agents and guard into <target>/.claude, and the my-git plugin from the same checkout")
-    x.add_argument("--target", required=True, help="project folder (or a .claude folder, e.g. ~/.claude for all projects)")
-    x.add_argument("--force", action="store_true", help="also overwrite installed files you edited")
+    x = sub.add_parser("install", help="install kaneki playbooks/skills and `.sdlc/bin/sdlc` shim for a host")
+    x.add_argument("--target", required=True, help="project folder (or ~/.claude when --host claude)")
+    x.add_argument("--host", choices=list(H.KNOWN_HOSTS), default="antigravity",
+                   help="target AI host (default: antigravity)")
+    x.add_argument("--with-my-git", action="store_true",
+                   help="also register the bundled my-git plugin (only valid with --host claude)")
+    x.add_argument("--force", action="store_true", help="also overwrite installed files and host binding you edited")
     x.add_argument("--dry-run", action="store_true")
     x.set_defaults(fn=cmd_install)
 
@@ -1325,10 +1458,16 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--path", required=True)
     x.add_argument("--expect")
     x.set_defaults(fn=cmd_digest)
+
+    x = sub.add_parser("host", parents=[common], help="show or set the local agent host binding (.sdlc/host.local.json)")
+    x.add_argument("--set", choices=list(H.KNOWN_HOSTS), help="write/switch .sdlc/host.local.json to this host preset")
+    x.add_argument("--node", help="also show resolved execution for this graph node")
+    x.add_argument("--unit", help="unit id within --node (default: worker)")
+    x.set_defaults(fn=cmd_host)
     return p
 
 
-READ_ONLY = {"status", "plan", "validate", "digest", "onboard-scan", "onboard-verify", "onboard-write", "install",
+READ_ONLY = {"status", "plan", "validate", "digest", "host", "onboard-scan", "onboard-verify", "onboard-write", "install",
              "tickets", "status-of", "web", "zed-setup", "contract", "ticket-detail", "gate-request"}
 NO_STATUS_REFRESH = READ_ONLY | {"git"}
 
@@ -1370,7 +1509,8 @@ def _refresh_status(args: argparse.Namespace) -> None:
     here never fails the command that already succeeded."""
     from . import board
     try:
-        board.write_status(Session(argparse.Namespace(profile=args.profile, ticket=args.ticket)))
+        board.write_status(Session(argparse.Namespace(profile=args.profile, ticket=args.ticket,
+                                                       host=getattr(args, "host", None))))
     except (HarnessError, OSError):
         pass
 
