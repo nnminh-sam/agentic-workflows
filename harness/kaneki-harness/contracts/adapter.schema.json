@@ -42,7 +42,7 @@
      "then": {"required": ["drafts", "review", "ship"], "properties": {
        "drafts": {"type": "object", "additionalProperties": {"type": "object", "required": ["template"]}},
        "review": {"type": "object"},
-       "ship": {"type": "object", "required": ["requiresUserGo"], "properties": {"requiresUserGo": {"const": true}, "push": {"type": "boolean"}, "pr": {"type": "object", "description": "How the PR/MR is opened after the push: via my-git (/my-git:pr) or manual (a person, from drafts/pr-body.md). `cli` is the pre-my-git spelling: gh = my-git, glab = manual.", "properties": {"via": {"enum": ["my-git", "manual"]}, "cli": {"enum": ["gh", "glab"]}}}}},
+       "ship": {"type": "object", "required": ["requiresUserGo"], "properties": {"requiresUserGo": {"const": true}, "backend": {"enum": ["native-git", "my-git"]}, "push": {"type": "boolean"}, "pr": {"type": "object", "description": "How the PR/MR is opened after the push: `gh`, `glab`, `my-git`, or `manual`. `cli` is the legacy alias.", "properties": {"via": {"enum": ["gh", "glab", "my-git", "manual"]}, "cli": {"enum": ["gh", "glab"]}}}}},
        "reship": {"type": "object"}}}}
   ]
 }

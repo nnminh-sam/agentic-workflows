@@ -15,16 +15,15 @@ import os
 import subprocess
 import sys
 import tempfile
-import time
 from pathlib import Path
 from typing import Any
 
+from . import approvals
 from .errors import HarnessError
 
 MARKETPLACE = "my-git-local"
 PLUGIN_ID = f"my-git@{MARKETPLACE}"
-APPROVALS = "kaneki-ship-approvals.json"  # in <project>/.claude/, read by the kaneki-flow guard
-APPROVAL_TTL_SECONDS = 30 * 60
+APPROVAL_TTL_SECONDS = approvals.APPROVAL_TTL_SECONDS
 
 
 def find_root(home: Path) -> Path | None:
@@ -122,36 +121,16 @@ def install(root: Path, project: Path, dry_run: bool = False, user_scope: bool =
     return out
 
 
-# --- ship approvals (read by the kaneki-flow guard) ------------------------------------------------------------
+# --- ship approvals (delegated to harness/approvals.py) --------------------------------------------------------
 
 def approvals_file(project: Path) -> Path:
-    return project / ".claude" / APPROVALS
-
-
-def _load_approvals(project: Path) -> list[dict[str, Any]]:
-    data = _read(approvals_file(project))
-    now = time.time()
-    return [a for a in data.get("approvals", []) if isinstance(a, dict) and a.get("expiresAt", 0) > now]
-
-
-def _save_approvals(project: Path, items: list[dict[str, Any]]) -> None:
-    f = approvals_file(project)
-    if not items:
-        if f.is_file():
-            f.unlink()
-        return
-    f.parent.mkdir(parents=True, exist_ok=True)
-    f.write_text(json.dumps({"schemaVersion": 1, "approvals": items}, indent=2) + "\n", encoding="utf-8")
+    return approvals.approvals_file(project)
 
 
 def grant(project: Path, ticket: str, repo: str, path: str, branch: str, digest: str) -> dict[str, Any]:
-    """Let the guard pass `git -C <path> commit|push` for this approved request, for APPROVAL_TTL_SECONDS."""
-    items = [a for a in _load_approvals(project) if not (a.get("ticket") == ticket and a.get("repo") == repo)]
-    entry = {"ticket": ticket, "repo": repo, "path": str(Path(path).resolve()), "branch": branch,
-             "requestDigest": digest, "allow": ["commit", "push"], "expiresAt": int(time.time()) + APPROVAL_TTL_SECONDS}
-    _save_approvals(project, items + [entry])
-    return entry
+    """Let the guard and worktree hooks pass commit/push for this approved request."""
+    return approvals.grant(project, ticket, repo, path, branch, digest)
 
 
 def revoke(project: Path, ticket: str, repo: str) -> None:
-    _save_approvals(project, [a for a in _load_approvals(project) if not (a.get("ticket") == ticket and a.get("repo") == repo)])
+    approvals.revoke(project, ticket, repo)

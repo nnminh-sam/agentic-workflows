@@ -1,0 +1,1398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kaneki Harness — Claude Code Decoupling &amp; Agent-Agnostic Port Analysis</title>
+<style>
+  :root {
+    --bg: #f8f9fb;
+    --surface: #ffffff;
+    --surface-2: #f1f4f8;
+    --border: #dfe4ec;
+    --border-strong: #c5cedb;
+    --text: #161b26;
+    --text-muted: #525f76;
+    --text-faint: #7b879d;
+    --accent: #3b5bdb;
+    --accent-soft: #edf2ff;
+    --crit: #c92a2a;
+    --crit-soft: #fff0f0;
+    --high: #d9480f;
+    --high-soft: #fff4e6;
+    --med: #b07400;
+    --med-soft: #fff9db;
+    --ok: #1b7f4b;
+    --ok-soft: #ebfbee;
+    --plan: #6741d9;
+    --plan-soft: #f3f0ff;
+    --code-bg: #f3f5f9;
+    --shadow: 0 1px 3px rgba(16, 24, 40, 0.06), 0 1px 2px rgba(16, 24, 40, 0.04);
+    --radius: 10px;
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+
+  [data-theme="dark"] {
+    --bg: #0e1117;
+    --surface: #161b22;
+    --surface-2: #1d2430;
+    --border: #2a3342;
+    --border-strong: #3c485d;
+    --text: #e6edf5;
+    --text-muted: #9aa7bd;
+    --text-faint: #6e7d96;
+    --accent: #748ffc;
+    --accent-soft: #1c2440;
+    --crit: #ff6b6b;
+    --crit-soft: #31171a;
+    --high: #ffa94d;
+    --high-soft: #312113;
+    --med: #ffd43b;
+    --med-soft: #2e2812;
+    --ok: #51cf66;
+    --ok-soft: #132c1d;
+    --plan: #b197fc;
+    --plan-soft: #231c3a;
+    --code-bg: #1c222d;
+    --shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: var(--font-sans);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.62;
+    font-size: 15px;
+  }
+
+  /* Layout */
+  .layout {
+    display: grid;
+    grid-template-columns: 260px minmax(0, 1fr);
+    min-height: 100vh;
+  }
+  @media (max-width: 960px) {
+    .layout { grid-template-columns: 1fr; }
+    .sidebar { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--border); }
+  }
+
+  /* Sidebar */
+  .sidebar {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 22px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .brand-title {
+    font-weight: 700;
+    font-size: 15px;
+    letter-spacing: -0.01em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .brand-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    background: linear-gradient(135deg, var(--accent), var(--plan));
+    display: inline-block;
+  }
+  .theme-btn {
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text-muted);
+    border-radius: 6px;
+    padding: 4px 9px;
+    font-size: 12px;
+    cursor: pointer;
+    font-family: var(--font-sans);
+  }
+  .theme-btn:hover { color: var(--text); border-color: var(--border-strong); }
+
+  .nav-group-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-faint);
+    margin: 6px 0 6px 8px;
+  }
+  .nav a {
+    display: block;
+    padding: 6px 10px;
+    border-radius: 6px;
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 13.5px;
+    transition: background 0.12s, color 0.12s;
+  }
+  .nav a:hover { background: var(--surface-2); color: var(--text); }
+  .nav a.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+
+  .meta-box {
+    margin-top: auto;
+    padding: 12px;
+    background: var(--surface-2);
+    border-radius: 8px;
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+  .meta-box strong { color: var(--text); }
+
+  /* Main content */
+  .main {
+    padding: 36px 44px 80px;
+    max-width: 1120px;
+    width: 100%;
+  }
+  @media (max-width: 720px) {
+    .main { padding: 24px 18px 60px; }
+  }
+
+  header.hero {
+    margin-bottom: 32px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+  }
+  .eyebrow {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--accent);
+    margin-bottom: 8px;
+  }
+  h1 {
+    margin: 0 0 10px;
+    font-size: 30px;
+    line-height: 1.2;
+    letter-spacing: -0.025em;
+  }
+  .subtitle {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 16px;
+    max-width: 780px;
+  }
+
+  h2 {
+    margin: 44px 0 14px;
+    font-size: 21px;
+    letter-spacing: -0.015em;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  h3 {
+    margin: 24px 0 10px;
+    font-size: 16.5px;
+    letter-spacing: -0.01em;
+  }
+  p { margin: 0 0 12px; }
+  ul, ol { margin: 0 0 14px; padding-left: 22px; }
+  li { margin-bottom: 5px; }
+
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.88em;
+    background: var(--code-bg);
+    padding: 2px 6px;
+    border-radius: 5px;
+    border: 1px solid var(--border);
+  }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: 12.8px;
+    line-height: 1.55;
+    margin: 12px 0 16px;
+  }
+  pre code { background: none; border: none; padding: 0; font-size: inherit; }
+
+  /* KPI cards */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(195px, 1fr));
+    gap: 14px;
+    margin: 22px 0 28px;
+  }
+  .kpi {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    box-shadow: var(--shadow);
+  }
+  .kpi-label { font-size: 12px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+  .kpi-value { font-size: 26px; font-weight: 700; margin: 4px 0; letter-spacing: -0.02em; }
+  .kpi-sub { font-size: 12.5px; color: var(--text-muted); }
+  .kpi.ok .kpi-value { color: var(--ok); }
+  .kpi.crit .kpi-value { color: var(--crit); }
+  .kpi.high .kpi-value { color: var(--high); }
+  .kpi.accent .kpi-value { color: var(--accent); }
+
+  /* Callout */
+  .callout {
+    border-left: 4px solid var(--accent);
+    background: var(--accent-soft);
+    padding: 14px 18px;
+    border-radius: 0 8px 8px 0;
+    margin: 18px 0;
+  }
+  .callout.ok { border-color: var(--ok); background: var(--ok-soft); }
+  .callout.warn { border-color: var(--high); background: var(--high-soft); }
+  .callout-title { font-weight: 700; margin-bottom: 4px; font-size: 14px; }
+
+  /* Badges */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+  }
+  .b-crit { background: var(--crit-soft); color: var(--crit); }
+  .b-high { background: var(--high-soft); color: var(--high); }
+  .b-med  { background: var(--med-soft); color: var(--med); }
+  .b-plan { background: var(--plan-soft); color: var(--plan); }
+  .b-ok   { background: var(--ok-soft); color: var(--ok); }
+
+  /* Filter bar */
+  .filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin: 14px 0 14px;
+  }
+  .filter-btn {
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-muted);
+    padding: 5px 12px;
+    border-radius: 999px;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: var(--font-sans);
+  }
+  .filter-btn:hover { border-color: var(--border-strong); color: var(--text); }
+  .filter-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  /* Tables */
+  .table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    margin: 14px 0 22px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+  }
+  th, td {
+    text-align: left;
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  th {
+    background: var(--surface-2);
+    font-weight: 700;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+  }
+  tr:last-child td { border-bottom: none; }
+  tr.hidden { display: none; }
+
+  /* Surface detail cards */
+  .surface-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 22px;
+    margin: 18px 0;
+    box-shadow: var(--shadow);
+  }
+  .surface-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  .surface-title {
+    font-size: 17px;
+    font-weight: 700;
+    margin: 0;
+  }
+  .surface-meta {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 12px;
+  }
+  @media (max-width: 780px) {
+    .two-col { grid-template-columns: 1fr; }
+  }
+  .sub-box {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 13px 15px;
+    font-size: 13.5px;
+  }
+  .sub-box h4 {
+    margin: 0 0 8px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+  }
+
+  /* Diagram container */
+  .diagram-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin: 18px 0 24px;
+    box-shadow: var(--shadow);
+    overflow-x: auto;
+  }
+  .diagram-box svg {
+    width: 100%;
+    height: auto;
+    display: block;
+    min-width: 680px;
+  }
+
+  /* Progress bar */
+  .split-bar {
+    display: flex;
+    height: 14px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    margin: 10px 0 8px;
+  }
+  .split-bar > div { height: 100%; }
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    font-size: 12.5px;
+    color: var(--text-muted);
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+
+  /* Roadmap */
+  .phase {
+    position: relative;
+    padding-left: 26px;
+    margin-bottom: 22px;
+    border-left: 2px solid var(--border-strong);
+  }
+  .phase::before {
+    content: "";
+    position: absolute;
+    left: -7px;
+    top: 4px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid var(--bg);
+  }
+  .phase-title {
+    font-weight: 700;
+    font-size: 15.5px;
+    margin-bottom: 4px;
+  }
+  .phase-goal {
+    color: var(--text-muted);
+    font-size: 13.5px;
+    margin-bottom: 8px;
+  }
+
+  .check-y { color: var(--ok); font-weight: 700; }
+  .check-p { color: var(--med); font-weight: 700; }
+  .check-n { color: var(--crit); font-weight: 700; }
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-title"><span class="brand-dot"></span>Kaneki Decoupling</div>
+      <button class="theme-btn" id="themeToggle" type="button">Dark</button>
+    </div>
+
+    <nav class="nav">
+      <div class="nav-group-title">Overview</div>
+      <a href="#executive-summary">Executive Summary</a>
+      <a href="#architecture-map">Architecture &amp; Coupling Map</a>
+      <a href="#inventory">Coupling Inventory Matrix</a>
+
+      <div class="nav-group-title">Coupling Surfaces (1–8)</div>
+      <a href="#s1-packaging">1. Skill Packaging &amp; Install</a>
+      <a href="#s2-git-guard">2. Git Guard PreToolUse Hook</a>
+      <a href="#s3-my-git">3. my-git Plugin Dependency</a>
+      <a href="#s4-subagents">4. Subagent Dispatch &amp; Roles</a>
+      <a href="#s5-interaction">5. AskUserQuestion &amp; Tools</a>
+      <a href="#s6-models">6. Model Names &amp; Tokens</a>
+      <a href="#s7-desktop-app">7. Planned Desktop App</a>
+      <a href="#s8-adjacent">8. Adjacent Host Couplings</a>
+
+      <div class="nav-group-title">Porting Blueprint</div>
+      <a href="#agent-matrix">Cross-Agent Capabilities</a>
+      <a href="#target-arch">Target Agnostic Architecture</a>
+      <a href="#keep-as-is">What NOT to Touch</a>
+      <a href="#roadmap">Phased Migration Roadmap</a>
+    </nav>
+
+    <div class="meta-box">
+      <strong>Analyzed Target</strong><br>
+      <code>harness/kaneki-harness</code><br>
+      4,924 LOC Python driver<br>
+      3 skills · 3 agents · 20 node cards<br>
+      10 JSON schemas · 17 adapters<br>
+      Date: 2026-11-22
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="hero">
+      <div class="eyebrow">Architecture Research &amp; Porting Audit</div>
+      <h1>Decoupling Kaneki Harness from Claude Code</h1>
+      <p class="subtitle">
+        A complete codebase audit identifying every Claude Code-specific dependency in <code>kaneki-harness</code>,
+        separating the already-agnostic SDLC core from the coupled host shell, and defining a clean porting blueprint
+        for multi-agent portability (Codex CLI, Gemini CLI, OpenCode, Cursor, Antigravity, and headless runners).
+      </p>
+    </header>
+
+    <!-- EXECUTIVE SUMMARY -->
+    <section id="executive-summary">
+      <h2>Executive Summary</h2>
+      <div class="callout ok">
+        <div class="callout-title">Key Finding: ~78% of Kaneki Harness is Already Agent-Agnostic</div>
+        The core SDLC engine — the lifecycle graph (<code>graph/lifecycle.json</code>), state machine &amp; hash-chained audit log
+        (<code>harness/state.py</code>), profile/adapter/rulepack resolvers, artifact structural &amp; citation checkers,
+        worktree management, token ledger, and 19 of 20 node reference cards — is pure stdlib Python and JSON data with
+        <strong>zero dependency on Claude Code</strong>. All Claude Code coupling is concentrated in the outer shell:
+        installation, hook enforcement, git shipping, subagent dispatch, and prompt conventions.
+      </div>
+
+      <div class="kpi-grid">
+        <div class="kpi ok">
+          <div class="kpi-label">Agnostic Core</div>
+          <div class="kpi-value">~78%</div>
+          <div class="kpi-sub">14 of 19 Python modules + graph, contracts, adapters, rulepacks, 19/20 node cards</div>
+        </div>
+        <div class="kpi crit">
+          <div class="kpi-label">Critical Blockers</div>
+          <div class="kpi-value">3</div>
+          <div class="kpi-sub">Install layout (<code>.claude/</code>), <code>PreToolUse</code> git guard, <code>my-git</code> plugin</div>
+        </div>
+        <div class="kpi high">
+          <div class="kpi-label">High-Impact Protocol</div>
+          <div class="kpi-value">3</div>
+          <div class="kpi-sub">Subagent dispatch/roles, <code>AskUserQuestion</code>/tool names, desktop app runner</div>
+        </div>
+        <div class="kpi accent">
+          <div class="kpi-label">Low-Friction Cleanups</div>
+          <div class="kpi-value">2</div>
+          <div class="kpi-sub">Model tier defaults/CSS tokens, Zed editor UI labels</div>
+        </div>
+      </div>
+
+      <div>
+        <strong>Codebase Agnosticism Breakdown (4,924 LOC in <code>harness/</code> + Skills/Config)</strong>
+        <div class="split-bar" aria-label="Codebase coupling ratio">
+          <div style="width:78%; background: var(--ok);" title="Already Agnostic (~78%)"></div>
+          <div style="width:12%; background: var(--crit);" title="Critically Coupled (~12%)"></div>
+          <div style="width:7%; background: var(--high);" title="Protocol Coupled (~7%)"></div>
+          <div style="width:3%; background: var(--med);" title="Cosmetic / Defaults (~3%)"></div>
+        </div>
+        <div class="legend">
+          <span><i class="dot" style="background:var(--ok)"></i>Already Agnostic (~78%)</span>
+          <span><i class="dot" style="background:var(--crit)"></i>Critical Shell Coupling (~12%: install, mygit, ship, guard)</span>
+          <span><i class="dot" style="background:var(--high)"></i>Prompt/Subagent Protocol (~7%: SKILL.md, agents/, cli.py)</span>
+          <span><i class="dot" style="background:var(--med)"></i>Defaults &amp; Naming (~3%: onboard.py, tokens.json)</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ARCHITECTURE MAP -->
+    <section id="architecture-map">
+      <h2>Current Architecture &amp; Coupling Map</h2>
+      <p>
+        Kaneki's existing design rule — <em>"the graph is generic; the project is data"</em> — successfully decoupled
+        stacks, trackers, surfaces, and delivery hosts. However, the <strong>agent host</strong> was never modeled as an
+        adapter. The diagram below shows where Claude Code assumptions cut across the layers.
+      </p>
+
+      <div class="diagram-box">
+        <svg viewBox="0 0 920 390" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+          <defs>
+            <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 1 L 10 5 L 0 9 z" fill="#7b879d"/>
+            </marker>
+          </defs>
+
+          <!-- Layer 1: Coupled Shell -->
+          <rect x="16" y="14" width="888" height="104" rx="10" fill="var(--crit-soft)" stroke="var(--crit)" stroke-width="1.5" stroke-dasharray="5 3"/>
+          <text x="32" y="36" font-size="12" font-weight="700" fill="var(--crit)">CLAUDE CODE COUPLED SHELL (MUST DECOUPLE)</text>
+
+          <rect x="32" y="48" width="198" height="56" rx="7" fill="var(--surface)" stroke="var(--crit)"/>
+          <text x="44" y="70" font-size="12.5" font-weight="700" fill="var(--text)">Installer &amp; Skills</text>
+          <text x="44" y="88" font-size="11" fill="var(--text-muted)">.claude/, $CLAUDE_SKILL_DIR</text>
+
+          <rect x="246" y="48" width="198" height="56" rx="7" fill="var(--surface)" stroke="var(--crit)"/>
+          <text x="258" y="70" font-size="12.5" font-weight="700" fill="var(--text)">Git Guard Hook</text>
+          <text x="258" y="88" font-size="11" fill="var(--text-muted)">PreToolUse, tool_input, exit 2</text>
+
+          <rect x="460" y="48" width="198" height="56" rx="7" fill="var(--surface)" stroke="var(--crit)"/>
+          <text x="472" y="70" font-size="12.5" font-weight="700" fill="var(--text)">my-git Plugin Bridge</text>
+          <text x="472" y="88" font-size="11" fill="var(--text-muted)">/my-git:*, settings.json</text>
+
+          <rect x="674" y="48" width="214" height="56" rx="7" fill="var(--surface)" stroke="var(--high)"/>
+          <text x="686" y="70" font-size="12.5" font-weight="700" fill="var(--text)">Subagents &amp; Prompts</text>
+          <text x="686" y="88" font-size="11" fill="var(--text-muted)">agents/*.md, AskUserQuestion</text>
+
+          <!-- Arrows down -->
+          <line x1="130" y1="118" x2="130" y2="148" stroke="#7b879d" stroke-width="1.5" marker-end="url(#arr)"/>
+          <line x1="345" y1="118" x2="345" y2="148" stroke="#7b879d" stroke-width="1.5" marker-end="url(#arr)"/>
+          <line x1="559" y1="118" x2="559" y2="148" stroke="#7b879d" stroke-width="1.5" marker-end="url(#arr)"/>
+          <line x1="781" y1="118" x2="781" y2="148" stroke="#7b879d" stroke-width="1.5" marker-end="url(#arr)"/>
+
+          <!-- Layer 2: Agnostic Core -->
+          <rect x="16" y="152" width="888" height="128" rx="10" fill="var(--ok-soft)" stroke="var(--ok)" stroke-width="1.5"/>
+          <text x="32" y="174" font-size="12" font-weight="700" fill="var(--ok)">ALREADY AGENT-AGNOSTIC CORE (PRESERVE)</text>
+
+          <rect x="32" y="188" width="160" height="76" rx="7" fill="var(--surface)" stroke="var(--ok)"/>
+          <text x="44" y="210" font-size="12.5" font-weight="700" fill="var(--text)">Lifecycle Graph</text>
+          <text x="44" y="228" font-size="11" fill="var(--text-muted)">graph/lifecycle.json</text>
+          <text x="44" y="244" font-size="11" fill="var(--text-muted)">lanes, slots, tiers</text>
+
+          <rect x="206" y="188" width="166" height="76" rx="7" fill="var(--surface)" stroke="var(--ok)"/>
+          <text x="218" y="210" font-size="12.5" font-weight="700" fill="var(--text)">State &amp; Integrity</text>
+          <text x="218" y="228" font-size="11" fill="var(--text-muted)">state.py, decisions.jsonl</text>
+          <text x="218" y="244" font-size="11" fill="var(--text-muted)">hash-chain, locks, receipts</text>
+
+          <rect x="386" y="188" width="166" height="76" rx="7" fill="var(--surface)" stroke="var(--ok)"/>
+          <text x="398" y="210" font-size="12.5" font-weight="700" fill="var(--text)">Gates &amp; Checkers</text>
+          <text x="398" y="228" font-size="11" fill="var(--text-muted)">checks.py, rules.py</text>
+          <text x="398" y="244" font-size="11" fill="var(--text-muted)">citations, lang, gitid</text>
+
+          <rect x="566" y="188" width="160" height="76" rx="7" fill="var(--surface)" stroke="var(--ok)"/>
+          <text x="578" y="210" font-size="12.5" font-weight="700" fill="var(--text)">Profile &amp; Adapters</text>
+          <text x="578" y="228" font-size="11" fill="var(--text-muted)">contracts/*.schema.json</text>
+          <text x="578" y="244" font-size="11" fill="var(--text-muted)">stack/surface/tracker</text>
+
+          <rect x="740" y="188" width="148" height="76" rx="7" fill="var(--surface)" stroke="var(--ok)"/>
+          <text x="752" y="210" font-size="12.5" font-weight="700" fill="var(--text)">Board &amp; Views</text>
+          <text x="752" y="228" font-size="11" fill="var(--text-muted)">board.py, usage.py</text>
+          <text x="752" y="244" font-size="11" fill="var(--text-muted)">STATUS.md, web.py</text>
+
+          <!-- Layer 3: Planned Desktop App -->
+          <rect x="16" y="302" width="888" height="74" rx="10" fill="var(--plan-soft)" stroke="var(--plan)" stroke-width="1.5" stroke-dasharray="5 3"/>
+          <text x="32" y="324" font-size="12" font-weight="700" fill="var(--plan)">PLANNED DESKTOP APP (app/ &amp; docs/desktop-app/plan.md — COUPLED IN SPEC)</text>
+          <text x="32" y="346" font-size="12" fill="var(--text)">D5: Spawns <code>claude -n ... --permission-mode ...</code> · D7: Parses <code>~/.claude/projects/**/*.jsonl</code> · Q1: Claude <code>Notification</code> hooks · Design tokens: <code>haiku/sonnet/opus</code></text>
+          <text x="32" y="364" font-size="11.5" fill="var(--text-muted)">Status: Planning stage (no Go/Wails code written yet) — cheapest time to introduce an AgentBackend interface.</text>
+        </svg>
+      </div>
+    </section>
+
+    <!-- COUPLING INVENTORY MATRIX -->
+    <section id="inventory">
+      <h2>Coupling Inventory Matrix</h2>
+      <p>Filter all identified Claude Code coupling points by severity to prioritize porting work.</p>
+
+      <div class="filter-bar" role="group" aria-label="Filter by severity">
+        <button class="filter-btn active" data-filter="all" type="button">All (11)</button>
+        <button class="filter-btn" data-filter="crit" type="button">Critical (4)</button>
+        <button class="filter-btn" data-filter="high" type="button">High (4)</button>
+        <button class="filter-btn" data-filter="med" type="button">Medium (2)</button>
+        <button class="filter-btn" data-filter="plan" type="button">Planned / Spec (1)</button>
+      </div>
+
+      <div class="table-wrap">
+        <table id="inventoryTable">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Coupling Point</th>
+              <th>Severity</th>
+              <th>Exact Files &amp; Lines</th>
+              <th>Coupling Mechanism</th>
+              <th>Effort</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr data-sev="crit">
+              <td>1A</td>
+              <td><strong>Install Directory &amp; Manifest</strong></td>
+              <td><span class="badge b-crit">CRITICAL</span></td>
+              <td><code>harness/install.py:1–83</code><br><code>harness/cli.py:1267–1271</code></td>
+              <td>Hardcodes <code>&lt;target&gt;/.claude/skills/</code>, <code>.claude/agents/</code>, <code>.claude/kaneki-harness.json</code></td>
+              <td>Medium</td>
+            </tr>
+            <tr data-sev="crit">
+              <td>1B</td>
+              <td><strong>Skill Frontmatter &amp; Env Vars</strong></td>
+              <td><span class="badge b-crit">CRITICAL</span></td>
+              <td><code>skills/kaneki-flow/SKILL.md:1–28</code><br><code>skills/kaneki-onboarding/SKILL.md:1–38</code><br><code>skills/kaneki-ship/SKILL.md:1–17</code></td>
+              <td>Uses <code>$CLAUDE_SKILL_DIR</code>, <code>$CLAUDE_PROJECT_DIR</code>, Claude YAML keys (<code>hooks.PreToolUse</code>, <code>when_to_use</code>, <code>user-invocable</code>)</td>
+              <td>Medium</td>
+            </tr>
+            <tr data-sev="crit">
+              <td>2</td>
+              <td><strong>Git Guard Hook Protocol</strong></td>
+              <td><span class="badge b-crit">CRITICAL</span></td>
+              <td><code>skills/kaneki-flow/SKILL.md:7–15</code><br><code>skills/kaneki-flow/scripts/guard_git.py:1–140</code></td>
+              <td>Claude <code>PreToolUse</code> stdin JSON (<code>tool_input.command</code>), exit code <code>2</code> = block, approval file under <code>.claude/kaneki-ship-approvals.json</code></td>
+              <td>High</td>
+            </tr>
+            <tr data-sev="crit">
+              <td>3</td>
+              <td><strong>my-git Claude Plugin Lock-in</strong></td>
+              <td><span class="badge b-crit">CRITICAL</span></td>
+              <td><code>harness/mygit.py:1–157</code><br><code>harness/ship.py:71–215</code><br><code>harness/install.py:44,73</code><br><code>adapters/delivery/github-pr.json:27–36</code></td>
+              <td>Fail-closed requirement for <code>.claude-plugin/plugin.json</code>, edits <code>.claude/settings*.json</code>, emits <code>/my-git:commit|push|pr</code> slash commands</td>
+              <td>High</td>
+            </tr>
+            <tr data-sev="high">
+              <td>4A</td>
+              <td><strong>Subagent Definitions</strong></td>
+              <td><span class="badge b-high">HIGH</span></td>
+              <td><code>skills/kaneki-flow/agents/kaneki-light.md</code><br><code>skills/kaneki-flow/agents/kaneki-worker.md</code><br><code>skills/kaneki-flow/agents/kaneki-deep.md</code></td>
+              <td>Claude agent YAML frontmatter (<code>model: haiku|sonnet|opus</code>, <code>tools: Read, Grep, ...</code>, <code>autoCompactWindow</code>); deep reasoning card trapped in agent file</td>
+              <td>Medium</td>
+            </tr>
+            <tr data-sev="high">
+              <td>4B</td>
+              <td><strong>Subagent Dispatch &amp; Tokens</strong></td>
+              <td><span class="badge b-high">HIGH</span></td>
+              <td><code>harness/cli.py:330–355, 447</code><br><code>skills/kaneki-flow/SKILL.md:134–147</code><br><code>skills/kaneki-onboarding/SKILL.md:37–40</code></td>
+              <td>Hardcodes <code>agentType</code> (<code>kaneki-light/worker/deep</code>); assumes native fresh subagent spawning + token usage from Claude completion notice</td>
+              <td>High</td>
+            </tr>
+            <tr data-sev="high">
+              <td>5</td>
+              <td><strong>AskUserQuestion &amp; Tool Names</strong></td>
+              <td><span class="badge b-high">HIGH</span></td>
+              <td><code>skills/kaneki-flow/SKILL.md:149</code><br><code>skills/kaneki-onboarding/SKILL.md:45</code><br><code>skills/kaneki-ship/SKILL.md:35</code><br><code>skills/kaneki-flow/references/nodes/scope.md:7,16</code><br><code>skills/kaneki-flow/scripts/packet-template.md:45–47</code></td>
+              <td>Calls Claude's <code>AskUserQuestion</code> tool by name and references Claude tool names (<code>Read</code>, <code>Grep</code>, <code>Glob</code>, <code>Bash</code>, <code>PowerShell</code>)</td>
+              <td>Low</td>
+            </tr>
+            <tr data-sev="high">
+              <td>7A</td>
+              <td><strong>Desktop App Session Runner</strong></td>
+              <td><span class="badge b-high">HIGH</span></td>
+              <td><code>docs/desktop-app/plan.md:39,80,114</code><br><code>app/doc/build-plan/parts/P6-*.md</code><br><code>app/doc/build-plan/parts/P8-*.md</code></td>
+              <td>Spawns <code>claude -n ... --session-id ... --permission-mode ...</code>; relies on Claude <code>Notification</code>/<code>Stop</code> hooks for status</td>
+              <td>Medium (Spec)</td>
+            </tr>
+            <tr data-sev="med">
+              <td>6A</td>
+              <td><strong>Model Defaults in Onboarding</strong></td>
+              <td><span class="badge b-med">MEDIUM</span></td>
+              <td><code>harness/onboard.py:687–688</code><br><code>examples/*/sdlc.profile.json</code></td>
+              <td>Defaults <code>models.routine = "sonnet"</code> and <code>models.deep = "opus"</code> (driver itself is already string-agnostic)</td>
+              <td>Low</td>
+            </tr>
+            <tr data-sev="med">
+              <td>6B</td>
+              <td><strong>Design System Model Tokens</strong></td>
+              <td><span class="badge b-med">MEDIUM</span></td>
+              <td><code>app/design-system/tokens.json:38–46</code><br><code>app/doc/design-system.html:578–696</code></td>
+              <td>CSS/JS color tokens named <code>haiku</code>, <code>sonnet</code>, <code>opus</code> instead of semantic tiers <code>light</code>, <code>routine</code>, <code>deep</code></td>
+              <td>Low</td>
+            </tr>
+            <tr data-sev="plan">
+              <td>7B</td>
+              <td><strong>Desktop App Cost Log Parser</strong></td>
+              <td><span class="badge b-plan">PLANNED</span></td>
+              <td><code>docs/desktop-app/plan.md:41,74</code><br><code>app/doc/build-plan/specs/P7-cost-panel.md</code></td>
+              <td>Reads Claude Code JSONL transcripts from <code>~/.claude/projects/&lt;slug&gt;/*.jsonl</code> + <code>subagents/*.jsonl</code></td>
+              <td>Medium (Spec)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- DEEP DIVES -->
+    <section id="deep-dives">
+      <h2>Deep-Dive Analysis of Coupling Surfaces</h2>
+
+      <!-- SURFACE 1 -->
+      <div class="surface-card" id="s1-packaging">
+        <div class="surface-head">
+          <h3 class="surface-title">1. Skill Packaging, Installation Layout &amp; Environment Variables</h3>
+          <div class="surface-meta">
+            <span class="badge b-crit">CRITICAL</span>
+            <span class="badge b-ok">Medium Effort</span>
+          </div>
+        </div>
+        <p>
+          Today, <code>sdlc install</code> assumes the target agent is Claude Code. It copies skills into
+          <code>&lt;target&gt;/.claude/skills/&lt;name&gt;/</code>, copies agents into <code>&lt;target&gt;/.claude/agents/</code>,
+          writes <code>&lt;target&gt;/.claude/kaneki-harness.json</code>, and instructs the user to restart Claude Code.
+          Inside every <code>SKILL.md</code>, the controller constructs the driver command using Claude-only environment
+          variables:
+        </p>
+        <pre><code>SDLC="sh $CLAUDE_SKILL_DIR/scripts/sdlc"   # skills/kaneki-flow/SKILL.md:28, onboarding:15, ship:17</code></pre>
+        <p>
+          Additionally, the YAML frontmatter in all three <code>SKILL.md</code> files uses Claude Code extensions
+          (<code>when_to_use</code>, <code>argument-hint</code>, <code>user-invocable</code>, and <code>hooks.PreToolUse</code>).
+          On Codex CLI, Gemini CLI, Cursor, or OpenCode, <code>$CLAUDE_SKILL_DIR</code> is empty, causing every
+          <code>$SDLC</code> command to fail immediately.
+        </p>
+        <div class="two-col">
+          <div class="sub-box">
+            <h4>Why It Breaks on Other Agents</h4>
+            <ul>
+              <li>Other agents discover instructions in different roots (<code>.agents/skills/</code>, <code>.codex/</code>, <code>.gemini/</code>, <code>.cursor/rules/</code>, <code>AGENTS.md</code>).</li>
+              <li><code>$CLAUDE_SKILL_DIR</code> and <code>$CLAUDE_PROJECT_DIR</code> are never exported outside Claude Code.</li>
+              <li>Slash command invocation (<code>/kaneki-flow ISSUE-123</code>) varies by host syntax or may not exist in headless CLI agents.</li>
+            </ul>
+          </div>
+          <div class="sub-box">
+            <h4>Decoupling Strategy</h4>
+            <ul>
+              <li>Install a stable, host-agnostic driver shim into <code>.sdlc/bin/sdlc</code> (or global <code>~/.local/bin/kaneki-sdlc</code>) so skills simply call <code>sdlc</code> or <code>sh .sdlc/bin/sdlc</code> without env vars.</li>
+              <li>Refactor <code>harness/install.py</code> into <strong>host emitters</strong>: <code>sdlc install --target . --host claude|codex|gemini|cursor|opencode|generic</code>.</li>
+              <li>Keep canonical Markdown playbooks under <code>playbooks/</code> (neutral frontmatter) and let each host emitter wrap them in that host's required directory &amp; frontmatter format.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- SURFACE 2 -->
+      <div class="surface-card" id="s2-git-guard">
+        <div class="surface-head">
+          <h3 class="surface-title">2. Git Guard Enforcement (PreToolUse Hook)</h3>
+          <div class="surface-meta">
+            <span class="badge b-crit">CRITICAL</span>
+            <span class="badge b-high">High Effort</span>
+          </div>
+        </div>
+        <p>
+          Kaneki enforces a strict safety invariant: <strong>nodes never commit, push, rebase, or delete work</strong>.
+          Currently this is enforced proactively via a Claude Code <code>PreToolUse</code> hook declared inline in
+          <code>skills/kaneki-flow/SKILL.md:7–15</code>:
+        </p>
+        <pre><code>hooks:
+  PreToolUse:
+    - matcher: "Bash|PowerShell"
+      hooks:
+        - type: command
+          command: 'g=".claude/skills/kaneki-flow/scripts/guard-git"; d="${CLAUDE_PROJECT_DIR}"; ...'</code></pre>
+        <p>
+          <code>guard_git.py</code> reads Claude Code's hook payload from <code>stdin</code>
+          (<code>data["tool_input"]["command"]</code>, <code>data["cwd"]</code>), resolves
+          <code>.claude/kaneki-ship-approvals.json</code>, and returns exit code <code>2</code> to block execution.
+        </p>
+        <div class="two-col">
+          <div class="sub-box">
+            <h4>Why It Breaks on Other Agents</h4>
+            <ul>
+              <li>Many agents (Codex CLI, Aider, OpenCode, generic LLM loops) do not support Claude's <code>PreToolUse</code> hook schema or exit-code-2 blocking semantics.</li>
+              <li>Agents that <em>do</em> support hooks (e.g., Gemini CLI, Cursor) use different JSON payload schemas and config locations.</li>
+              <li>Approval state is stored in <code>.claude/kaneki-ship-approvals.json</code>, tying ship state to a Claude directory.</li>
+            </ul>
+          </div>
+          <div class="sub-box">
+            <h4>Decoupling Strategy (Defense in Depth)</h4>
+            <ul>
+              <li><strong>Relocate state:</strong> Move approvals to <code>.sdlc/ship-approvals.json</code> (harness-owned).</li>
+              <li><strong>Layer 1 — Git Hooks (100% Agent-Agnostic):</strong> During <code>sdlc worktree</code> / <code>init</code>, install lightweight <code>pre-commit</code> and <code>pre-push</code> hooks inside the ticket worktree's git dir that check <code>.sdlc/ship-approvals.json</code>. Works for <em>every</em> agent and shell!</li>
+              <li><strong>Layer 2 — Host Tool Hooks (Optional Adapter):</strong> Extract the pure command parser in <code>guard_git.py</code> into a library, and provide thin stdin/stdout shims per host that supports pre-tool hooks (Claude, Gemini CLI, etc.).</li>
+              <li><strong>Layer 3 — Post-hoc Gate Audit (Already Agnostic):</strong> Keep <code>_commit_rule_problem()</code> in <code>cli.py:633</code>, which already rejects unauthorized commits at gate time regardless of agent.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- SURFACE 3 -->
+      <div class="surface-card" id="s3-my-git">
+        <div class="surface-head">
+          <h3 class="surface-title">3. Hard Dependency on the <code>my-git</code> Claude Code Plugin</h3>
+          <div class="surface-meta">
+            <span class="badge b-crit">CRITICAL</span>
+            <span class="badge b-high">High Effort</span>
+          </div>
+        </div>
+        <p>
+          As of 2026-11-19, <code>kaneki-ship</code> delegates all git commit/push/PR operations to the external
+          <code>my-git</code> Claude Code plugin. This creates four hard coupling points:
+        </p>
+        <ul>
+          <li><code>harness/mygit.py:34–47</code> — <code>require_root()</code> fails closed (G7) unless <code>plugins/my-git/.claude-plugin/plugin.json</code> exists.</li>
+          <li><code>harness/install.py:44, 73–74</code> &amp; <code>mygit.py:91–122</code> — executes <code>my-git/install.py</code> and mutates <code>.claude/settings.json</code> and <code>.claude/settings.local.json</code> (<code>extraKnownMarketplaces</code>, <code>enabledPlugins</code>).</li>
+          <li><code>harness/ship.py:97</code> — invokes <code>my-git/scripts/check_message.py</code> via subprocess to validate Conventional Commits / no-AI-attribution rules.</li>
+          <li><code>harness/ship.py:158–163</code>, <code>skills/kaneki-ship/SKILL.md:43–48</code>, and <code>adapters/delivery/github-pr.json:27–36</code> — emit Claude slash commands (<code>/my-git:commit</code>, <code>/my-git:push</code>, <code>/my-git:pr</code>) as the required next steps.</li>
+        </ul>
+        <div class="two-col">
+          <div class="sub-box">
+            <h4>Why It Breaks on Other Agents</h4>
+            <ul>
+              <li><code>.claude-plugin/plugin.json</code> and <code>extraKnownMarketplaces</code> are Claude Code marketplace primitives.</li>
+              <li>Non-Claude agents cannot execute <code>/my-git:commit</code>, <code>/my-git:push</code>, or <code>/my-git:pr</code> slash commands.</li>
+              <li>Users without the sibling <code>plugins/my-git</code> checkout cannot even run <code>sdlc install</code> or <code>sdlc ship-request</code>.</li>
+            </ul>
+          </div>
+          <div class="sub-box">
+            <h4>Decoupling Strategy</h4>
+            <ul>
+              <li>Introduce a pluggable <code>delivery.ship.backend</code> setting in the profile/delivery adapter:
+                <ul>
+                  <li><code>native-git</code> (default for agent-agnostic): <code>sdlc ship --approve &lt;digest&gt;</code> commits via <code>harness/gitid.py</code> (already applies <code>GIT_AUTHOR_*</code>, <code>GIT_COMMITTER_*</code>, <code>GIT_SSH_COMMAND</code>!), pushes, and opens PRs via <code>gh</code>/<code>glab</code> or prints a compare URL.</li>
+                  <li><code>my-git</code> (optional Claude Code adapter): retains the current staging + <code>/my-git:*</code> handoff when running on Claude Code.</li>
+                </ul>
+              </li>
+              <li>Port the Conventional Commits / no-AI-coauthor check into <code>harness/checks.py</code> (stdlib Python, ~40 LOC) so <code>ship-request</code> needs no external plugin script.</li>
+              <li>Make <code>my-git</code> registration in <code>install.py</code> conditional on <code>--host claude --with-my-git</code>.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- SURFACE 4 -->
+      <div class="surface-card" id="s4-subagents">
+        <div class="surface-head">
+          <h3 class="surface-title">4. Subagent Dispatch, Agent Definitions &amp; Token Reporting</h3>
+          <div class="surface-meta">
+            <span class="badge b-high">HIGH</span>
+            <span class="badge b-high">High Effort</span>
+          </div>
+        </div>
+        <p>
+          Kaneki's quality model relies heavily on <strong>fresh, isolated subagents</strong> (workers and independent
+          reviewers that see only their rendered packet, never the controller's chat history). Today, this is wired
+          directly to Claude Code's custom subagent system:
+        </p>
+        <ul>
+          <li><code>skills/kaneki-flow/agents/kaneki-{light,worker,deep}.md</code> define Claude subagents with YAML frontmatter (<code>model: haiku|sonnet|opus</code>, <code>tools: Read, Grep, Glob, Bash, Write, Edit</code>, <code>autoCompactWindow: 200000</code>).</li>
+          <li><strong>Critical insight:</strong> <code>kaneki-deep.md</code> contains the valuable 5-step adversarial reasoning card (Floor check → Hypotheses → Simulate concretely → Attack weakest claim → Calibrate). Because it lives inside a Claude agent file rather than the packet, any non-Claude runner would lose it!</li>
+          <li><code>harness/cli.py:330</code> hardcodes <code>AGENT_TYPES = {"light": "kaneki-light", "routine": "kaneki-worker", "deep": "kaneki-deep"}</code> and returns <code>agentType</code> in <code>plan</code> and <code>packet</code>.</li>
+          <li><code>SKILL.md:142</code> expects the controller to read total tokens from Claude Code's subagent completion notice and pass <code>--tokens &lt;n&gt;</code> to <code>sdlc record</code>.</li>
+        </ul>
+        <div class="two-col">
+          <div class="sub-box">
+            <h4>Why It Breaks on Other Agents</h4>
+            <ul>
+              <li>Agents like Aider, Cursor (standard chat), and older CLI loops have no native subagent spawning tool.</li>
+              <li>Agents that <em>do</em> have subagents (Codex, Gemini CLI, OpenCode, Antigravity) use different spawn APIs, model flags, and do not read <code>.claude/agents/*.md</code>.</li>
+              <li>Many agents do not expose subagent token counts in a completion notice.</li>
+            </ul>
+          </div>
+          <div class="sub-box">
+            <h4>Decoupling Strategy</h4>
+            <ul>
+              <li><strong>Move role protocols into packets:</strong> Move the body of <code>kaneki-light.md</code>, <code>kaneki-worker.md</code>, and <code>kaneki-deep.md</code> (especially the deep reasoning card) into neutral <code>roles/{light,routine,deep}.md</code> files and inline or link them directly in <code>packet-template.md</code>.</li>
+              <li><strong>Three execution modes via a Runner Adapter:</strong>
+                <ol>
+                  <li><em>Host-native subagents</em> (Claude Code, Antigravity, OpenCode): host adapter maps logical tier → native subagent call.</li>
+                  <li><em>External CLI subprocess runner</em> (<code>sdlc dispatch --ticket T --node N --unit U</code>): spawns a fresh headless CLI process (<code>codex exec</code>, <code>gemini -p</code>, <code>claude -p</code>, <code>opencode run</code>) with the packet path, captures stdout/usage JSON, and optionally auto-calls <code>sdlc record</code>!</li>
+                  <li><em>Manual / Handoff mode:</em> prints the packet path for a human or external orchestrator to run in a fresh session.</li>
+                </ol>
+              </li>
+              <li>Rename <code>agentType</code> in CLI output (or add <code>roleProfile</code> alongside it for backward compatibility with <code>CONTRACT_VERSION = 1</code>).</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- SURFACE 5 -->
+      <div class="surface-card" id="s5-interaction">
+        <div class="surface-head">
+          <h3 class="surface-title">5. Interactive User Prompts (<code>AskUserQuestion</code>) &amp; Tool Naming</h3>
+          <div class="surface-meta">
+            <span class="badge b-high">HIGH</span>
+            <span class="badge b-ok">Low Effort</span>
+          </div>
+        </div>
+        <p>
+          Several prompt files call Claude Code's built-in tools by exact name:
+        </p>
+        <ul>
+          <li><code>AskUserQuestion</code> appears in <code>skills/kaneki-flow/SKILL.md:149</code>, <code>skills/kaneki-onboarding/SKILL.md:45</code>, <code>skills/kaneki-ship/SKILL.md:35</code>, and <code>skills/kaneki-flow/references/nodes/scope.md:16</code>.</li>
+          <li><code>Read</code>, <code>Grep</code>, <code>Glob</code>, <code>Bash</code>, <code>PowerShell</code> appear in <code>packet-template.md:45–47</code>, <code>scope.md:7</code>, and <code>agents/*.md</code>.</li>
+        </ul>
+        <div class="two-col">
+          <div class="sub-box">
+            <h4>Why It Breaks on Other Agents</h4>
+            <p>Other agents either lack a structured question tool (they ask in plain chat text) or name it differently (e.g., <code>ask_question</code>, <code>request_user_input</code>). Strict instruction-following models may stall or error looking for a nonexistent tool named <code>AskUserQuestion</code>.</p>
+          </div>
+          <div class="sub-box">
+            <h4>Decoupling Strategy</h4>
+            <p>Replace concrete tool names with <strong>capability-level instructions</strong> in canonical playbooks and packets:</p>
+            <ul>
+              <li><em>"Ask the user (using your host's structured question UI if available, otherwise numbered options in chat; ≤ 4 questions at a time, recommended option first)."</em></li>
+              <li><em>"Search with line numbers first, then read targeted line ranges."</em></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- SURFACE 6 -->
+      <div class="surface-card" id="s6-models">
+        <div class="surface-head">
+          <h3 class="surface-title">6. Model Tier Defaults &amp; Design System Naming</h3>
+          <div class="surface-meta">
+            <span class="badge b-med">MEDIUM</span>
+            <span class="badge b-ok">Low Effort</span>
+          </div>
+        </div>
+        <p>
+          Notably, <strong>the Python driver is already model-name-agnostic</strong>: <code>harness/profile.py</code> and
+          <code>harness/cli.py</code> treat <code>models.light</code>, <code>models.routine</code>, and <code>models.deep</code>
+          as opaque strings. However, Claude model names leak in three places:
+        </p>
+        <ul>
+          <li><code>harness/onboard.py:687–688</code> hardcodes fallback defaults <code>("models.routine", "sonnet")</code> and <code>("models.deep", "opus")</code>.</li>
+          <li><code>skills/kaneki-flow/agents/*.md</code> hardcode <code>model: haiku / sonnet / opus</code> in frontmatter.</li>
+          <li><code>app/design-system/tokens.json:38–46</code> and <code>app/doc/design-system.html</code> name CSS/JS color tokens <code>haiku</code>, <code>sonnet</code>, <code>opus</code> (and soft/text variants) rather than tier names.</li>
+        </ul>
+        <div class="two-col">
+          <div class="sub-box">
+            <h4>Impact</h4>
+            <p>A user running OpenAI (<code>gpt-5-mini</code> / <code>o3</code>) or Gemini (<code>gemini-2.5-flash</code> / <code>gemini-2.5-pro</code>) gets invalid Claude model defaults on onboarding and misleading CSS class names in the desktop UI.</p>
+          </div>
+          <div class="sub-box">
+            <h4>Decoupling Strategy</h4>
+            <ul>
+              <li>Add a <code>provider</code> / model preset question in <code>onboard.py</code> (Claude, OpenAI/Codex, Gemini, Custom) or let the host adapter supply default tier-to-model mappings.</li>
+              <li>Rename design tokens from <code>haiku/sonnet/opus</code> to <code>tier-light/tier-routine/tier-deep</code> (with optional deprecated aliases).</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- SURFACE 7 -->
+      <div class="surface-card" id="s7-desktop-app">
+        <div class="surface-head">
+          <h3 class="surface-title">7. Planned Desktop App (<code>app/</code> &amp; <code>docs/desktop-app/plan.md</code>)</h3>
+          <div class="surface-meta">
+            <span class="badge b-plan">PLANNED / SPEC</span>
+            <span class="badge b-high">High Impact if Built As-Is</span>
+          </div>
+        </div>
+        <p>
+          The Go + Wails desktop app is currently in the planning stage (no Go code yet), which makes this the ideal
+          moment to decouple its design before implementation starts. Four design decisions in <code>plan.md</code> and
+          <code>app/doc/build-plan/parts/P6–P8</code> are Claude-specific:
+        </p>
+        <ul>
+          <li><strong>D5 / P6 (Session Supervision):</strong> Spawns <code>claude -n kaneki-&lt;ticket&gt;-&lt;node&gt; --session-id &lt;uuid&gt; --permission-mode acceptEdits --append-system-prompt-file ...</code>.</li>
+          <li><strong>Q1 / P6 (Live Status &amp; Permission Waiting):</strong> Injects a Claude Code <code>Notification</code> / <code>Stop</code> / <code>SessionStart</code> hook writing to <code>runs/&lt;id&gt;/events.jsonl</code>.</li>
+          <li><strong>D7 / P7 (Real Cost Panel):</strong> Parses Claude Code's private transcript format at <code>~/.claude/projects/&lt;cwd-slug&gt;/&lt;session&gt;.jsonl</code> and <code>&lt;session&gt;/subagents/*.jsonl</code>.</li>
+          <li><strong>P8 (Environment Probe &amp; Onboarding):</strong> Probes for the <code>claude</code> binary and hands off weak-repo interpretation / <code>--refresh</code> to a Claude session.</li>
+        </ul>
+        <div class="sub-box" style="margin-top:12px">
+          <h4>Decoupling Strategy (Before Writing Go Code)</h4>
+          <p>Define a clean Go interface in the Wails Host (<code>host/agent/backend.go</code>) so the UI and ticket supervisor never know which CLI agent is running:</p>
+          <pre><code>type AgentBackend interface {
+    ID() string                                          // "claude-code", "codex-cli", "gemini-cli", "opencode"
+    Probe(ctx context.Context) EnvProbeResult            // binary path, version, capabilities
+    BuildLaunchCmd(req LaunchRequest) (*exec.Cmd, error) // args, system prompt, env, hook config
+    WatchSessionEvents(runDir string) (&lt;-chan SessionEvent, error)
+    ParseUsage(workspace string, since time.Time) ([]UsageRecord, error)
+}</code></pre>
+        </div>
+      </div>
+
+      <!-- SURFACE 8 -->
+      <div class="surface-card" id="s8-adjacent">
+        <div class="surface-head">
+          <h3 class="surface-title">8. Adjacent Host Couplings (Non-Claude, Worth Noting)</h3>
+          <div class="surface-meta">
+            <span class="badge b-med">MINOR</span>
+            <span class="badge b-ok">Already Mostly Abstracted</span>
+          </div>
+        </div>
+        <ul>
+          <li><strong>Zed Editor:</strong> <code>harness/zed.py</code>, <code>harness/web.py</code>, and <code>harness/web_page.html:176</code> label the button <em>"Open in Zed"</em> and default to the <code>zed</code> binary. However, <code>SDLC_EDITOR</code> is already supported in <code>web.py</code> — simply generalize the UI label to <em>"Open in Editor"</em> and optionally support VS Code / Cursor task generation alongside <code>zed-setup</code>.</li>
+          <li><strong>GitHub CLI (<code>gh</code>):</strong> <code>harness/ship.py:217–256</code> implements <code>review-fetch</code> specifically for GitHub via <code>gh</code> (already overridable via <code>SDLC_GH</code>; non-GitHub hosts already work via <code>sdlc handback --review-file</code>).</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- CROSS-AGENT CAPABILITY MATRIX -->
+    <section id="agent-matrix">
+      <h2>Cross-Agent Capability Matrix</h2>
+      <p>
+        Porting to an agent-agnostic architecture requires designing for the <strong>lowest common denominator</strong>
+        in the core harness while allowing richer host adapters to light up native features where available.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Capability Kaneki Uses</th>
+              <th>Claude Code</th>
+              <th>OpenAI Codex CLI</th>
+              <th>Gemini CLI</th>
+              <th>Cursor / IDE Agents</th>
+              <th>OpenCode</th>
+              <th>Agnostic Fallback</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Skill / Playbook Discovery</strong></td>
+              <td class="check-y">.claude/skills/</td>
+              <td class="check-y">AGENTS.md / .agents/skills/</td>
+              <td class="check-y">GEMINI.md / .gemini/skills/</td>
+              <td class="check-y">.cursor/rules/</td>
+              <td class="check-y">AGENTS.md / .opencode/</td>
+              <td><code>sdlc</code> CLI + canonical <code>playbooks/</code></td>
+            </tr>
+            <tr>
+              <td><strong>Pre-Tool Shell Guard Hooks</strong></td>
+              <td class="check-y">PreToolUse (exit 2)</td>
+              <td class="check-n">None (sandbox only)</td>
+              <td class="check-p">BeforeTool hooks</td>
+              <td class="check-p">Hooks (varying)</td>
+              <td class="check-p">Plugin hooks</td>
+              <td><strong>Git worktree hooks</strong> + <code>sdlc gate</code> commit audit</td>
+            </tr>
+            <tr>
+              <td><strong>Isolated Fresh Subagents</strong></td>
+              <td class="check-y">Native (.claude/agents)</td>
+              <td class="check-p">Subprocess (<code>codex exec</code>)</td>
+              <td class="check-p">Subprocess (<code>gemini -p</code>)</td>
+              <td class="check-p">Background / Subagents</td>
+              <td class="check-y">Native subagents</td>
+              <td><code>sdlc dispatch</code> headless CLI runner</td>
+            </tr>
+            <tr>
+              <td><strong>Structured Ask UI</strong></td>
+              <td class="check-y">AskUserQuestion</td>
+              <td class="check-n">Plain text / CLI</td>
+              <td class="check-p">Interactive prompt</td>
+              <td class="check-p">Chat / UI</td>
+              <td class="check-p">Plain text / TUI</td>
+              <td>Numbered choices in chat</td>
+            </tr>
+            <tr>
+              <td><strong>Plugin Slash Commands (my-git)</strong></td>
+              <td class="check-y">/my-git:*</td>
+              <td class="check-n">Not supported</td>
+              <td class="check-n">Not supported</td>
+              <td class="check-n">Not supported</td>
+              <td class="check-n">Not supported</td>
+              <td><code>sdlc ship</code> native git + <code>gh</code>/<code>glab</code></td>
+            </tr>
+            <tr>
+              <td><strong>Exact Token/Cost Logs</strong></td>
+              <td class="check-y">~/.claude/projects/*.jsonl</td>
+              <td class="check-y">JSONL event stream</td>
+              <td class="check-y">--output-format json</td>
+              <td class="check-n">Closed / UI only</td>
+              <td class="check-y">Session DB / JSON</td>
+              <td>Optional <code>--tokens</code> + provider log adapter</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- TARGET ARCHITECTURE -->
+    <section id="target-arch">
+      <h2>Recommended Target Architecture</h2>
+      <p>
+        Extend Kaneki's existing adapter philosophy (<code>tracker</code>, <code>stack</code>, <code>surface</code>,
+        <code>delivery</code>) with <strong>two new clean boundaries</strong>: an <strong>Agent Host Adapter</strong>
+        (for installation, dispatch, and hooks) and a <strong>Ship Backend</strong> (decoupling git execution from
+        <code>my-git</code>).
+      </p>
+
+      <div class="diagram-box">
+        <svg viewBox="0 0 920 340" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+          <defs>
+            <marker id="arr2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 1 L 10 5 L 0 9 z" fill="#3b5bdb"/>
+            </marker>
+          </defs>
+
+          <!-- Top: Host Adapters -->
+          <rect x="16" y="14" width="888" height="86" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"/>
+          <text x="32" y="36" font-size="12" font-weight="700" fill="var(--accent)">NEW: AGENT HOST ADAPTER LAYER (hosts/)</text>
+
+          <rect x="32" y="48" width="160" height="40" rx="6" fill="var(--surface)" stroke="var(--accent)"/>
+          <text x="46" y="72" font-size="12" font-weight="600" fill="var(--text)">Claude Code Host</text>
+
+          <rect x="206" y="48" width="160" height="40" rx="6" fill="var(--surface)" stroke="var(--accent)"/>
+          <text x="224" y="72" font-size="12" font-weight="600" fill="var(--text)">Codex CLI Host</text>
+
+          <rect x="380" y="48" width="160" height="40" rx="6" fill="var(--surface)" stroke="var(--accent)"/>
+          <text x="396" y="72" font-size="12" font-weight="600" fill="var(--text)">Gemini CLI Host</text>
+
+          <rect x="554" y="48" width="160" height="40" rx="6" fill="var(--surface)" stroke="var(--accent)"/>
+          <text x="568" y="72" font-size="12" font-weight="600" fill="var(--text)">OpenCode / Cursor</text>
+
+          <rect x="728" y="48" width="160" height="40" rx="6" fill="var(--surface)" stroke="var(--accent)"/>
+          <text x="742" y="72" font-size="12" font-weight="600" fill="var(--text)">Generic / Headless</text>
+
+          <!-- Arrows -->
+          <line x1="460" y1="100" x2="460" y2="128" stroke="#3b5bdb" stroke-width="2" marker-end="url(#arr2)"/>
+
+          <!-- Middle: Canonical Playbooks + Runner + Ship -->
+          <rect x="16" y="132" width="888" height="88" rx="10" fill="var(--surface)" stroke="var(--border-strong)" stroke-width="1.5"/>
+          <text x="32" y="154" font-size="12" font-weight="700" fill="var(--text-muted)">HOST-AGNOSTIC ORCHESTRATION &amp; SAFETY LAYER</text>
+
+          <rect x="32" y="166" width="204" height="42" rx="6" fill="var(--surface-2)" stroke="var(--border-strong)"/>
+          <text x="44" y="185" font-size="12" font-weight="700" fill="var(--text)">Canonical Playbooks &amp; Roles</text>
+          <text x="44" y="200" font-size="10.5" fill="var(--text-muted)">playbooks/, roles/{light,routine,deep}</text>
+
+          <rect x="250" y="166" width="204" height="42" rx="6" fill="var(--surface-2)" stroke="var(--border-strong)"/>
+          <text x="262" y="185" font-size="12" font-weight="700" fill="var(--text)">Unit Runner (sdlc dispatch)</text>
+          <text x="262" y="200" font-size="10.5" fill="var(--text-muted)">native subagent OR CLI subprocess</text>
+
+          <rect x="468" y="166" width="204" height="42" rx="6" fill="var(--surface-2)" stroke="var(--border-strong)"/>
+          <text x="480" y="185" font-size="12" font-weight="700" fill="var(--text)">Git Safety (Worktree Hooks)</text>
+          <text x="480" y="200" font-size="10.5" fill="var(--text-muted)">.sdlc/ship-approvals.json + git hooks</text>
+
+          <rect x="686" y="166" width="202" height="42" rx="6" fill="var(--surface-2)" stroke="var(--border-strong)"/>
+          <text x="698" y="185" font-size="12" font-weight="700" fill="var(--text)">Pluggable Ship Backend</text>
+          <text x="698" y="200" font-size="10.5" fill="var(--text-muted)">native-git (default) | my-git (opt)</text>
+
+          <!-- Arrows -->
+          <line x1="460" y1="220" x2="460" y2="246" stroke="#3b5bdb" stroke-width="2" marker-end="url(#arr2)"/>
+
+          <!-- Bottom: Core -->
+          <rect x="16" y="250" width="888" height="74" rx="10" fill="var(--ok-soft)" stroke="var(--ok)" stroke-width="1.5"/>
+          <text x="32" y="274" font-size="12.5" font-weight="700" fill="var(--ok)">UNCHANGED KANEKI CORE ENGINE (Python stdlib)</text>
+          <text x="32" y="296" font-size="12" fill="var(--text)"><code>graph/lifecycle.json</code> · <code>harness/{state,graph,profile,checks,rules,gitid,board,usage,contract}.py</code> · <code>contracts/</code> · <code>adapters/</code> · <code>rulepacks/</code></text>
+          <text x="32" y="313" font-size="11.5" fill="var(--text-muted)">Zero breaking changes to <code>state.json</code>, <code>decisions.jsonl</code>, or <code>CONTRACT_VERSION = 1</code>.</text>
+        </svg>
+      </div>
+
+      <h3>Proposed Directory Evolution</h3>
+      <pre><code>kaneki-harness/
+├── graph/                  # UNCHANGED — pure lifecycle state machine
+├── contracts/              # UNCHANGED — add optional host/ship-backend fields (additive)
+├── adapters/               # UNCHANGED — update delivery/*.json to support native-git backend
+├── rulepacks/ &amp; templates/ # UNCHANGED
+├── playbooks/              # NEW (extracted from skills/*/SKILL.md) — host-agnostic markdown
+│   ├── flow.md             # controller loop (neutral tool/ask phrasing)
+│   ├── onboarding.md
+│   ├── ship.md
+│   ├── roles/              # NEW (extracted from agents/*.md) — injected into packets!
+│   │   ├── light.md
+│   │   ├── routine.md
+│   │   └── deep.md         # 5-step adversarial reasoning card lives here
+│   └── nodes/              # moved from skills/kaneki-flow/references/nodes/ (19/20 unchanged)
+├── hosts/                  # NEW — thin host-specific emitters &amp; shims
+│   ├── claude/             # emits .claude/skills, .claude/agents, PreToolUse hook, optional my-git
+│   ├── codex/              # emits AGENTS.md / .agents/skills + headless runner config
+│   ├── gemini/             # emits .gemini/skills + BeforeTool hook shim
+│   ├── cursor/             # emits .cursor/rules/
+│   └── generic/            # installs .sdlc/bin/sdlc + AGENTS.md + worktree git hooks
+└── harness/
+    ├── install.py          # refactored: delegates to hosts/&lt;host&gt; emitter
+    ├── ship.py             # refactored: supports native-git backend + optional my-git backend
+    ├── dispatch.py         # NEW: optional headless CLI subagent runner (codex/gemini/claude/opencode)
+    └── (all other 15 .py modules stay intact!)</code></pre>
+    </section>
+
+    <!-- WHAT NOT TO TOUCH -->
+    <section id="keep-as-is">
+      <h2>What NOT to Touch (Already Agent-Agnostic)</h2>
+      <p>
+        Do not rewrite or destabilize these modules — they are already cleanly isolated from Claude Code and covered
+        by the existing 52-test suite:
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Component</th>
+              <th>Files</th>
+              <th>Why It Is Already Clean</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Lifecycle Graph</strong></td>
+              <td><code>graph/lifecycle.json</code>, <code>harness/graph.py</code></td>
+              <td>Pure DAG with lanes, tiers (<code>light/routine/deep</code>), extension slots, and token invalidation. Zero agent references.</td>
+            </tr>
+            <tr>
+              <td><strong>State &amp; Integrity</strong></td>
+              <td><code>harness/state.py</code>, <code>harness/schema.py</code>, <code>harness/contract.py</code></td>
+              <td>Hash-chained <code>decisions.jsonl</code>, file locking, receipts, POSIX portable paths, JSON Schema validation.</td>
+            </tr>
+            <tr>
+              <td><strong>Verification &amp; Rules</strong></td>
+              <td><code>harness/checks.py</code>, <code>harness/rules.py</code>, <code>rulepacks/</code></td>
+              <td>Pure text parsers (sections, verdicts, citations, language checks) and phase-filtered rulepacks.</td>
+            </tr>
+            <tr>
+              <td><strong>Git Identity &amp; Policy</strong></td>
+              <td><code>harness/gitid.py</code>, <code>harness/gitpolicy.py</code></td>
+              <td>Applies <code>GIT_AUTHOR_*</code> / <code>GIT_COMMITTER_*</code> / <code>GIT_SSH_COMMAND</code> per command; pure policy predicates.</td>
+            </tr>
+            <tr>
+              <td><strong>Views &amp; Telemetry</strong></td>
+              <td><code>harness/board.py</code>, <code>harness/usage.py</code>, <code>harness/web.py</code></td>
+              <td><code>STATUS.md</code>, <code>token-usage.md</code>, <code>sdlc tickets</code>, local read-only web board.</td>
+            </tr>
+            <tr>
+              <td><strong>Project Adapters &amp; Schemas</strong></td>
+              <td><code>contracts/*.schema.json</code>, <code>adapters/{tracker,stack,surface}/</code>, <code>templates/</code></td>
+              <td>Completely project-data-driven; only <code>adapters/delivery/*.json</code> mentions <code>my-git</code>.</td>
+            </tr>
+            <tr>
+              <td><strong>Node Reference Cards</strong></td>
+              <td>19 of 20 files in <code>skills/kaneki-flow/references/nodes/</code></td>
+              <td>Pure SDLC procedures. Only <code>scope.md</code> needs a 2-line edit (<code>AskUserQuestion</code> / <code>Grep</code>).</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ROADMAP -->
+    <section id="roadmap">
+      <h2>Phased Migration Roadmap</h2>
+      <p>
+        Execute in four incremental phases. After each phase, the existing Python test suite
+        (<code>python3 -m unittest discover -s tests -v</code>) must stay 100% green, and Claude Code compatibility
+        remains unbroken as the first host adapter.
+      </p>
+
+      <div class="phase">
+        <div class="phase-title">Phase 1 — Decouple Ship &amp; Git Safety (Removes the 2 Hardest Blockers)</div>
+        <div class="phase-goal">Goal: Any agent can run the full lifecycle including <code>kaneki-ship</code> without <code>my-git</code> or Claude hooks.</div>
+        <ul>
+          <li>Port Conventional Commits + no-AI-attribution check into <code>harness/checks.py</code> (remove hard subprocess call to <code>my-git/scripts/check_message.py</code>).</li>
+          <li>Add <code>native-git</code> ship backend in <code>harness/ship.py</code> using <code>gitid.run()</code> + optional <code>gh</code>/<code>glab</code> CLI; keep <code>my-git</code> as an opt-in backend.</li>
+          <li>Move ship approvals from <code>.claude/kaneki-ship-approvals.json</code> to <code>.sdlc/ship-approvals.json</code>.</li>
+          <li>Install worktree-level git <code>pre-commit</code> / <code>pre-push</code> hooks during <code>sdlc worktree</code> / <code>init</code> for universal, agent-agnostic history protection.</li>
+        </ul>
+      </div>
+
+      <div class="phase">
+        <div class="phase-title">Phase 2 — Neutralize Prompts, Role Cards &amp; Packets</div>
+        <div class="phase-goal">Goal: Zero Claude-specific tool names, env vars, or model names in canonical playbooks and packets.</div>
+        <ul>
+          <li>Extract <code>roles/{light,routine,deep}.md</code> from <code>skills/kaneki-flow/agents/*.md</code> and embed the role card (especially <code>deep</code>'s 5-step adversarial reasoning protocol) directly into rendered packets in <code>cmd_packet()</code>.</li>
+          <li>Replace <code>AskUserQuestion</code> and Claude tool names (<code>Read</code>, <code>Grep</code>, etc.) in <code>SKILL.md</code>, <code>scope.md</code>, and <code>packet-template.md</code> with capability-based phrasing.</li>
+          <li>Replace <code>$CLAUDE_SKILL_DIR/scripts/sdlc</code> with a workspace-local shim <code>.sdlc/bin/sdlc</code> (or <code>PATH</code> binary).</li>
+          <li>Add model preset selection to <code>harness/onboard.py</code> instead of hardcoding <code>sonnet</code>/<code>opus</code>.</li>
+        </ul>
+      </div>
+
+      <div class="phase">
+        <div class="phase-title">Phase 3 — Multi-Host Installer &amp; External Subagent Runner</div>
+        <div class="phase-goal">Goal: One-command install and subagent execution on Claude Code, Codex CLI, Gemini CLI, Cursor, and OpenCode.</div>
+        <ul>
+          <li>Refactor <code>harness/install.py</code> to support <code>--host claude|codex|gemini|cursor|opencode|generic</code> via <code>hosts/</code> emitters.</li>
+          <li>Keep <code>--host claude</code> generating the exact <code>.claude/</code> structure + <code>PreToolUse</code> hook shim for backward compatibility.</li>
+          <li>Add <code>harness/dispatch.py</code> (<code>sdlc dispatch --ticket T --node N --unit U --runner &lt;cmd&gt;</code>) so agents without native subagents (or headless CI) can spawn fresh worker/reviewer processes per unit and capture token counts automatically.</li>
+        </ul>
+      </div>
+
+      <div class="phase">
+        <div class="phase-title">Phase 4 — Align Desktop App Spec &amp; Design System Before Coding</div>
+        <div class="phase-goal">Goal: Prevent Claude Code lock-in from re-entering via the upcoming Go/Wails desktop app.</div>
+        <ul>
+          <li>Update <code>app/design-system/tokens.json</code> to rename <code>haiku/sonnet/opus</code> tokens to <code>tier-light/tier-routine/tier-deep</code>.</li>
+          <li>Update <code>docs/desktop-app/plan.md</code> (D5, D7, Q1) and <code>P6–P8</code> specs to define the Go <code>AgentBackend</code> interface (session launch, event watcher, usage log parser) with <code>ClaudeCodeBackend</code> as adapter #1.</li>
+          <li>Generalize <code>harness/web_page.html</code> ("Open in Editor" instead of hardcoded "Open in Zed").</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+  // Theme toggle
+  const btn = document.getElementById("themeToggle");
+  const root = document.documentElement;
+  const saved = localStorage.getItem("kaneki-doc-theme");
+  if (saved === "dark" || (!saved && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
+    root.setAttribute("data-theme", "dark");
+    btn.textContent = "Light";
+  }
+  btn.addEventListener("click", () => {
+    const isDark = root.getAttribute("data-theme") === "dark";
+    root.setAttribute("data-theme", isDark ? "light" : "dark");
+    btn.textContent = isDark ? "Dark" : "Light";
+    localStorage.setItem("kaneki-doc-theme", isDark ? "light" : "dark");
+  });
+
+  // Inventory table severity filter
+  const filterBtns = document.querySelectorAll(".filter-btn");
+  const rows = document.querySelectorAll("#inventoryTable tbody tr");
+  filterBtns.forEach(b => {
+    b.addEventListener("click", () => {
+      filterBtns.forEach(x => x.classList.remove("active"));
+      b.classList.add("active");
+      const sev = b.dataset.filter;
+      rows.forEach(r => {
+        r.classList.toggle("hidden", sev !== "all" && r.dataset.sev !== sev);
+      });
+    });
+  });
+
+  // Active nav highlight on scroll
+  const navLinks = Array.from(document.querySelectorAll(".nav a"));
+  const sections = navLinks.map(a => document.querySelector(a.getAttribute("href"))).filter(Boolean);
+  const onScroll = () => {
+    const y = window.scrollY + 120;
+    let current = sections[0];
+    for (const s of sections) {
+      if (s.offsetTop <= y) current = s;
+    }
+    navLinks.forEach(a => a.classList.toggle("active", current && a.getAttribute("href") === "#" + current.id));
+  };
+  window.addEventListener("scroll", onScroll, { passive: true });
+  onScroll();
+</script>
+</body>
+</html>

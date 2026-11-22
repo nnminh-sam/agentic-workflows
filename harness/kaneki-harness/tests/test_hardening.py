@@ -268,12 +268,14 @@ class GuardHookTests(unittest.TestCase):
         from harness import mygit
         project = Path(tempfile.mkdtemp(prefix="sdlc-guard-"))
         self.addCleanup(lambda: __import__("shutil").rmtree(project, ignore_errors=True))
+        self.assertEqual(mygit.approvals_file(project), project / ".sdlc" / "ship-approvals.json")
         wt, other = project / "wt", project / "other"
         wt.mkdir()
         other.mkdir()
         commit = f'git -C "{wt.as_posix()}" -c user.name="A" commit -S -F msg.txt'
         self.assertEqual(self.hook(commit, project), 2)
         mygit.grant(project, "T-1", "app", str(wt), "develop/feat/x", "d" * 64)
+        self.assertTrue((project / ".sdlc" / "ship-approvals.json").is_file())
         self.assertEqual(self.hook(commit, project), 0)
         self.assertEqual(self.hook(f'git -C "{wt}" push -u origin develop/feat/x', project), 0)
         self.assertEqual(self.hook("git push origin HEAD", project, cwd=wt), 0)
@@ -283,6 +285,20 @@ class GuardHookTests(unittest.TestCase):
         mygit.revoke(project, "T-1", "app")
         self.assertEqual(self.hook(commit, project), 2)
         self.assertFalse(mygit.approvals_file(project).exists())
+
+    def test_legacy_claude_approval_file_still_honored(self) -> None:
+        project = Path(tempfile.mkdtemp(prefix="sdlc-guard-leg-"))
+        self.addCleanup(lambda: __import__("shutil").rmtree(project, ignore_errors=True))
+        wt = project / "wt"
+        wt.mkdir()
+        legacy = project / ".claude" / "kaneki-ship-approvals.json"
+        legacy.parent.mkdir(parents=True)
+        legacy.write_text(json.dumps({"schemaVersion": 1, "approvals": [
+            {"ticket": "T-1", "repo": "app", "path": str(wt.resolve()), "branch": "ticket/T-1",
+             "requestDigest": "d" * 64, "allow": ["commit", "push"], "expiresAt": int(time.time()) + 600}
+        ]}), encoding="utf-8")
+        self.assertEqual(self.hook(f'git -C "{wt.as_posix()}" commit -F msg.txt', project), 0)
+        self.assertEqual(self.hook(f'git -C "{wt.as_posix()}" push -u origin HEAD', project), 0)
 
     def test_guard_rules_match_the_wrapper_policy(self) -> None:
         import importlib.util
@@ -333,30 +349,32 @@ class ShipTests(Flow):
         """What /my-git:commit runs: commit exactly what is staged, identity pinned on the command."""
         git(self.repo, "-c", f"user.name={name}", "-c", "user.email=dev@kaneki.test", "commit", "-q", "-F", message_file)
 
-    def ready(self, ticket: str) -> dict:
+    def ready(self, ticket: str, backend: str | None = None) -> dict:
         (self.repo / "main.py").write_text("print('fixed')\n")
         (self.repo / "added.py").write_text("NEW = True\n")
         run("init", "--ticket", ticket, "--kind", "bug", *self.p)
         self.to(ticket, "deliverable-ready")
         (self.tdir(ticket) / "drafts" / "commit-msg.md").write_text(self.MESSAGE, encoding="utf-8")
-        code, req = run("ship-request", "--ticket", ticket, "--repo", "app", *self.p)
+        extra = ("--backend", backend) if backend else ()
+        code, req = run("ship-request", "--ticket", ticket, "--repo", "app", *extra, *self.p)
         self.assertEqual(code, 0, req)
         return req
 
     def test_ship_stages_for_my_git_then_records_the_approved_commit(self) -> None:
-        req = self.ready("SH-1")
+        req = self.ready("SH-1", backend="my-git")
         self.assertEqual(req["files"], ["added.py", "main.py"])
         self.assertEqual((req["via"], req["pr"]), ("my-git", "my-git"))
-        code, res = run("ship", "--ticket", "SH-1", "--repo", "app", "--approve", "0" * 64, *self.p)
+        code, res = run("ship", "--ticket", "SH-1", "--repo", "app", "--approve", "0" * 64, "--backend", "my-git", *self.p)
         self.assertEqual(code, 2)
         self.assertIn("changed since it was approved", res["error"])
-        code, res = run("ship", "--ticket", "SH-1", "--repo", "app", "--approve", req["requestDigest"], *self.p)
+        code, res = run("ship", "--ticket", "SH-1", "--repo", "app", "--approve", req["requestDigest"],
+                        "--backend", "my-git", *self.p)
         self.assertEqual(code, 0, res)
         self.assertEqual(sorted(res["staged"]), ["added.py", "main.py"])
         self.assertTrue(res["next"][0].startswith("/my-git:commit"))
         self.assertTrue(any(step.startswith("/my-git:push") for step in res["next"]))
         self.assertTrue(any(step.startswith("/my-git:pr") for step in res["next"]))
-        self.assertTrue((self.tmp / ".claude" / "kaneki-ship-approvals.json").is_file())
+        self.assertTrue((self.tmp / ".sdlc" / "ship-approvals.json").is_file())
         self.assertEqual(git(self.repo, "log", "-1", "--format=%s").strip(), "init")  # ship itself commits nothing
 
         code, res = run("ship-record", "--ticket", "SH-1", "--repo", "app", *self.p)
@@ -371,7 +389,7 @@ class ShipTests(Flow):
         self.assertTrue(res["pushed"])
         self.assertEqual(res["pr"], "https://github.com/acme/app/pull/7")
         self.assertEqual(git(self.remote, "rev-parse", f"refs/heads/{branch}").strip(), res["commit"])
-        self.assertFalse((self.tmp / ".claude" / "kaneki-ship-approvals.json").exists())
+        self.assertFalse((self.tmp / ".sdlc" / "ship-approvals.json").exists())
 
         # review round: fetch the review, reopen coding; the shipped commit is not a "node commit"
         git(self.repo, "remote", "set-url", "origin", "git@github.com:acme/app.git")
@@ -384,8 +402,9 @@ class ShipTests(Flow):
         self.complete("SH-1", "coding")
 
     def test_ship_record_refuses_a_commit_that_is_not_the_approved_one(self) -> None:
-        req = self.ready("SH-2")
-        code, res = run("ship", "--ticket", "SH-2", "--repo", "app", "--approve", req["requestDigest"], *self.p)
+        req = self.ready("SH-2", backend="my-git")
+        code, res = run("ship", "--ticket", "SH-2", "--repo", "app", "--approve", req["requestDigest"],
+                        "--backend", "my-git", *self.p)
         self.assertEqual(code, 0, res)
         other = self.tmp / "other-msg.txt"
         other.write_text("fix(app): something else\n", encoding="utf-8")
@@ -400,9 +419,126 @@ class ShipTests(Flow):
         self.to("SH-3", "deliverable-ready")
         (self.tdir("SH-3") / "drafts" / "commit-msg.md").write_text(
             "fix(app): x\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n", encoding="utf-8")
-        code, res = run("ship-request", "--ticket", "SH-3", "--repo", "app", *self.p)
+        code, res = run("ship-request", "--ticket", "SH-3", "--repo", "app", "--backend", "my-git", *self.p)
         self.assertEqual(code, 2)
         self.assertIn("my-git", res["error"])
+
+    def test_native_ship_commits_pushes_opens_pr_without_my_git(self) -> None:
+        os.environ["SDLC_MYGIT"] = str(self.tmp / "no-my-git")
+        self.addCleanup(os.environ.pop, "SDLC_MYGIT", None)
+        req = self.ready("SH-NAT-1")
+        self.assertEqual((req["via"], req["pr"]), ("native-git", "gh"))
+        code, res = run("ship", "--ticket", "SH-NAT-1", "--repo", "app", "--approve", "0" * 64, *self.p)
+        self.assertEqual(code, 2)
+        self.assertIn("changed since it was approved", res["error"])
+
+        code, res = run("ship", "--ticket", "SH-NAT-1", "--repo", "app", "--approve", req["requestDigest"], *self.p)
+        self.assertEqual(code, 0, res)
+        self.assertEqual(res["via"], "native-git")
+        self.assertTrue(res["pushed"])
+        self.assertEqual(res["pr"], "https://github.com/acme/app/pull/7")
+        self.assertEqual(res["next"], [])
+        self.assertFalse((self.tmp / ".sdlc" / "ship-approvals.json").exists())
+        branch = git(self.repo, "rev-parse", "--abbrev-ref", "HEAD").strip()
+        self.assertEqual(git(self.remote, "rev-parse", f"refs/heads/{branch}").strip(), res["commit"])
+        self.assertEqual(git(self.repo, "log", "-1", "--format=%an <%ae>").strip(), "Kaneki Dev <dev@kaneki.test>")
+
+        # Re-ship after review round: updates branch and preserves PR URL without recreating PR
+        old_gh = os.environ["SDLC_GH"]
+        no_create_gh = self.tmp / "no_create_gh.py"
+        no_create_gh.write_text(textwrap.dedent('''
+            import json, sys
+            a = sys.argv[1:]
+            if a[:2] == ["pr", "view"]:
+                print(json.dumps({"url": "https://github.com/acme/app/pull/7", "headRefOid": "abc",
+                                  "reviews": [{"author": {"login": "rev"}, "state": "CHANGES_REQUESTED", "body": "Fix y."}],
+                                  "comments": []}))
+            elif a[:1] == ["api"]:
+                print("[]")
+            else:
+                sys.exit(4)  # pr create must NOT be called on re-ship
+        '''), encoding="utf-8")
+        os.environ["SDLC_GH"] = f"{Path(sys.executable).as_posix()} {no_create_gh.as_posix()}"
+        git(self.repo, "remote", "set-url", "origin", "git@github.com:acme/app.git")
+        code, res = run("review-fetch", "--ticket", "SH-NAT-1", "--repo", "app", *self.p)
+        self.assertEqual(code, 0, res)
+        git(self.repo, "remote", "set-url", "origin", str(self.remote))
+        self.complete("SH-NAT-1", "read-review")
+        self.complete("SH-NAT-1", "triage-review", actor="user", extra=("--reopen", "coding"))
+        (self.repo / "main.py").write_text("print('fixed round 2')\n")
+        for node in ("coding", "code-review", "execute-and-evidence",
+                     "final-review", "delivery-drafts", "deliverable-ready"):
+            self.complete("SH-NAT-1", node, actor="user" if node == "deliverable-ready" else "controller")
+        (self.tdir("SH-NAT-1") / "drafts" / "commit-msg.md").write_text(
+            "fix(app): apply round 2 review feedback\n\nRefs SH-NAT-1.\n", encoding="utf-8")
+        code, req2 = run("ship-request", "--ticket", "SH-NAT-1", "--repo", "app", *self.p)
+        self.assertEqual(code, 0, req2)
+        code, res2 = run("ship", "--ticket", "SH-NAT-1", "--repo", "app", "--approve", req2["requestDigest"], *self.p)
+        self.assertEqual(code, 0, res2)
+        self.assertEqual(res2["pr"], "https://github.com/acme/app/pull/7")
+        self.assertEqual(git(self.remote, "rev-parse", f"refs/heads/{branch}").strip(), res2["commit"])
+        os.environ["SDLC_GH"] = old_gh
+
+    def test_native_ship_manual_adapter_commits_without_push(self) -> None:
+        os.environ["SDLC_MYGIT"] = str(self.tmp / "no-my-git")
+        self.addCleanup(os.environ.pop, "SDLC_MYGIT", None)
+        prof = json.loads(self.profile.read_text())
+        prof["delivery"] = {"adapter": "manual", "drafts": ["commit-msg", "pr-body"]}
+        self.profile.write_text(json.dumps(prof))
+        req = self.ready("SH-NAT-2")
+        self.assertEqual((req["via"], req["push"], req["pr"]), ("native-git", False, None))
+        code, res = run("ship", "--ticket", "SH-NAT-2", "--repo", "app", "--approve", req["requestDigest"], *self.p)
+        self.assertEqual(code, 0, res)
+        self.assertFalse(res["pushed"])
+        self.assertIsNone(res["pr"])
+        self.assertEqual(git(self.repo, "log", "-1", "--format=%s").strip(), "fix(app): print the fixed value")
+
+    def test_native_ship_rejects_bad_commit_messages(self) -> None:
+        os.environ["SDLC_MYGIT"] = str(self.tmp / "no-my-git")
+        self.addCleanup(os.environ.pop, "SDLC_MYGIT", None)
+        (self.repo / "main.py").write_text("print('fixed')\n")
+        run("init", "--ticket", "SH-NAT-3", "--kind", "bug", *self.p)
+        self.to("SH-NAT-3", "deliverable-ready")
+        bad_cases = [
+            ("fix(app): ok\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n", "CM016"),
+            ("fix(app): ok\n\n🤖 Generated with Codex\n", "CM016"),
+            ("Fixed the bug", "CM003"),
+            ("fix(app): " + "a" * 65, "CM007"),
+            ("fix(app): bad trailing period.", "CM008"),
+            ("fix(app): WIP temporary", "CM014"),
+            ("fix(app): valid header\nmissing blank line\n", "CM011"),
+            ("fix(app): ok\n\nbreaking change: lowercase\n", "CM013"),
+        ]
+        for msg, rule_id in bad_cases:
+            (self.tdir("SH-NAT-3") / "drafts" / "commit-msg.md").write_text(msg, encoding="utf-8")
+            code, res = run("ship-request", "--ticket", "SH-NAT-3", "--repo", "app", *self.p)
+            self.assertEqual(code, 2, (rule_id, msg))
+            self.assertIn(rule_id, res["error"], (rule_id, msg))
+
+    def test_native_ship_push_failure_records_commit_and_revokes_approval(self) -> None:
+        os.environ["SDLC_MYGIT"] = str(self.tmp / "no-my-git")
+        self.addCleanup(os.environ.pop, "SDLC_MYGIT", None)
+        git(self.repo, "remote", "set-url", "origin", str(self.tmp / "missing-remote.git"))
+        req = self.ready("SH-NAT-4")
+        code, res = run("ship", "--ticket", "SH-NAT-4", "--repo", "app", "--approve", req["requestDigest"], *self.p)
+        self.assertEqual(code, 2)
+        self.assertIn("commit", res["error"])
+        self.assertIn("push failed", res["error"])
+        self.assertFalse((self.tmp / ".sdlc" / "ship-approvals.json").exists())
+        code, st = run("status", "--ticket", "SH-NAT-4", *self.p)
+        self.assertEqual(code, 0, st)
+        state = json.loads((self.tdir("SH-NAT-4") / "state.json").read_text(encoding="utf-8"))
+        sha = git(self.repo, "rev-parse", "HEAD").strip()
+        self.assertIn(sha, state["shipped"]["app"]["commits"])
+
+        git(self.repo, "remote", "set-url", "origin", str(self.remote))
+        branch = git(self.repo, "rev-parse", "--abbrev-ref", "HEAD").strip()
+        git(self.repo, "push", "-q", "origin", f"HEAD:refs/heads/{branch}")
+        code, rec = run("ship-record", "--ticket", "SH-NAT-4", "--repo", "app", "--pr",
+                        "https://github.com/acme/app/pull/99", *self.p)
+        self.assertEqual(code, 0, rec)
+        self.assertTrue(rec["pushed"])
+        self.assertEqual(rec["pr"], "https://github.com/acme/app/pull/99")
 
 
 class InstallTests(unittest.TestCase):
@@ -455,6 +591,157 @@ class InstallTests(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn("my-git", res["error"])
         self.assertFalse((target / ".claude" / "skills").exists())
+
+
+class CommitMessageCheckTests(unittest.TestCase):
+    def test_valid_and_exempt_messages(self) -> None:
+        from harness import checks
+        self.assertEqual(checks.commit_message("feat(api): add retry logic"), [])
+        self.assertEqual(checks.commit_message("feat!: drop legacy endpoint\n\nBREAKING CHANGE: v1 removed"), [])
+        self.assertEqual(checks.commit_message("Merge branch 'develop/base'"), [])
+        self.assertEqual(checks.commit_message('Revert "feat: old"'), [])
+        self.assertEqual(checks.commit_message("fixup! feat: something"), [])
+
+    def test_rejects_every_rule(self) -> None:
+        from harness import checks
+        cases = [
+            ("", "CM003"),
+            ("Not conventional", "CM003"),
+            ("feature: wrong type", "CM004"),
+            ("feat(BAD_SCOPE): bad scope", "CM005"),
+            ("feat(): empty scope", "CM005"),
+            ("fix: x", "CM006"),
+            ("feat: " + "a" * 70, "CM007"),
+            ("docs: trailing dot.", "CM008"),
+            ("feat: one\nno blank line", "CM011"),
+            ("feat: one\n\nbreaking change: lower", "CM013"),
+            ("feat: WIP work", "CM014"),
+            ("feat: ok\n\nCo-Authored-By: Gemini <gemini@google.com>", "CM016"),
+            ("feat: ok\n\nGenerated with Claude Code", "CM016"),
+        ]
+        for msg, expected_code in cases:
+            errs = checks.commit_message(msg)
+            self.assertTrue(any(e.startswith(expected_code) for e in errs), (expected_code, msg, errs))
+
+
+class WorktreeHookTests(Flow):
+    def setUp(self) -> None:
+        super().setUp()
+        self.remote = self.tmp / "remote.git"
+        subprocess.run(["git", "init", "-q", "--bare", str(self.remote)], check=True)
+        git(self.repo, "remote", "add", "origin", str(self.remote))
+        prof = json.loads(self.profile.read_text())
+        prof["delivery"] = {"adapter": "github-pr", "drafts": ["commit-msg", "pr-body", "tracker-reply"]}
+        self.profile.write_text(json.dumps(prof))
+        fake = self.tmp / "fake_gh.py"
+        fake.write_text('import sys\nprint("https://github.com/acme/app/pull/12")\n', encoding="utf-8")
+        os.environ["SDLC_GH"] = f"{Path(sys.executable).as_posix()} {fake.as_posix()}"
+        self.addCleanup(os.environ.pop, "SDLC_GH", None)
+
+    def _raw_git(self, repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, encoding="utf-8")
+
+    def _bind_worktree(self, ticket: str) -> Path:
+        wt = self.tmp / "worktrees" / f"app-{ticket}"
+        wt.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["git", "-C", str(self.repo), "worktree", "add", "-q", str(wt), "-b", f"ticket/{ticket}"], check=True)
+        code, res = run("worktree", "--ticket", ticket, "--repo", "app", "--path", str(wt), *self.p)
+        self.assertEqual(code, 0, res)
+        self.assertTrue(res["hooks"]["installed"], res)
+        return wt
+
+    def test_worktree_bind_installs_hooks_that_block_commit_and_push_until_approved(self) -> None:
+        from harness import approvals
+        run("init", "--ticket", "WH-1", "--kind", "bug", *self.p)
+        wt = self._bind_worktree("WH-1")
+        (wt / "main.py").write_text("print('edited in wt')\n")
+        git(wt, "add", "main.py")
+
+        res = self._raw_git(wt, "-c", "user.name=Dev", "-c", "user.email=dev@kaneki.test", "commit", "-m", "sneaky")
+        self.assertNotEqual(res.returncode, 0)
+        self.assertIn("Blocked by kaneki worktree hook", res.stderr)
+
+        # Main checkout remains unaffected (per-worktree isolation)
+        (self.repo / "main_only.txt").write_text("ok\n")
+        git(self.repo, "add", "main_only.txt")
+        main_res = self._raw_git(self.repo, "-c", "user.name=Dev", "-c", "user.email=dev@kaneki.test",
+                                 "commit", "-m", "main repo commit")
+        self.assertEqual(main_res.returncode, 0, main_res.stderr)
+
+        # Grant approval -> commit and push succeed in worktree
+        approvals.grant(self.tmp, "WH-1", "app", str(wt), "ticket/WH-1", "d" * 64)
+        ok_commit = self._raw_git(wt, "-c", "user.name=Dev", "-c", "user.email=dev@kaneki.test",
+                                  "commit", "-m", "fix: approved commit")
+        self.assertEqual(ok_commit.returncode, 0, ok_commit.stderr)
+        ok_push = self._raw_git(wt, "push", "-u", "origin", "HEAD:refs/heads/ticket/WH-1")
+        self.assertEqual(ok_push.returncode, 0, ok_push.stderr)
+
+        # Revoke -> blocked again
+        approvals.revoke(self.tmp, "WH-1", "app")
+        (wt / "main.py").write_text("print('second edit')\n")
+        git(wt, "add", "main.py")
+        blocked_again = self._raw_git(wt, "-c", "user.name=Dev", "-c", "user.email=dev@kaneki.test",
+                                      "commit", "-m", "after revoke")
+        self.assertNotEqual(blocked_again.returncode, 0)
+        self.assertIn("Blocked by kaneki worktree hook", blocked_again.stderr)
+
+    def test_worktree_hooks_allow_native_ship_end_to_end(self) -> None:
+        os.environ["SDLC_MYGIT"] = str(self.tmp / "no-my-git")
+        self.addCleanup(os.environ.pop, "SDLC_MYGIT", None)
+        run("init", "--ticket", "WH-2", "--kind", "bug", *self.p)
+        wt = self._bind_worktree("WH-2")
+        (wt / "main.py").write_text("print('wt fix')\n")
+        self.to("WH-2", "deliverable-ready")
+        (self.tdir("WH-2") / "drafts" / "commit-msg.md").write_text("fix(app): fix inside worktree\n", encoding="utf-8")
+        code, req = run("ship-request", "--ticket", "WH-2", "--repo", "app", *self.p)
+        self.assertEqual(code, 0, req)
+        code, res = run("ship", "--ticket", "WH-2", "--repo", "app", "--approve", req["requestDigest"], *self.p)
+        self.assertEqual(code, 0, res)
+        self.assertTrue(res["pushed"])
+        self.assertEqual(res["pr"], "https://github.com/acme/app/pull/12")
+        self.assertEqual(git(self.remote, "rev-parse", "refs/heads/ticket/WH-2").strip(), res["commit"])
+        self.assertFalse((self.tmp / ".sdlc" / "ship-approvals.json").exists())
+
+        # Post-ship rogue commit inside worktree is blocked again
+        (wt / "main.py").write_text("print('rogue')\n")
+        git(wt, "add", "main.py")
+        rogue = self._raw_git(wt, "-c", "user.name=Dev", "-c", "user.email=dev@kaneki.test", "commit", "-m", "rogue")
+        self.assertNotEqual(rogue.returncode, 0)
+        self.assertIn("Blocked by kaneki worktree hook", rogue.stderr)
+
+    def test_worktree_hook_chains_existing_repo_hooks_and_is_idempotent(self) -> None:
+        import shlex
+        from harness import approvals
+        repo_hooks = self.tmp / "repo-hooks"
+        repo_hooks.mkdir()
+        pc_marker = self.tmp / "pc-ran.txt"
+        pp_marker = self.tmp / "pp-stdin.txt"
+        pc_hook = repo_hooks / "pre-commit"
+        pp_hook = repo_hooks / "pre-push"
+        pc_hook.write_bytes(f"#!/bin/sh\necho ran > {shlex.quote(pc_marker.as_posix())}\n".encode("utf-8"))
+        pp_hook.write_bytes(f"#!/bin/sh\ncat > {shlex.quote(pp_marker.as_posix())}\n".encode("utf-8"))
+        os.chmod(pc_hook, 0o755)
+        os.chmod(pp_hook, 0o755)
+        git(self.repo, "config", "core.hooksPath", str(repo_hooks))
+
+        run("init", "--ticket", "WH-3", "--kind", "bug", *self.p)
+        wt = self._bind_worktree("WH-3")
+        # Bind a second time to verify idempotency (must not self-chain into infinite loop)
+        code, res2 = run("worktree", "--ticket", "WH-3", "--repo", "app", "--path", str(wt), *self.p)
+        self.assertEqual(code, 0, res2)
+        self.assertEqual(Path(res2["hooks"]["chained"]).resolve(), repo_hooks.resolve())
+
+        (wt / "main.py").write_text("print('chained')\n")
+        git(wt, "add", "main.py")
+        approvals.grant(self.tmp, "WH-3", "app", str(wt), "ticket/WH-3", "e" * 64)
+        ok_commit = self._raw_git(wt, "-c", "user.name=Dev", "-c", "user.email=dev@kaneki.test",
+                                  "commit", "-m", "fix: chained commit")
+        self.assertEqual(ok_commit.returncode, 0, ok_commit.stderr)
+        self.assertTrue(pc_marker.is_file())
+        ok_push = self._raw_git(wt, "push", "-u", "origin", "HEAD:refs/heads/ticket/WH-3")
+        self.assertEqual(ok_push.returncode, 0, ok_push.stderr)
+        self.assertTrue(pp_marker.is_file())
+        self.assertIn("refs/heads/ticket/WH-3", pp_marker.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

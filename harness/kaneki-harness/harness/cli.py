@@ -505,7 +505,7 @@ def _git_block(s: Session) -> str:
              "  (it runs in the ticket worktree, applies the identity and SSH command, and logs the call).",
              "- Never run plain `git` for anything that writes or talks to the remote, never set `user.*` or `core.sshCommand`, "
              "never pass `--author`. Nodes never commit, push, merge or rebase, and never delete work (reset --hard, clean -f): "
-             "only kaneki-ship commits and pushes (through the my-git plugin), after the user approves."]
+             "only kaneki-ship commits and pushes, after the user approves."]
     return "\n".join(lines)
 
 
@@ -899,7 +899,9 @@ def cmd_worktree(args: argparse.Namespace) -> None:
     repo["startHead"] = head.stdout.strip()
     s.save()
     s.ticket.log({"event": "worktree", "repo": args.repo, "path": repo["worktree"]})
-    out({"ok": True, "repo": args.repo, "worktree": repo["worktree"]})
+    from . import worktree_hooks
+    hooks = worktree_hooks.install(given, s.pdir)
+    out({"ok": True, "repo": args.repo, "worktree": repo["worktree"], "hooks": hooks})
 
 
 def cmd_handback(args: argparse.Namespace) -> None:
@@ -938,39 +940,56 @@ def cmd_ship_request(args: argparse.Namespace) -> None:
     """kaneki-ship step 1: the exact request the user approves (printed in full; its digest is the approval)."""
     from . import mygit
     s = Session(args)
-    request = SHIP.build_request(s, args.repo, _delivery(s), mygit.require_root(HOME))
+    delivery = _delivery(s)
+    backend = SHIP.resolve_backend(s.profile, delivery, args.backend)
+    root = mygit.require_root(HOME) if backend == "my-git" else None
+    request = SHIP.build_request(s, args.repo, delivery, backend=backend, mygit_root=root)
     digest = SHIP.request_digest(request)
     path = s.ticket.dir / "ship" / f"{args.repo}-request.json"
     path.parent.mkdir(exist_ok=True)
     path.write_text(json.dumps({**request, "requestDigest": digest}, indent=2, ensure_ascii=False), encoding="utf-8")
     s.ticket.log({"event": "ship-request", "repo": args.repo, "requestDigest": digest})
+    approve_with = f"ship --ticket {s.ctx['ticket']} --repo {args.repo} --approve {digest}"
+    if args.backend:
+        approve_with += f" --backend {args.backend}"
     out({"requestDigest": digest, "requestFile": str(path), "repo": args.repo, "branch": request["branch"],
          "base": request["base"], "files": request["paths"], "identity": request["identity"],
-         "commitMessage": request["commitMessage"], "push": request["push"], "pr": request["pr"], "via": "my-git",
-         "approveWith": f"ship --ticket {s.ctx['ticket']} --repo {args.repo} --approve {digest}"})
+         "commitMessage": request["commitMessage"], "push": request["push"], "pr": request["pr"], "via": backend,
+         "approveWith": approve_with})
 
 
 def cmd_ship(args: argparse.Namespace) -> None:
     """kaneki-ship step 2: only with the digest of the request the user approved; refuses any drift since.
-    Stages exactly the approved files and hands the commit/push/PR to my-git (the `next` steps)."""
+    With `native-git` (default), commits, pushes, and opens the PR directly. With `my-git`, stages and prints
+    the /my-git:* steps."""
     from . import mygit
     s = Session(args)
-    root = mygit.require_root(HOME)
-    request = SHIP.build_request(s, args.repo, _delivery(s), root)
+    delivery = _delivery(s)
+    backend = SHIP.resolve_backend(s.profile, delivery, args.backend)
+    root = mygit.require_root(HOME) if backend == "my-git" else None
+    request = SHIP.build_request(s, args.repo, delivery, backend=backend, mygit_root=root)
     digest = SHIP.request_digest(request)
     if args.approve != digest:
         raise HarnessError("G0: the request changed since it was approved (or the digest is wrong): run ship-request "
                            "again, show it to the user, and approve the new digest")
     if args.no_pr:
         request["pr"] = None
-    result = SHIP.stage(s, request, root)
-    s.save()
-    s.ticket.log({"event": "ship", "repo": args.repo, "approval": digest, "tree": result["tree"], "via": "my-git"})
+    if backend == "my-git":
+        assert root is not None
+        result = SHIP.stage(s, request, root)
+        s.save()
+        s.ticket.log({"event": "ship", "repo": args.repo, "approval": digest, "tree": result["tree"], "via": "my-git"})
+    else:
+        result = SHIP.execute_native(s, request)
+        s.save()
+        s.ticket.log({"event": "ship", "repo": args.repo, "approval": digest, "tree": result["tree"], "via": "native-git"})
+        s.ticket.log({"event": "ship-record", "repo": args.repo, "commit": result["commit"], "approval": digest,
+                      "pushed": result["pushed"], "pr": result.get("pr")})
     out(result)
 
 
 def cmd_ship_record(args: argparse.Namespace) -> None:
-    """kaneki-ship step 3: after /my-git:commit (push, pr), verify the commit is the approved one and record it."""
+    """kaneki-ship step 3: after /my-git:commit or manual PR/push, verify/record commit, push and PR link."""
     s = Session(args)
     result = SHIP.record_ship(s, args.repo, args.pr)
     s.save()
@@ -1209,15 +1228,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     x = sub.add_parser("ship-request", parents=[ticketed], help="kaneki-ship: build the exact commit/push/PR request for the user to approve")
     x.add_argument("--repo", required=True)
+    x.add_argument("--backend", choices=["native-git", "my-git"], help="ship backend: native-git (default) or my-git")
     x.set_defaults(fn=cmd_ship_request)
 
-    x = sub.add_parser("ship", parents=[ticketed], help="kaneki-ship: stage exactly the approved files and hand commit/push/PR to my-git (needs the approved digest)")
+    x = sub.add_parser("ship", parents=[ticketed], help="kaneki-ship: execute (native-git) or stage (my-git) the approved request (needs the approved digest)")
     x.add_argument("--repo", required=True)
     x.add_argument("--approve", required=True, help="requestDigest of the request the user approved")
     x.add_argument("--no-pr", action="store_true", help="push but do not open a PR/MR")
+    x.add_argument("--backend", choices=["native-git", "my-git"], help="ship backend: native-git (default) or my-git")
     x.set_defaults(fn=cmd_ship)
 
-    x = sub.add_parser("ship-record", parents=[ticketed], help="kaneki-ship: after /my-git:commit, verify the commit is the approved one and record it as shipped")
+    x = sub.add_parser("ship-record", parents=[ticketed], help="kaneki-ship: verify/record the committed, pushed, or manually opened PR state")
     x.add_argument("--repo", required=True)
     x.add_argument("--pr", help="the PR/MR URL (or the compare link a person submitted)")
     x.set_defaults(fn=cmd_ship_record)
