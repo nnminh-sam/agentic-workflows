@@ -553,6 +553,22 @@
           "description": "`park`: over a cap refuses packets and parks/stops runner nodes; `warn`: only warns."
         }
       }
+    },
+    "learning": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Self-improvement (M4). Learning output never changes anything without the user's approval (D10).",
+      "properties": {
+        "reflect": {
+          "enum": [
+            "always",
+            "on-signal",
+            "off"
+          ],
+          "default": "on-signal",
+          "description": "When the reflect node runs: on-signal (default) dispatches its unit only when something went wrong (sdlc reflect-signals has new signals) and otherwise closes it without a unit; always dispatches it on every ticket and review round; off removes it from the trace."
+        }
+      }
     }
   },
   "additionalProperties": false

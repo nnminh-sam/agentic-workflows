@@ -14,6 +14,7 @@ from . import ship as SHIP
 from . import gitid
 from . import graph as G
 from . import hosts as H
+from . import learning as L
 from . import onboard as OB
 from . import rules as R
 from . import usage as U
@@ -74,10 +75,12 @@ class Session:
             if repo.get("worktreeRel"):
                 wt = Path(repo["worktreeRel"])
                 repo["worktree"] = str(wt if wt.is_absolute() else (self.pdir / wt).resolve())
+        self.ctx["reflect"] = L.reflect_mode(self.profile)  # the profile in force decides (off drops reflect)
         self.graph = G.load_graph(HOME, self.profile, self.pdir)
         self.order = G.trace(self.graph, self.ctx)
         for node in self.order:  # nodes that enter the trace later (review round) get a record
             self.state["nodes"].setdefault(node, new_node_record())
+        self._signals: tuple[Any, dict[str, Any]] | None = None
 
     def spec(self, node: str) -> dict[str, Any]:
         if node not in self.order:
@@ -85,11 +88,27 @@ class Session:
         spec = self.graph["nodes"][node]
         if G.is_inline(self.graph, self.ctx, node):  # this lane: the controller does it, no subagent, no reviewer
             spec = {**{k: v for k, v in spec.items() if k != "reviewer"}, "units": [], "pattern": "controller-inline"}
+        if node == L.REFLECT and self.reflect_quiet():  # on-signal and nothing new went wrong: close without a unit
+            spec = {**spec, "units": [], "artifacts": [], "checks": {}, "pattern": "no-signal"}
         return spec
 
-    def artifacts(self, node: str) -> list[str]:
+    def signals(self) -> dict[str, Any]:
+        """`sdlc reflect-signals` for this ticket, cached until the decision log or a ticket file it reads changes."""
+        files = (self.ticket.log_path, self.ticket.dir / "questions.md", self.ticket.dir / "triage.md")
+        key = (tuple((p.stat().st_mtime_ns, p.stat().st_size) if p.is_file() else None for p in files),
+               self.ctx.get("reviewRound"))
+        if self._signals is None or self._signals[0] != key:
+            self._signals = (key, L.collect(self))
+        return self._signals[1]
+
+    def reflect_quiet(self) -> bool:
+        return self.ctx.get("reflect") == "on-signal" and self.signals()["empty"]
+
+    def artifacts(self, node: str, static: bool = False) -> list[str]:
+        """Artifact names of a node. `static`: as the graph declares them, even when this round needs none
+        (a quiet reflect), for marking superseded files."""
         names = []
-        for name in self.spec(node).get("artifacts", []):
+        for name in (self.graph["nodes"][node] if static else self.spec(node)).get("artifacts", []):
             if name == "@delivery.drafts":
                 names += [f"drafts/{d}.md" for d in self.profile["delivery"].get("drafts", [])]
             else:
@@ -412,6 +431,13 @@ def cmd_plan(args: argparse.Namespace) -> None:
         "loopCap": s.profile.get("gates", {}).get("loopCap", 2), "attempts": rec["attempts"],
         "closeWith": f"sdlc gate --ticket {s.ctx['ticket']} --node {node} --status approved",
     }
+    if node == L.REFLECT:
+        report = s.signals()
+        quiet = s.reflect_quiet()
+        plan["reflect"] = {"mode": s.ctx.get("reflect"), "newSignals": report["newSignals"], "counts": report["counts"],
+                           "noSignal": quiet, "signals": f"sdlc reflect-signals --ticket {s.ctx['ticket']}"}
+        if quiet:
+            plan["closeWith"] += " --note no-signal"
     if args.card:
         plan = {k: v for k, v in plan.items() if v is not None}
     out(plan)
@@ -457,6 +483,12 @@ def build_packet(s: Session, node: str, unit_id: str, facts_arg: str | None = No
     result_path = s.ticket.dir / "results" / f"{dispatch}.md"
     adapters = _adapters_for(node, spec, resolve_adapters(HOME, s.pdir, s.profile, s.ctx))
     inputs = packet_inputs(s, node, pdir / f"{dispatch}.inputs")
+    signals_path = None
+    if node == L.REFLECT:  # the unit reflects on exactly what `sdlc reflect-signals` reported, pinned by digest
+        signals_path = pdir / f"{dispatch}.signals.json"
+        signals_path.write_text(json.dumps(s.signals(), indent=2, ensure_ascii=False), encoding="utf-8")
+        inputs.append({"token": "signals", "from": "sdlc reflect-signals", "file": str(signals_path),
+                       "sha256": sha256_file(signals_path)})
     window = exe["contextWindow"]
     logs_dir = s.ticket.dir / "logs"
     logs_dir.mkdir(exist_ok=True)
@@ -480,7 +512,10 @@ def build_packet(s: Session, node: str, unit_id: str, facts_arg: str | None = No
         "repositories": _repositories_block(s),
         "weakestClaim": facts.get("weakestClaim", "(controller: name it)"),
         "observed": _bullets(facts.get("observed")), "doubts": _bullets(facts.get("doubts")),
-        "settled": _bullets(facts.get("settled")), "authorizedPaths": _bullets(facts.get("authorizedPaths")),
+        "settled": _bullets(facts.get("settled")),
+        "authorizedPaths": _bullets(facts.get("authorizedPaths")) if node != L.REFLECT else
+        f"- `{s.ticket.dir}` only: write `reflection.md` and `proposals.json` there and nothing anywhere else. "
+        "Proposals change nothing until the user approves them.",
         "findingsToFix": _bullets(facts.get("findingsToFix")),
         "languages": _languages_block(s, node),
         "git": _git_block(s, exe["host"]),
@@ -506,6 +541,8 @@ def build_packet(s: Session, node: str, unit_id: str, facts_arg: str | None = No
         warn = B.warning(budget)
         if warn:
             res["budgetWarning"] = warn
+    if signals_path is not None:
+        res["signals"] = str(signals_path)
     if estimate > window // 4:
         res["contextWarning"] = (f"the packet and its inputs are ~{estimate:,} tokens, over a quarter of the {window:,}-token "
                                  f"window assumed for {tier}; trim the inputs or split the unit before dispatching")
@@ -893,12 +930,46 @@ def cmd_gate(args: argparse.Namespace) -> None:
         rec["verdict"] = args.status
         result["verdict"] = args.status
 
-    s.ticket.log({"event": "gate", "gate": args.gate, "actor": args.actor, "node": node,
-                  "generation": rec["generation"], "verdict": result["verdict"], "note": args.note})
+    event: dict[str, Any] = {"event": "gate", "gate": args.gate, "actor": args.actor, "node": node,
+                             "generation": rec["generation"], "verdict": result["verdict"], "note": args.note}
+    if args.reopen and args.status == "approved":
+        event["reopen"] = args.reopen
+    if result.get("citationWarnings"):
+        event["citationWarnings"] = result["citationWarnings"]
+    if node == L.REFLECT and args.status == "approved":
+        # the signals this close covered: a later round (PR review) reflects only on what is new
+        event["covered"] = L.new_ids(s.signals())
+        if s.reflect_quiet() and not (args.note or "").startswith("no-signal"):
+            event["note"] = "no-signal: nothing new went wrong; no unit dispatched" + (f" ({args.note})" if args.note else "")
+        result["covered"] = len(event["covered"])
+    s.ticket.log(event)
+    if args.status == "approved":
+        auto = _auto_close_reflect(s, node)
+        if auto:
+            result["autoClosed"] = auto
     s.save()
     result["tokenUsageFile"] = str(U.write_ticket_file(s.ticket.dir, s.ctx["ticket"], s.order, s.state["nodes"]))
     result["nextPending"] = next_pending(s.state, s.order)
     out(result)
+
+
+def _auto_close_reflect(s: "Session", after: str) -> dict[str, Any] | None:
+    """learning.reflect on-signal: when reflect is next, ready, has no unit at this generation and nothing new went
+    wrong, the driver closes it in the same command (no dispatch, a `no-signal` gate note). Ship never waits on it."""
+    if after == L.REFLECT or L.REFLECT not in s.order or s.ctx.get("reflect") != "on-signal":
+        return None
+    if next_pending(s.state, s.order) != L.REFLECT:
+        return None
+    rec = s.state["nodes"][L.REFLECT]
+    if any(u["generation"] == rec["generation"] for u in rec["units"]) or not s.reflect_quiet():
+        return None
+    if next(gate_readiness(s, L.REFLECT, "approved", "controller", None), None):
+        return None
+    note = f"no-signal: nothing new went wrong (closed after {after}); no unit dispatched"
+    rec.update({"status": "done", "verdict": "approved", "closedAt": now(), "artifactDigests": {}})
+    s.ticket.log({"event": "gate", "gate": "G0", "actor": "controller", "node": L.REFLECT,
+                  "generation": rec["generation"], "verdict": "approved", "note": note, "auto": True, "covered": []})
+    return {"node": L.REFLECT, "verdict": "approved", "note": note}
 
 
 def node_rule_ids(s: "Session", node: str) -> list[str]:
@@ -909,7 +980,9 @@ def node_rule_ids(s: "Session", node: str) -> list[str]:
 def artifact_problems(s: "Session", node: str, status: str, reopen: str | None) -> list[str]:
     spec = s.spec(node)
     out = []
-    ctx = {"ruleIds": node_rule_ids(s, node), "status": status, "reopen": reopen}
+    ctx: dict[str, Any] = {"ruleIds": node_rule_ids(s, node), "status": status, "reopen": reopen}
+    if any("proposals" in (c.get("parsers") or []) for c in (spec.get("checks") or {}).values()):
+        ctx["proposals"] = proposal_context(s)
     for name, check in (spec.get("checks") or {}).items():
         path = s.ticket.dir / name
         if not path.is_file():
@@ -917,6 +990,15 @@ def artifact_problems(s: "Session", node: str, status: str, reopen: str | None) 
             continue
         out += [f"{name}: {p}" for p in C.check_artifact(live_text(path), check, ctx)]
     return out
+
+
+def proposal_context(s: "Session") -> dict[str, Any]:
+    """What the reflect gate checks proposals.json against (learning.proposal_problems)."""
+    events, _ = s.ticket.verify_log()
+    stacks = {r["stack"] for r in s.profile["repositories"]} | {p.stem for p in (HOME / "adapters" / "stack").glob("*.json")}
+    files = {p.relative_to(s.ticket.dir).as_posix() for pat in ("*", "*/*") for p in s.ticket.dir.glob(pat) if p.is_file()}
+    return {"ticket": s.ctx["ticket"], "nodes": set(s.graph["nodes"]), "stacks": stacks, "logLines": len(events),
+            "roots": citation_roots(s), "ticketFiles": files}
 
 
 def citation_roots(s: "Session") -> list[Path]:
@@ -992,7 +1074,7 @@ def mark_superseded(s: "Session", node: str, from_node: str, generation: int) ->
     content can never pass the gate again. One header per invalidation; replaying the same one adds nothing."""
     marked = []
     reason = f"rerun from {from_node} (generation {generation}) invalidated this artifact"
-    for name in s.artifacts(node):
+    for name in s.artifacts(node, static=True):
         path = s.ticket.dir / name
         if not name.endswith(".md") or path.is_symlink() or not path.is_file():
             continue
@@ -1114,10 +1196,14 @@ def do_handback(s: "Session", src: Path) -> dict[str, Any]:
     dest = s.ticket.dir / "reviews" / f"round-{rnd}{src.suffix or '.md'}"
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_bytes(src.read_bytes())
-    for node in ("read-review", "triage-review", "respond-review"):
+    # every PR round is reflected: reflect restarts with the review nodes (when learning.reflect keeps it in the trace)
+    restart = ("read-review", "triage-review", "respond-review") + ((L.REFLECT,) if L.REFLECT in s.order else ())
+    for node in restart:
         rec = s.state["nodes"].setdefault(node, new_node_record())
         if rec["units"] or rec["status"] == "done":
             rec.update({"status": "pending", "generation": rec["generation"] + 1, "verdict": None, "attempts": 0})
+            if node == L.REFLECT:
+                mark_superseded(s, node, "handback", rec["generation"])
     s.save()
     s.ticket.log({"event": "handback", "round": rnd, "file": str(dest), "digest": sha256_file(dest)})
     order = G.trace(s.graph, s.ctx)
@@ -1370,6 +1456,12 @@ def cmd_transcripts(args: argparse.Namespace) -> None:
     out(sessions.transcripts(profile_path(args), args.ticket, args.node, max_steps=args.max_steps))
 
 
+def cmd_reflect_signals(args: argparse.Namespace) -> None:
+    """What went wrong on a ticket, for the reflect node (one JSON line). Read-only."""
+    s = Session(args)
+    out(s.signals())
+
+
 def cmd_cost(args: argparse.Namespace) -> None:
     """Measured usage and USD from the agents' own logs (harness/cost.py). Read-only for tickets; caches under the
     user config dir. One JSON line with --json, else a short table."""
@@ -1439,6 +1531,22 @@ def cmd_autonomy(args: argparse.Namespace) -> None:
 
 def cmd_unpark(args: argparse.Namespace) -> None:
     out(_runner(args).unpark(args.ticket, args.reason))
+
+
+def cmd_schedule(args: argparse.Namespace) -> int | None:
+    """Scheduled tick / recover (harness/schedule.py): Windows Task Scheduler, or crontab on macOS/Linux."""
+    from . import schedule as SCH
+    ppath = profile_path(args)
+    if args.run_pass:
+        return SCH.main_pass(ppath, args.run_pass)
+    if args.install:
+        out(SCH.install(ppath, every=args.every, dry_run=args.dry_run, write=args.write, platform=args.platform,
+                        show_console=args.show_console))
+    elif args.uninstall:
+        out(SCH.uninstall(ppath, platform=args.platform))
+    else:
+        out(SCH.status(ppath, platform=args.platform))
+    return None
 
 
 def cmd_digest(args: argparse.Namespace) -> None:
@@ -1656,6 +1764,11 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--max-steps", type=_non_negative, default=200, help="steps kept per session (first + most recent)")
     x.set_defaults(fn=cmd_transcripts)
 
+    x = sub.add_parser("reflect-signals", parents=[ticketed],
+                       help="what went wrong on the ticket (loop-backs, escalations, gate firings, PR findings, ...) "
+                            "for the reflect node (read-only)")
+    x.set_defaults(fn=cmd_reflect_signals)
+
     x = sub.add_parser("cost", parents=[common],
                        help="measured tokens and USD per ticket/node from the agents' own logs (read-only)")
     x.add_argument("--ticket", help="one ticket")
@@ -1727,6 +1840,23 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--reason")
     x.set_defaults(fn=cmd_unpark)
 
+    x = sub.add_parser("schedule", parents=[common],
+                       help="run tick every N minutes and recover at logon: Windows Task Scheduler (per user, no "
+                            "admin) or crontab lines on macOS/Linux; --status, --uninstall")
+    g = x.add_mutually_exclusive_group(required=True)
+    g.add_argument("--install", action="store_true", help="create the scheduled tick and recover for this workspace")
+    g.add_argument("--status", action="store_true", help="whether they exist, next / last run, last log lines")
+    g.add_argument("--uninstall", action="store_true", help="remove only the tasks / crontab lines this created")
+    g.add_argument("--pass", dest="run_pass", choices=["tick", "recover"], help=argparse.SUPPRESS)
+    x.add_argument("--every", type=int, default=15, help="minutes between ticks (default 15)")
+    x.add_argument("--dry-run", action="store_true", help="print the exact commands / crontab lines, change nothing")
+    x.add_argument("--write", action="store_true", help="macOS/Linux: also add the lines to your crontab")
+    x.add_argument("--platform", choices=["windows", "posix"], help="default: this machine's")
+    x.add_argument("--show-console", action="store_true",
+                   help="Windows: run the wrapper directly instead of through conhost.exe --headless (a console "
+                        "window then flashes at each pass)")
+    x.set_defaults(fn=cmd_schedule)
+
     x = sub.add_parser("host", parents=[common], help="show or set the local agent host binding (.sdlc/host.local.json)")
     x.add_argument("--set", choices=list(H.KNOWN_HOSTS), help="write/switch .sdlc/host.local.json to this host preset")
     x.add_argument("--node", help="also show resolved execution for this graph node")
@@ -1737,7 +1867,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 READ_ONLY = {"status", "plan", "validate", "digest", "host", "onboard-scan", "onboard-verify", "onboard-write", "install",
              "tickets", "status-of", "web", "zed-setup", "contract", "ticket-detail", "gate-request",
-             "transcripts", "cost", "budget",
+             "transcripts", "cost", "budget", "reflect-signals",
              "decide"}  # decide takes the lock only for the gate it runs (through main), never while it waits for you
 NO_STATUS_REFRESH = READ_ONLY | {"git"}
 # Commands that take the ticket lock themselves, only around each write: a run lasts as long as its node, and the

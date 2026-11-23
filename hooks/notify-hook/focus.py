@@ -51,7 +51,11 @@ ZED_BINDINGS = [
      "bindings": {RENAME_PASTE_KEY: "editor::Paste", RENAME_CONFIRM_KEY: "menu::Confirm"}},
 ]
 ALL_KEYS = (OPEN_KEY, PASTE_KEY, CONFIRM_KEY, RENAME_KEY, RENAME_PASTE_KEY, RENAME_CONFIRM_KEY)
-TABS_DIR = Path(__file__).resolve().with_name("tabs")  # <session_id>.txt holds the label we gave the tab
+# tabs/<session_id>.txt: line 1 is the label we gave the tab, line 2 its owner: the PID of the
+# claude.exe that runs in that tab, or SPAWN_OWNER when zed-spawn named the tab before claude started.
+# The owner tells a resumed session (new claude.exe, new tab) from the one whose tab we named.
+TABS_DIR = Path(__file__).resolve().with_name("tabs")
+SPAWN_OWNER = "spawn"
 
 
 def tab_state(session: str) -> Path:
@@ -59,11 +63,23 @@ def tab_state(session: str) -> Path:
     return TABS_DIR / f"{safe}.txt"
 
 
-def read_tab_label(session: str) -> str:
+def read_tab_state(session: str) -> tuple[str, str]:
+    """(label, owner) saved for this session; ('', '') when none."""
     try:
-        return tab_state(session).read_text(encoding="utf-8").strip() if session else ""
+        lines = tab_state(session).read_text(encoding="utf-8-sig").splitlines() if session else []
     except OSError:
-        return ""
+        lines = []
+    lines = [x.strip() for x in lines] + ["", ""]
+    return lines[0], lines[1]
+
+
+def read_tab_label(session: str) -> str:
+    return read_tab_state(session)[0]
+
+
+def write_tab_state(session: str, label: str, owner: str = "") -> None:
+    TABS_DIR.mkdir(parents=True, exist_ok=True)
+    tab_state(session).write_text(f"{label}\n{owner}\n", encoding="utf-8")
 
 VK_SHIFT, VK_CONTROL, VK_MENU = 0x10, 0x11, 0x12
 KEYEVENTF_KEYUP = 0x0002
@@ -285,7 +301,7 @@ def run_keys(win: Win, hwnd, text: str, open_key: str, paste_key: str, confirm_k
             win.set_clipboard(saved)
 
 
-def rename_tab(label: str, session: str, delay: float = 0.4) -> str:
+def rename_tab(label: str, session: str, delay: float = 0.4, owner: str = "") -> str:
     """Rename the focused Zed terminal tab (the one the user just typed in) and remember the label."""
     time.sleep(delay)  # let the Enter that submitted the prompt finish
     win = Win()
@@ -297,8 +313,7 @@ def rename_tab(label: str, session: str, delay: float = 0.4) -> str:
         return "skipped: Zed keymap lacks notify-hook bindings"
     result = run_keys(win, hwnd, label, RENAME_KEY, RENAME_PASTE_KEY, RENAME_CONFIRM_KEY)
     if result == "ok" and session:
-        TABS_DIR.mkdir(parents=True, exist_ok=True)
-        tab_state(session).write_text(label + "\n", encoding="utf-8")
+        write_tab_state(session, label, owner)
     return result
 
 
@@ -313,9 +328,9 @@ def main(argv: Optional[list[str]] = None) -> int:
         print("focus.py only supports Windows")
         return 0
     if "--rename-tab" in args:
-        label, session = _arg(args, "--rename-tab"), _arg(args, "--session")
+        label, session, owner = _arg(args, "--rename-tab"), _arg(args, "--session"), _arg(args, "--owner")
         try:
-            log(f"rename tab -> {label!r}: {rename_tab(label, session)}; session={session}")
+            log(f"rename tab -> {label!r}: {rename_tab(label, session, owner=owner)}; session={session}")
         except Exception as e:
             log(f"rename error: {e!r}")
         return 0

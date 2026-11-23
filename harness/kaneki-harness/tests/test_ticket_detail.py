@@ -91,7 +91,7 @@ class TicketDetailTests(Base):
         for full, brief in zip(res["nodes"], plain["nodes"]):
             self.assertEqual(set(full) - set(brief), NODE_EXTRAS)
             self.assertEqual({k: full[k] for k in brief}, brief)
-        self.assertEqual(res["trace"], ["scope", "change", "check", "delivery-drafts", "deliverable-ready"])
+        self.assertEqual(res["trace"], ["scope", "change", "check", "delivery-drafts", "deliverable-ready", "reflect"])
         self.assertEqual((res["loopCap"], res["generationMax"], res["loopBacks"]), (2, 1, []))
 
     def test_default_outputs_unchanged(self) -> None:

@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sdlc-proposal@1",
+  "title": "Learning proposal",
+  "description": "One item of `<ticketDir>/proposals.json` ({\"schemaVersion\": 1, \"ticket\": \"<id>\", \"proposals\": [...]}), written by the reflect node. A proposal changes nothing by itself (decision D10): only the user approves it (`sdlc learn apply --actor user`, next track), which copies it to `.sdlc/learning/` as a lesson (lesson.schema.json). Beyond this schema the reflect gate refuses: an unknown type, scope nodes not in the graph, unknown stacks, absolute or `..` scope paths, evidence that does not resolve (decisions.jsonl line or path:line), and prose (title, body, metric, baseline) that contains commands, tool names, destinations (URL, address, IP, share) or paths outside scope.paths.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "type",
+    "title",
+    "body",
+    "evidence",
+    "scope",
+    "metric",
+    "baseline",
+    "status"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+      "description": "Unique within the file. Globally a proposal is <ticket>/<id>."
+    },
+    "type": {
+      "enum": [
+        "lesson",
+        "rule",
+        "profile",
+        "harness"
+      ],
+      "description": "lesson: guidance added to packets of the scoped nodes; rule: a rulepack rule to add or change; profile: a project profile setting (e.g. a nodeOverrides tier); harness: a change to the harness itself, which the harness never applies to its own graph, gates or driver (it goes to the harness maintainers)."
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "body": {
+      "type": "string",
+      "minLength": 1,
+      "description": "What to do differently, in prose. No commands, tool names, destinations or paths outside scope."
+    },
+    "evidence": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ticket",
+          "ref"
+        ],
+        "properties": {
+          "ticket": {
+            "type": "string",
+            "minLength": 1
+          },
+          "ref": {
+            "type": "string",
+            "minLength": 1,
+            "description": "decisions.jsonl#<line> (1-based line of the ticket's decision log, as `sdlc reflect-signals` reports it) or <path>:<line>[-<line>] in a repository or the ticket folder."
+          }
+        }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "nodes",
+        "stacks",
+        "paths"
+      ],
+      "description": "Where it applies; the next track filters lessons into packets by node, stack and path.",
+      "properties": {
+        "nodes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "stacks": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          },
+          "description": "Stack ids; empty = every stack."
+        },
+        "paths": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          },
+          "description": "Repository-relative paths or globs; empty = every path."
+        }
+      }
+    },
+    "metric": {
+      "type": "string",
+      "minLength": 1,
+      "description": "What it should improve, measurably (e.g. code-review loop-backs per ticket on the scoped nodes)."
+    },
+    "baseline": {
+      "type": [
+        "string",
+        "number"
+      ],
+      "description": "The metric's value on this ticket (what the retro compares against)."
+    },
+    "status": {
+      "enum": [
+        "proposed"
+      ],
+      "description": "Always `proposed` here; approval and retirement live in the lesson (lesson.schema.json)."
+    },
+    "round": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Review round the proposal came from (0 = first delivery)."
+    }
+  }
+}

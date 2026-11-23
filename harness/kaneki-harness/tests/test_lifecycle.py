@@ -96,6 +96,8 @@ class Base(unittest.TestCase):
                 lines.append(f"Verdict: {verdict}")
             if "reopen" in parsers:
                 lines.append(f"Reopen: {reopen or 'none'}")
+            if "proposals" in parsers:  # reflect: a valid, empty proposals file
+                lines = [json.dumps({"schemaVersion": 1, "ticket": ticket, "proposals": []})]
             path = self.tdir(ticket) / art
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -193,6 +195,9 @@ class DriverTests(Base):
         self.complete(t, "delivery-drafts")
         self.complete(t, "deliverable-ready", actor="user")
         code, st = run("status", "--ticket", t, "--compact", *self.p)
+        self.assertEqual(st["nextPending"], "reflect")  # the code-review loop-back is a signal: reflect has a unit
+        self.complete(t, "reflect")
+        code, st = run("status", "--ticket", t, "--compact", *self.p)
         self.assertIsNone(st["nextPending"])
 
         # after PR: a review arrives, triage reopens coding, only the stale part reruns
@@ -211,6 +216,9 @@ class DriverTests(Base):
             self.complete(t, node)
         self.complete(t, "deliverable-ready", actor="user")
         self.complete(t, "respond-review", actor="user")
+        code, st = run("status", "--ticket", t, "--compact", *self.p)
+        self.assertEqual(st["nextPending"], "reflect")  # restarted by the handback; the reopen is a new signal
+        self.complete(t, "reflect")
         code, st = run("status", "--ticket", t, "--compact", *self.p)
         self.assertIsNone(st["nextPending"])
 

@@ -70,7 +70,8 @@
               "analysis",
               "implementation",
               "delivery",
-              "after-pr"
+              "after-pr",
+              "learning"
             ]
           },
           "when": {
@@ -83,6 +84,10 @@
               "stack": {},
               "reviewRound": {
                 "type": "boolean"
+              },
+              "reflect": {
+                "type": "boolean",
+                "description": "true: the node is in the trace unless the profile sets learning.reflect to off"
               }
             }
           },
@@ -271,7 +276,8 @@
                       "rule-self-check",
                       "rule-verdicts",
                       "verdict",
-                      "reopen"
+                      "reopen",
+                      "proposals"
                     ]
                   }
                 }
@@ -351,7 +357,8 @@
             "analysis",
             "implementation",
             "delivery",
-            "after-pr"
+            "after-pr",
+            "learning"
           ]
         },
         "when": {
@@ -364,6 +371,10 @@
             "stack": {},
             "reviewRound": {
               "type": "boolean"
+            },
+            "reflect": {
+              "type": "boolean",
+              "description": "true: the node is in the trace unless the profile sets learning.reflect to off"
             }
           }
         },
@@ -552,7 +563,8 @@
                     "rule-self-check",
                     "rule-verdicts",
                     "verdict",
-                    "reopen"
+                    "reopen",
+                    "proposals"
                   ]
                 }
               }
