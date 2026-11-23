@@ -1414,10 +1414,10 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--reason", help="the user's words that asked for the change")
     x.set_defaults(fn=cmd_lang)
 
-    x = sub.add_parser("install", help="install kaneki playbooks/skills and `.sdlc/bin/sdlc` shim for a host")
+    x = sub.add_parser("install", help="install kaneki playbooks/skills and the `.sdlc/bin` driver launchers for a host")
     x.add_argument("--target", required=True, help="project folder (or ~/.claude when --host claude)")
-    x.add_argument("--host", choices=list(H.KNOWN_HOSTS), default="antigravity",
-                   help="target AI host (default: antigravity)")
+    x.add_argument("--host", choices=list(H.KNOWN_HOSTS), required=True,
+                   help="target AI host; run install once per host to set up several agents in one workspace")
     x.add_argument("--with-my-git", action="store_true",
                    help="also register the bundled my-git plugin (only valid with --host claude)")
     x.add_argument("--force", action="store_true", help="also overwrite installed files and host binding you edited")
