@@ -30,6 +30,8 @@ def tasks(home: Path) -> list[dict[str, Any]]:
         task("tickets", ["tickets"]),
         task("ticket status (from open file)", ["status-of", "--path", "$ZED_FILE"]),
         task("validate profile", ["validate"]),
+        # interactive: its own terminal tab; the ticket comes from the open file, else a picker (no open file -> ".")
+        task("decide gate", ["decide", "--path", "${ZED_FILE:.}"], use_new_terminal=True),
     ]
 
 

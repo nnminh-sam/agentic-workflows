@@ -85,7 +85,8 @@ def summarize(s: Any, events_limit: int = 40, detail: bool = False) -> dict[str,
         "ticketDir": str(s.ticket.dir), "createdAt": s.state.get("createdAt"),
         "updatedAt": events[-1]["at"] if events else s.state.get("createdAt"),
         "settled": sum(1 for n in s.order if settled(s.state, n)), "traceLength": len(s.order),
-        "nextPending": nxt, "next": next_hint(s, nxt), "tokensTotal": tokens_total,
+        "nextPending": nxt, "next": next_hint(s, nxt) + (DECIDE_HINT if wait["on"] == "user" else ""),
+        "tokensTotal": tokens_total,
         "waitingOn": wait["on"], "waitingNode": wait["node"], "waitingReason": wait["reason"],
         "lastEventAt": shown[-1]["at"] if shown else None, "lastEventKind": shown[-1]["event"] if shown else None,
         "nodes": nodes, "strip": strip, "inFlight": flying,
@@ -196,6 +197,9 @@ def _title(s: Any) -> str | None:
                 return (text[len(prefix):] if text.startswith(prefix) else text).strip() or None
         return None
     return None
+
+
+DECIDE_HINT = " (or run `sdlc decide`)"
 
 
 def next_hint(s: Any, node: str | None) -> str:

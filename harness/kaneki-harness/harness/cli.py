@@ -1247,13 +1247,11 @@ def cmd_tickets(args: argparse.Namespace) -> None:
     out({"contractVersion": CONTRACT_VERSION, "tickets": board.list_tickets(profile_path(args))})
 
 
-def cmd_status_of(args: argparse.Namespace) -> None:
-    """The ticket a file belongs to (its ticket folder, or a ticket worktree `<repoId>-<ticket>`), as a board summary."""
-    from . import board
-    ppath = profile_path(args)
+def ticket_of_path(ppath: Path, path: Path) -> str | None:
+    """The ticket a file belongs to (its ticket folder, or a ticket worktree `<repoId>-<ticket>`), or None."""
     prof = load_profile(ppath)
     root = ticket_root(prof, ppath.parent)
-    target = Path(args.path).resolve()
+    target = path.resolve()
     ticket = None
     try:
         ticket = target.relative_to(root.resolve()).parts[0]
@@ -1264,7 +1262,16 @@ def cmd_status_of(args: argparse.Namespace) -> None:
             ticket = next((d.name for d in root.iterdir() if d.is_dir() and folder.endswith("-" + d.name)), None) if root.is_dir() else None
         except (ValueError, IndexError):
             pass
-    if not ticket or not (root / ticket / "state.json").is_file():
+    return ticket if ticket and (root / ticket / "state.json").is_file() else None
+
+
+def cmd_status_of(args: argparse.Namespace) -> None:
+    """The ticket a file belongs to (its ticket folder, or a ticket worktree `<repoId>-<ticket>`), as a board summary."""
+    from . import board
+    ppath = profile_path(args)
+    target = Path(args.path).resolve()
+    ticket = ticket_of_path(ppath, target)
+    if not ticket:
         out({"ticket": None, "path": str(target), "hint": "not inside a ticket folder or ticket worktree; see `sdlc tickets`"})
         return
     summary = board.summarize_ticket(ppath, ticket)
@@ -1283,6 +1290,17 @@ def cmd_gate_request(args: argparse.Namespace) -> None:
     """What the gate on a node would accept, as the desktop app's `GateRequest`. Read-only; never closes anything."""
     from . import board
     out(board.gate_request(Session(args), args.node))
+
+
+def cmd_decide(args: argparse.Namespace) -> int:
+    """A person closes a user gate at a terminal: gate-request shown as text, a choice, y/N, then `sdlc gate --actor
+    user` run in-process through `main`. Refuses without an interactive terminal (harness/decide.py)."""
+    from . import board, decide
+
+    def request(ticket: str, node: str | None) -> dict[str, Any]:
+        return board.gate_request(Session(argparse.Namespace(profile=args.profile, ticket=ticket, host=args.host)), node)
+
+    return decide.run(args, request, main)
 
 
 def cmd_transcripts(args: argparse.Namespace) -> None:
@@ -1509,6 +1527,13 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--node")
     x.set_defaults(fn=cmd_gate_request)
 
+    x = sub.add_parser("decide", parents=[common],
+                       help="close a user gate yourself at a terminal: pick, read, choose, confirm (people only, needs a TTY)")
+    x.add_argument("--ticket", help="the ticket (default: pick from the tickets waiting on you)")
+    x.add_argument("--node", help="the node (default: the one the ticket waits on)")
+    x.add_argument("--path", help="infer the ticket from a file inside it (editor tasks); falls back to the picker")
+    x.set_defaults(fn=cmd_decide)
+
     x = sub.add_parser("transcripts", parents=[ticketed],
                        help="agent sessions per node from Claude/Codex/Antigravity logs and dispatch logs (read-only)")
     x.add_argument("--node", help="one node, with the steps of each session")
@@ -1523,7 +1548,7 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--open", action="store_true", help="open it in the browser")
     x.set_defaults(fn=cmd_web)
 
-    x = sub.add_parser("zed-setup", help="add kaneki tasks (board, tickets, status) to <target>/.zed/tasks.json")
+    x = sub.add_parser("zed-setup", help="add kaneki tasks (board, tickets, status, decide) to <target>/.zed/tasks.json")
     x.add_argument("--target", required=True, help="the folder you open in Zed (the workspace with sdlc.profile.json)")
     x.add_argument("--dry-run", action="store_true")
     x.set_defaults(fn=cmd_zed_setup)
@@ -1543,7 +1568,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 READ_ONLY = {"status", "plan", "validate", "digest", "host", "onboard-scan", "onboard-verify", "onboard-write", "install",
              "tickets", "status-of", "web", "zed-setup", "contract", "ticket-detail", "gate-request",
-             "transcripts"}
+             "transcripts",
+             "decide"}  # decide takes the lock only for the gate it runs (through main), never while it waits for you
 NO_STATUS_REFRESH = READ_ONLY | {"git"}
 
 
