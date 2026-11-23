@@ -166,6 +166,14 @@ After `deliverable-ready`, run the `kaneki-ship` workflow to commit, push, and o
 arrives, run `$SDLC review-fetch --ticket <id> --repo <repo>` (or `$SDLC handback --ticket <id> --review-file <file>`).
 The trace gains `read-review → triage-review → respond-review`, rerunning only invalidated nodes before re-shipping.
 
+## Reflect (last node, never blocks ship)
+
+`reflect` closes every trace (after `deliverable-ready`, and after `respond-review` in each review round). Ship does
+not wait for it. Profile `learning.reflect`: `on-signal` (default) — when `$SDLC reflect-signals --ticket <id>` has no
+new signal the driver closes it itself (gate note `no-signal`); otherwise `plan` shows one routine unit. `always`
+dispatches it every time; `off` removes it. The unit writes only `reflection.md` and `proposals.json` in the ticket
+folder; proposals change nothing until the user approves them (decision D10).
+
 <HARD-GATE>
 Analyze before code: `coding` (`change` in `lite`) never starts before the plan node (`scope`) is approved with
 `--actor user` (or `gates.autoSkipPlanApproval`), and every HIGH question in `questions.md` is ANSWERED with evidence.

@@ -74,7 +74,8 @@ class SummaryKeysTests(Base):
         self.assertEqual((summ["waitingOn"], summ["waitingNode"], summ["waitingReason"]), ("none", None, "done"))
         self.assert_waiting_matches(t, summ)
         self.assertTrue(all(i["waiting"] == {"on": "none", "node": i["node"], "reason": "done"} for i in summ["strip"]))
-        self.assertEqual(summ["strip"][-1]["boundary"], "user")
+        self.assertEqual([(i["node"], i["boundary"]) for i in summ["strip"][-2:]],
+                         [("deliverable-ready", "user"), ("reflect", "controller")])  # reflect closed with no signal
         self.assertEqual(summ["lastEventKind"], "gate")
 
     def test_invalidate_event_and_strip_generation(self) -> None:
