@@ -24,6 +24,7 @@ examples/generic-web/         TypeScript API + web, GitHub
 examples/wms/                 the WMS/Kai setup re-expressed: Backlog, Laravel + Flutter, IF as a family
 docs/design.md                architecture and extension points
 docs/porting-from-wms-flow.md node-by-node map of what was kept, merged and dropped
+docs/zed-workspace/plan.md    plan: Zed + ACP (Claude Code, Codex, Antigravity) and the web board (diagram: docs/zed-acp-any-agent.html)
 tests/                        end-to-end driver tests
 ```
 
