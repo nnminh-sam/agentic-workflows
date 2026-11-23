@@ -8,6 +8,7 @@ reported tokens and reviewer verdict when present, and calls `record_unit`.
 from __future__ import annotations
 
 import json
+import os
 import re
 import shlex
 import shutil
@@ -32,12 +33,74 @@ _FAILURE_CLASS_RE = re.compile(
 )
 _TOKEN_RE = re.compile(r"(?:total[_ ]tokens?|tokens used)\s*[:=]\s*([0-9][0-9,]*)", re.I)
 
+# Hosts whose units run only on the host's own subagents, never through `sdlc dispatch` or any runner.
+# Antigravity's terms forbid third-party software wrapping its `agy` CLI on consumer plans (plan decision D6).
+INTERACTIVE_ONLY_HOSTS: dict[str, str] = {
+    "antigravity": "Antigravity's terms forbid third-party software wrapping its `agy` CLI on consumer plans; "
+                   "run the unit with Antigravity's own subagents (invoke_subagent) inside the Antigravity session",
+}
+
+
+def check_dispatchable(host: str | None) -> None:
+    """Refuse `sdlc dispatch` for an interactive-only host, whatever runner, command or commandTemplate is set."""
+    why = INTERACTIVE_ONLY_HOSTS.get(host or "")
+    if why:
+        raise HarnessError(f"sdlc dispatch refuses host {host!r}: {why}. To dispatch through a CLI runner, pick "
+                           "another host (--host, SDLC_HOST or `sdlc host --set`).")
+
+
+def split_command(command: str, windows: bool | None = None) -> list[str]:
+    """Split a `--command` string into an argv list without a shell.
+
+    A JSON array of strings is taken as the argv as-is (the unambiguous form on every OS). Otherwise `shlex.split`
+    applies on POSIX. On Windows a backslash is a path separator, not an escape, so `shlex.split` would eat it: there
+    whitespace separates arguments, `"` or `'` quote a span (spaces kept, quotes removed, also mid-token as in
+    `--x="a b"`), and every backslash is kept as written."""
+    stripped = command.strip()
+    if stripped.startswith("["):
+        try:
+            argv = json.loads(stripped)
+        except json.JSONDecodeError:
+            argv = None
+        if isinstance(argv, list) and argv and all(isinstance(a, str) for a in argv):
+            return argv
+        if argv is not None:
+            raise HarnessError("--command as JSON must be a non-empty array of strings")
+    if windows is None:
+        windows = os.name == "nt"
+    if not windows:
+        return shlex.split(command)
+    out: list[str] = []
+    cur: list[str] = []
+    in_token = False
+    quote: str | None = None
+    for ch in command:
+        if quote:
+            if ch == quote:
+                quote = None
+            else:
+                cur.append(ch)
+        elif ch in "\"'":
+            quote, in_token = ch, True
+        elif ch.isspace():
+            if in_token:
+                out.append("".join(cur))
+                cur, in_token = [], False
+        else:
+            cur.append(ch)
+            in_token = True
+    if quote:
+        raise HarnessError(f"--command has an unclosed {quote} quote: {command}")
+    if in_token:
+        out.append("".join(cur))
+    return out
+
 
 def build_argv(execution: dict[str, Any], prompt: str, packet_path: str, result_path: str, *,
                tier: str, command_override: str | None = None, runner_override: str | None = None) -> list[str]:
     """Build argument vector for subprocess execution (never via shell=True)."""
     if command_override:
-        template = shlex.split(command_override)
+        template = split_command(command_override)
     elif not runner_override and execution.get("commandTemplate"):
         template = list(execution["commandTemplate"])
     else:
@@ -153,7 +216,10 @@ def run_dispatch(s: Any, node: str, unit_id: str, *, facts: str | None = None,
     """Build packet, execute subprocess runner, validate result, and record unit."""
     from . import cli
 
+    # before the packet is rendered: a refused dispatch leaves nothing behind
+    check_dispatchable(s.execution(node, unit_id)["host"])
     packet, exe = cli.build_packet(s, node, unit_id, facts)
+    check_dispatchable(exe["host"])
     prompt = f"Read the packet at {packet['path']} (sha256 {packet['packetDigest']}) and execute it."
     argv = build_argv(
         exe,

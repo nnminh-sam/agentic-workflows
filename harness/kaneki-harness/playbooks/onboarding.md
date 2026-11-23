@@ -5,7 +5,8 @@ trusts, with **every value backed by evidence**, **every command verified by run
 be detected asked**. Never guess to make the profile look complete: an unknown stays a default, is listed as open,
 and is reported.
 
-`SDLC="sh .sdlc/bin/sdlc"` (finds Python 3.9+ on macOS, Linux and Windows Git Bash; override with `SDLC_PYTHON`).
+`$SDLC` = the driver command your host binding names (`.sdlc\bin\sdlc-<host>.cmd` on Windows,
+`sh .sdlc/bin/sdlc-<host>` on macOS/Linux; finds Python 3.9+, override with `SDLC_PYTHON`).
 `ROOT` = target project argument, else current directory. `CAND` = `<scratchpad>/onboarding-candidates.json`
 (a temporary working file outside the repository).
 

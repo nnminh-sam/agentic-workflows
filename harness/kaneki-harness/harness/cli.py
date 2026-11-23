@@ -303,6 +303,7 @@ def cmd_status(args: argparse.Namespace) -> None:
         prof = load_profile(profile_path(args))
         t = Ticket(ticket_root(prof, profile_path(args).parent), args.ticket)
         t.accept_current(args.reason)
+    from . import board
     s = Session(args)
     rows = []
     tokens_total = 0
@@ -312,11 +313,14 @@ def cmd_status(args: argparse.Namespace) -> None:
         tokens_total += toks
         rows.append({"node": node, "layer": s.spec(node)["layer"], "status": rec["status"],
                      "generation": rec["generation"], "verdict": rec["verdict"], "tokens": toks,
-                     "models": sorted({u["model"] for u in rec["units"] if u["generation"] == rec["generation"]})})
+                     "models": sorted({u["model"] for u in rec["units"] if u["generation"] == rec["generation"]}),
+                     "hosts": sorted({board.unit_host(u) for u in rec["units"]
+                                      if u["generation"] == rec["generation"]})})
     nxt = next_pending(s.state, s.order)
     res = {"ticket": s.ctx["ticket"], "kind": s.ctx["kind"], "lane": G.lane_of(s.ctx), "reviewRound": s.ctx["reviewRound"],
            "settled": sum(1 for n in s.order if settled(s.state, n)), "traceLength": len(s.order),
            "nextPending": nxt, "tokensTotal": tokens_total}
+    res["host"], res["hosts"] = board.ticket_hosts(s.state)
     if nxt:
         res["nextMissing"] = missing_prerequisites(s.graph, s.order, s.state, nxt)
     if not args.compact:
@@ -484,7 +488,7 @@ def build_packet(s: Session, node: str, unit_id: str, facts_arg: str | None = No
     estimate = sum(f.stat().st_size for f in handed if f.is_file()) // 4
     res = {"path": str(path), "packetDigest": sha256_file(path), "agentType": agent_type(tier), "tier": tier,
            "model": exe["model"], "resultPath": str(result_path), "dispatchId": dispatch,
-           "roleCard": str(role_path), "execution": _public_execution(exe),
+           "roleCard": portable(role_path, HOME), "execution": _public_execution(exe),
            "handedTokens": estimate, "contextWindow": window}
     if escalated:
         res["escalated"] = {"from": unit["tier"], "why": escalated}
@@ -599,15 +603,27 @@ def record_unit(s: Session, node: str, unit_id: str, result_path: Path, model: s
         entry["plannedModel"] = exe["model"]
     if mismatch:
         entry["modelMismatch"] = True
+    previous = _last_recorded_unit(s)
     rec["units"].append(entry)
     rec["status"] = "in_progress" if rec["status"] in ("pending", "stale") else rec["status"]
     s.save()
     s.ticket.log({"event": "record", "node": node, **entry})
+    host = entry.get("host", "profile")
+    if previous is not None and previous.get("host", "profile") != host:
+        s.ticket.log({"event": "host-switch", "node": node, "unit": unit_id, "from": previous.get("host", "profile"),
+                      "to": host, "previousNode": previous.get("node"), "previousUnit": previous.get("unit")})
     U.write_ticket_file(s.ticket.dir, s.ctx["ticket"], s.order, s.state["nodes"])
     payload: dict[str, Any] = {"ok": True, "recorded": entry, "nodeTokens": U.node_usage(rec)["total"]}
     if warn:
         payload["warning"] = warn
     return payload
+
+
+def _last_recorded_unit(s: Session) -> dict[str, Any] | None:
+    """The ticket's most recent `record` event (any node, any generation), from the hash-chained log. A unit
+    recorded on the `profile` binding has no `host` key; callers read it as `profile`."""
+    events, _ = s.ticket.verify_log()
+    return next((e for e in reversed(events) if e.get("event") == "record"), None)
 
 
 def cmd_record(args: argparse.Namespace) -> None:
@@ -1246,6 +1262,12 @@ def cmd_decide(args: argparse.Namespace) -> int:
     return decide.run(args, request, main)
 
 
+def cmd_transcripts(args: argparse.Namespace) -> None:
+    """Agent sessions per node of one ticket, from the agents' own logs; steps only with --node. Read-only."""
+    from . import sessions
+    out(sessions.transcripts(profile_path(args), args.ticket, args.node, max_steps=args.max_steps))
+
+
 def cmd_contract(args: argparse.Namespace) -> None:
     """The contract version the desktop app checks at start-up; needs no profile or ticket and writes nothing."""
     from .contract import contract_info
@@ -1327,13 +1349,15 @@ def build_parser() -> argparse.ArgumentParser:
     x.set_defaults(fn=cmd_packet)
 
     x = sub.add_parser("dispatch", parents=[ticketed],
-                       help="build packet, spawn an external CLI runner, verify output, and record the unit")
+                       help="build packet, spawn an external CLI runner, verify output, and record the unit "
+                            "(refused for host antigravity: its units run on its own subagents)")
     x.add_argument("--node", required=True)
     x.add_argument("--unit", required=True)
     x.add_argument("--facts", help="facts JSON passed to packet")
     x.add_argument("--runner", choices=["codex", "claude", "gemini", "opencode"],
                    help="override runner CLI template from .sdlc/host.local.json")
-    x.add_argument("--command", help="custom command template string (tokenized with shlex.split; placeholders {prompt},{packet},{result},{model},{effort},{tier})")
+    x.add_argument("--command", help="custom command template: a JSON array of strings, or a string split shell-style (backslashes kept on "
+                        "Windows); placeholders {prompt},{packet},{result},{model},{effort},{tier}")
     x.add_argument("--timeout", type=int, default=900, help="subprocess timeout in seconds (default: 900)")
     x.add_argument("--dry-run", action="store_true", help="render packet and print resolved argv without executing")
     x.add_argument("--no-record", action="store_true", help="execute subprocess without calling sdlc record")
@@ -1432,10 +1456,10 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--reason", help="the user's words that asked for the change")
     x.set_defaults(fn=cmd_lang)
 
-    x = sub.add_parser("install", help="install kaneki playbooks/skills and `.sdlc/bin/sdlc` shim for a host")
+    x = sub.add_parser("install", help="install kaneki playbooks/skills and the `.sdlc/bin` driver launchers for a host")
     x.add_argument("--target", required=True, help="project folder (or ~/.claude when --host claude)")
-    x.add_argument("--host", choices=list(H.KNOWN_HOSTS), default="antigravity",
-                   help="target AI host (default: antigravity)")
+    x.add_argument("--host", choices=list(H.KNOWN_HOSTS), required=True,
+                   help="target AI host; run install once per host to set up several agents in one workspace")
     x.add_argument("--with-my-git", action="store_true",
                    help="also register the bundled my-git plugin (only valid with --host claude)")
     x.add_argument("--force", action="store_true", help="also overwrite installed files and host binding you edited")
@@ -1466,6 +1490,12 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--path", help="infer the ticket from a file inside it (editor tasks); falls back to the picker")
     x.set_defaults(fn=cmd_decide)
 
+    x = sub.add_parser("transcripts", parents=[ticketed],
+                       help="agent sessions per node from Claude/Codex/Antigravity logs and dispatch logs (read-only)")
+    x.add_argument("--node", help="one node, with the steps of each session")
+    x.add_argument("--max-steps", type=_non_negative, default=200, help="steps kept per session (first + most recent)")
+    x.set_defaults(fn=cmd_transcripts)
+
     x = sub.add_parser("contract", help="the data contract version the desktop app checks (read-only, no profile)")
     x.set_defaults(fn=cmd_contract)
 
@@ -1494,6 +1524,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 READ_ONLY = {"status", "plan", "validate", "digest", "host", "onboard-scan", "onboard-verify", "onboard-write", "install",
              "tickets", "status-of", "web", "zed-setup", "contract", "ticket-detail", "gate-request",
+             "transcripts",
              "decide"}  # decide takes the lock only for the gate it runs (through main), never while it waits for you
 NO_STATUS_REFRESH = READ_ONLY | {"git"}
 
