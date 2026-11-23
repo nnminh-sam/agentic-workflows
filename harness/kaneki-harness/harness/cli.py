@@ -6,7 +6,7 @@ import argparse
 import json
 import os
 import sys
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any, Iterator
 
 from . import checks as C
@@ -475,7 +475,7 @@ def build_packet(s: Session, node: str, unit_id: str, facts_arg: str | None = No
         "settled": _bullets(facts.get("settled")), "authorizedPaths": _bullets(facts.get("authorizedPaths")),
         "findingsToFix": _bullets(facts.get("findingsToFix")),
         "languages": _languages_block(s, node),
-        "git": _git_block(s),
+        "git": _git_block(s, exe["host"]),
     }
     text = template
     for key, val in values.items():
@@ -535,11 +535,25 @@ def _checks_block(spec: dict[str, Any]) -> str:
     return NL.join(lines) or "- no structural checks for this node (existence and citations only)"
 
 
-def launcher_cmd(profile_file: Path) -> str:
-    """How a unit calls the driver: project `.sdlc/bin/sdlc` shim when installed, else bundled `sdlc`."""
-    shim = profile_file.parent / ".sdlc" / "bin" / "sdlc"
-    launcher = shim.as_posix() if shim.is_file() else (HOME / "skills" / "kaneki-flow" / "scripts" / "sdlc").as_posix()
-    return f'sh "{launcher}" --profile "{profile_file.as_posix()}"'
+def launcher_cmd(profile_file: Path, host: str | None = None, windows: bool | None = None) -> str:
+    """The command a unit runs to call the driver, as display text for packets (never stored in state).
+
+    Windows (PowerShell, where `sh` is not on PATH): `& "<project>\\.sdlc\\bin\\sdlc-<host>.cmd"` when that per-host
+    launcher exists, else `sdlc.cmd`, else Python on the bundled `sdlc.py` (user-scope `~/.claude` install).
+    POSIX: `sh "<project>/.sdlc/bin/sdlc-<host>"`, else `sh .../sdlc`, else the bundled `sdlc` shim.
+    """
+    windows = (os.name == "nt") if windows is None else windows
+    bin_dir = profile_file.parent / ".sdlc" / "bin"
+    bundled = HOME / "skills" / "kaneki-flow" / "scripts"
+    names = ([f"sdlc-{host}"] if host and host != "profile" else []) + ["sdlc"]
+    if windows:
+        def win(p: Path) -> str:
+            return str(PureWindowsPath(p.as_posix()))
+        shim = next((bin_dir / f"{n}.cmd" for n in names if (bin_dir / f"{n}.cmd").is_file()), None)
+        head = f'& "{win(shim)}"' if shim else f'python "{win(bundled / "sdlc.py")}"'
+        return f'{head} --profile "{win(profile_file)}"'
+    shim = next((bin_dir / n for n in names if (bin_dir / n).is_file()), None)
+    return f'sh "{(shim or bundled / "sdlc").as_posix()}" --profile "{profile_file.as_posix()}"'
 
 
 def _languages_block(s: Session, node: str) -> str:
@@ -551,9 +565,9 @@ def _languages_block(s: Session, node: str) -> str:
     return "\n".join(lines)
 
 
-def _git_block(s: Session) -> str:
+def _git_block(s: Session, host: str | None = None) -> str:
     ident = gitid.identity(s.profile)
-    cmd = launcher_cmd(s.ppath)
+    cmd = launcher_cmd(s.ppath, host)
     per_repo = [f"- `{r['id']}`: {gitid.identity(s.profile, r['id'])['name']} <{gitid.identity(s.profile, r['id'])['email']}>"
                 for r in s.ctx["repositories"] if gitid.identity(s.profile, r["id"]) != ident]
     lines = [f"- Project identity: **{ident['name']} <{ident['email']}>**" + (" (custom SSH command configured)" if ident.get("sshCommand") else ""),
