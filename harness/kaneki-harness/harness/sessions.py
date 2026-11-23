@@ -898,6 +898,64 @@ def collect(ticket_dir: Path, dirs: list[str], *, max_steps: int = MAX_STEPS, ru
     return sessions
 
 
+def log_fingerprint(profile_path: Path, ticket: str) -> str:
+    """A digest of (path, mtime, size) of every file `transcripts` could read for this ticket: state.json, the
+    decision log, the Claude Code / Codex / Antigravity logs of its workspace folders and its dispatch logs. Stat only:
+    no log is opened, so a poller can call it cheaply and re-read only when it changes. It covers a superset of what
+    `collect` reads (Codex rollouts of any cwd, Antigravity conversations of any project), which costs at most an extra
+    refresh, never a stale answer."""
+    import hashlib
+    from .cli import ticket_root
+    from .profile import load_profile
+    profile = load_profile(profile_path)
+    tdir = ticket_root(profile, profile_path.parent) / ticket
+    try:
+        state = json.loads((tdir / "state.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        state = {}
+    files: list[Path] = [tdir / "state.json", tdir / "decisions.jsonl"]
+    projects = claude_root() / "projects"
+    globs: list[tuple[Path, tuple[str, ...]]] = []
+    for d in workspace_dirs(profile_path.parent, state if isinstance(state, dict) else {}):
+        globs.append((projects / claude_slug(d), ("*.jsonl", "*/subagents/*.jsonl", "*/subagents/*.meta.json")))
+    for root in (codex_root() / "sessions", codex_root() / "archived_sessions"):
+        globs.append((root, ("*/*/*/rollout-*.jsonl", "rollout-*.jsonl")))
+    agy = antigravity_root()
+    files.append(agy / "conversation_summaries.db")
+    globs.append((agy / "brain", ("*/.system_generated/logs/transcript*.jsonl",)))
+    globs.append((tdir / "logs", ("*.dispatch.log",)))
+    for folder, patterns in globs:
+        if not folder.is_dir():
+            continue
+        for pattern in patterns:
+            try:
+                files += list(folder.glob(pattern))
+            except OSError:
+                continue
+    h = hashlib.sha256()
+    for f in sorted(set(files), key=str):
+        try:
+            st = f.stat()
+        except OSError:
+            continue
+        h.update(f"{f}\0{st.st_mtime_ns}\0{st.st_size}\n".encode("utf-8", "surrogateescape"))
+    return h.hexdigest()
+
+
+def running_until(result: dict[str, Any], running_seconds: int = RUNNING_SECONDS) -> float | None:
+    """The earliest epoch at which a session of a `transcripts` result flagged `running` stops being running without
+    its log changing (no write for `running_seconds`); None when no session is running."""
+    until: float | None = None
+    for entry in (result.get("nodes") or {}).values():
+        for sess in (entry.get("units") or []) + (entry.get("controller") or []):
+            if sess.get("running"):
+                at = _epoch(sess.get("updatedAt"))
+                if at is not None:
+                    end = at + running_seconds + 1
+                    until = end if until is None else min(until, end)
+    return until
+
+
 def transcripts(profile_path: Path, ticket: str, node: str | None = None, *, max_steps: int = MAX_STEPS,
                 running_seconds: int = RUNNING_SECONDS) -> dict[str, Any]:
     """`sdlc transcripts`: sessions per node of one ticket; steps only with `node`. Read-only."""
