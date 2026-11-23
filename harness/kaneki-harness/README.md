@@ -143,6 +143,43 @@ sdlc unpark --ticket ISSUE-123                   # let the runner continue a tic
   `["--permission-mode", "acceptEdits"]`; `[]` passes nothing extra, so your own Claude settings decide.
 - Run state per ticket: `run/lease.json` (separate from the 10-minute command lock) and `run/<runId>.jsonl`.
 
+### Scheduled runs (`sdlc schedule`)
+
+`tick` and `recover` run on a timer, so tickets move on while you are away and runs are picked up again after a
+shutdown or reboot. Nothing runs until a ticket opts in: `sdlc autonomy --ticket ISSUE-123 --set on`.
+
+```bash
+sdlc schedule --install --dry-run          # print the exact commands / crontab lines; change nothing
+sdlc schedule --install [--every 15]       # Windows: create the two tasks; macOS/Linux: print the crontab lines
+sdlc schedule --install --show-console     # Windows: without conhost --headless (a console window flashes)
+sdlc schedule --install --write            # macOS/Linux: also add the lines to your crontab
+sdlc schedule --status                     # tasks present?, next / last run, last result, last log lines
+sdlc schedule --uninstall                  # remove only what --install created
+```
+
+- **Windows** (needs no admin): two per-user Task Scheduler tasks, `kaneki tick <workspace>-<hash>` every N
+  minutes and `kaneki recover <workspace>-<hash>` at your logon (2 minutes after). The name is the workspace folder
+  plus a hash of its path, so each workspace has its own pair; `--uninstall` deletes exactly these two names and
+  never another task. The tasks are created from XML (`.sdlc/run/schedule-<pass>.xml`): a pass never starts while
+  the previous one runs, and a tick missed while the machine slept runs when it wakes. They run only while you are
+  logged on.
+- **No console window on Windows**: the tasks start the wrapper through `conhost.exe --headless "<wrapper>" tick`,
+  so nothing flashes at each pass. `--headless` is an undocumented Windows switch and a Windows update may change
+  it. If passes stop running or a window appears, reinstall with `sdlc schedule --install --show-console`, which
+  runs the wrapper directly (a console window then flashes briefly at each pass). On a Windows without
+  `conhost.exe` the install does the same by itself and says so in its `console` field.
+- **macOS / Linux**: `*/N * * * *` runs tick and `@reboot` runs recover. Each line ends with the marker
+  `# kaneki tick|recover <workspace>-<hash>`, and `--install --write` / `--uninstall` change only lines with those
+  markers. `--every` must be below 60 or whole hours. The wrapper keeps the `PATH` of the shell that installed it
+  (cron starts with a bare one); install again after `claude` or Python moves.
+- Both run the wrapper `.sdlc/bin/sdlc-schedule.cmd` / `.sdlc/bin/sdlc-schedule` (`tick` or `recover`), which goes
+  through the project launcher (it finds Python 3.9+), so `sdlc install` must have run in the workspace first.
+- A pass takes a workspace lock (`.sdlc/run/schedule.lock`), so passes never overlap; with no ticket opted in and no
+  run lease it returns at once without loading the runner. Each pass writes one line to `.sdlc/run/schedule.log`
+  (the full result of the last one is in `.sdlc/run/schedule.last`); install and uninstall are logged there too,
+  not in any ticket's decision log. Which host runs nodes comes from `host` in `.sdlc/runner.local.json` or the
+  active binding, as for `sdlc tick`.
+
 ## Workspace layout
 
 Run the harness from a workspace folder that holds the repositories, not from inside a repository. Every ticket
