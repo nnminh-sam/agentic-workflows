@@ -266,8 +266,15 @@ def cmd_init(args: argparse.Namespace) -> None:
     ticket.save(state)
     ticket.log({"event": "init", "kind": args.kind, "lane": args.lane, "families": ctx["families"], "surfaces": ctx["surfaces"],
                 **({"locale": override} if override else {})})
+    hooks = {}
+    if not G.graph_uses_worktree(graph, ctx):  # in-place lanes: guard the checkout while this ticket holds it
+        from . import worktree_hooks
+        for repo in ctx["repositories"]:
+            hooks[repo["id"]] = worktree_hooks.install(Path(repo["path"]), path.parent, in_place=True,
+                                                       ticket=args.ticket, ticket_dir=ticket.dir, repo_id=repo["id"],
+                                                       base_branch=repo.get("baseBranch"))
     out({"ok": True, "ticketDir": str(ticket.dir), "lane": args.lane, "trace": order, "nextPending": order[0],
-         **({"warnings": warnings} if warnings else {})})
+         **({"hooks": hooks} if hooks else {}), **({"warnings": warnings} if warnings else {})})
 
 
 def cmd_lane(args: argparse.Namespace) -> None:
@@ -986,6 +993,19 @@ def cmd_worktree(args: argparse.Namespace) -> None:
     repo = next((r for r in s.ctx["repositories"] if r["id"] == args.repo), None)
     if repo is None:
         raise HarnessError(f"unknown repo {args.repo}")
+    from . import worktree_hooks
+    if args.release:
+        # end the in-place git protection of this ticket (the user's call: it lifts the branch/history guard)
+        if args.actor != "user":
+            raise HarnessError("G0: releasing the in-place git protection is the user's decision: repeat with --actor user")
+        checkout = Path(repo.get("worktree") or repo["path"])
+        res = worktree_hooks.release(checkout, s.ctx["ticket"])
+        s.ticket.log({"event": "worktree", "action": "release", "actor": "user", "repo": args.repo, "path": str(checkout),
+                      **res})
+        out({"ok": True, "repo": args.repo, "checkout": str(checkout), **res})
+        return
+    if not args.path:
+        raise HarnessError("--path is required (or --release --actor user to end in-place protection)")
     if not Path(args.path).is_dir():
         raise HarnessError(f"G7: worktree path does not exist: {args.path}")
     given = Path(args.path).resolve()
@@ -995,6 +1015,8 @@ def cmd_worktree(args: argparse.Namespace) -> None:
     if given != Path(repo["path"]).resolve() and given != expected:
         raise HarnessError(f"G7: worktree must be {expected.as_posix()} (paths.worktreeRoot/<repoId>-<ticket>), "
                            f"not {given.as_posix()}")
+    in_place = given == Path(repo["path"]).resolve()
+    previous = Path(repo["worktree"]).resolve() if repo.get("worktree") else None
     repo["worktree"] = str(given)
     repo["worktreeRel"] = portable(Path(repo["worktree"]), s.pdir)
     head = gitid.run(repo["worktree"], ["rev-parse", "HEAD"], gitid.identity(s.profile, repo["id"]))
@@ -1003,8 +1025,13 @@ def cmd_worktree(args: argparse.Namespace) -> None:
     repo["startHead"] = head.stdout.strip()
     s.save()
     s.ticket.log({"event": "worktree", "repo": args.repo, "path": repo["worktree"]})
-    from . import worktree_hooks
-    hooks = worktree_hooks.install(given, s.pdir)
+    if in_place:  # the repository's own checkout: guarded only while this ticket holds it
+        hooks = worktree_hooks.install(given, s.pdir, in_place=True, ticket=s.ctx["ticket"], ticket_dir=s.ticket.dir,
+                                       repo_id=repo["id"], base_branch=repo.get("baseBranch"))
+    else:
+        hooks = worktree_hooks.install(given, s.pdir, base_branch=repo.get("baseBranch"))
+        if previous is not None and previous == Path(repo["path"]).resolve():
+            hooks["releasedInPlace"] = worktree_hooks.release(previous, s.ctx["ticket"])  # moved off the checkout
     out({"ok": True, "repo": args.repo, "worktree": repo["worktree"], "hooks": hooks})
 
 
@@ -1384,9 +1411,12 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--reason", required=True)
     x.set_defaults(fn=cmd_invalidate)
 
-    x = sub.add_parser("worktree", parents=[ticketed], help="bind a repository to the ticket worktree")
+    x = sub.add_parser("worktree", parents=[ticketed], help="bind a repository to the ticket worktree (installs the git-safety hooks)")
     x.add_argument("--repo", required=True)
-    x.add_argument("--path", required=True)
+    x.add_argument("--path", help="the ticket's worktree slot, or the repository itself to work in place")
+    x.add_argument("--release", action="store_true",
+                   help="end this ticket's in-place git protection of the checkout (needs --actor user)")
+    x.add_argument("--actor", default="controller", choices=["controller", "user"])
     x.set_defaults(fn=cmd_worktree)
 
     x = sub.add_parser("handback", parents=[ticketed], help="start an after-PR review round from an exported review")
