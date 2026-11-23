@@ -1330,7 +1330,7 @@ def cmd_host(args: argparse.Namespace) -> None:
 def cmd_tickets(args: argparse.Namespace) -> None:
     from . import board
     from .contract import CONTRACT_VERSION
-    out({"contractVersion": CONTRACT_VERSION, "tickets": board.list_tickets(profile_path(args))})
+    out({"contractVersion": CONTRACT_VERSION, "tickets": board.list_tickets(profile_path(args), measured=True)})
 
 
 def ticket_of_path(ppath: Path, path: Path) -> str | None:
@@ -1401,6 +1401,29 @@ def cmd_reflect_signals(args: argparse.Namespace) -> None:
     out(s.signals())
 
 
+def cmd_cost(args: argparse.Namespace) -> None:
+    """Measured usage and USD from the agents' own logs (harness/cost.py). Read-only for tickets; caches under the
+    user config dir. One JSON line with --json, else a short table."""
+    from . import cost
+    if args.init_prices:
+        out(cost.init_prices())
+        return
+    if not args.ticket and not args.since:
+        raise HarnessError("cost needs --ticket T or --since DATE (or --init-prices)")
+    if args.node and not args.ticket:
+        raise HarnessError("--node needs --ticket")
+    if args.until and not args.since:
+        raise HarnessError("--until needs --since")
+    if args.ticket:
+        rep = cost.ticket_report(profile_path(args), args.ticket, args.node, since=args.since, until=args.until)
+    else:
+        rep = cost.range_report(profile_path(args), args.since, args.until)
+    if args.json:
+        out(rep)
+    else:
+        print(cost.render_text(rep))
+
+
 def cmd_contract(args: argparse.Namespace) -> None:
     """The contract version the desktop app checks at start-up; needs no profile or ticket and writes nothing."""
     from .contract import contract_info
@@ -1415,6 +1438,38 @@ def cmd_web(args: argparse.Namespace) -> None:
 def cmd_zed_setup(args: argparse.Namespace) -> None:
     from . import zed
     out(zed.setup(HOME, Path(args.target).resolve(), dry_run=args.dry_run))
+
+
+def _runner(args: argparse.Namespace) -> Any:
+    from .runner import Runner
+    return Runner(profile_path(args))
+
+
+def cmd_run(args: argparse.Namespace) -> None:
+    """Run the ticket's next node(s) unattended in a fresh agent session each (harness/runner.py), or --stop it."""
+    r = _runner(args)
+    if args.stop:
+        out(r.stop(args.ticket))
+        return
+    host = args.host if args.host and args.host != "profile" else None
+    out(r.run(args.ticket, max_nodes=args.max_nodes, host=host, trigger=args.trigger))
+
+
+def cmd_tick(args: argparse.Namespace) -> None:
+    host = args.host if args.host and args.host != "profile" else None
+    out(_runner(args).tick(host=host, foreground=args.foreground, recover=not args.no_recover))
+
+
+def cmd_recover(args: argparse.Namespace) -> None:
+    out(_runner(args).recover(restart=not args.no_restart, foreground=args.foreground))
+
+
+def cmd_autonomy(args: argparse.Namespace) -> None:
+    out(_runner(args).autonomy(args.ticket, args.set, args.reason))
+
+
+def cmd_unpark(args: argparse.Namespace) -> None:
+    out(_runner(args).unpark(args.ticket, args.reason))
 
 
 def cmd_digest(args: argparse.Namespace) -> None:
@@ -1637,6 +1692,17 @@ def build_parser() -> argparse.ArgumentParser:
                             "for the reflect node (read-only)")
     x.set_defaults(fn=cmd_reflect_signals)
 
+    x = sub.add_parser("cost", parents=[common],
+                       help="measured tokens and USD per ticket/node from the agents' own logs (read-only)")
+    x.add_argument("--ticket", help="one ticket")
+    x.add_argument("--node", help="one node of --ticket")
+    x.add_argument("--since", help="first local day (YYYY-MM-DD, today, yesterday); without --ticket: every ticket")
+    x.add_argument("--until", help="last local day, inclusive (default: --since and later)")
+    x.add_argument("--json", action="store_true", help="one JSON line instead of the table")
+    x.add_argument("--init-prices", action="store_true",
+                   help="write a price-table template (null prices, unverified) to the user config if missing")
+    x.set_defaults(fn=cmd_cost)
+
     x = sub.add_parser("contract", help="the data contract version the desktop app checks (read-only, no profile)")
     x.set_defaults(fn=cmd_contract)
 
@@ -1655,6 +1721,37 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--expect")
     x.set_defaults(fn=cmd_digest)
 
+    x = sub.add_parser("run", parents=[ticketed],
+                       help="run the ticket's next node unattended (claude --bg or codex exec, one node per fresh session); "
+                            "parks at user gates; never Antigravity")
+    x.add_argument("--max-nodes", type=int, default=1, help="nodes to run one after another (default 1)")
+    x.add_argument("--stop", action="store_true", help="stop the running node's session and release the run lease")
+    x.add_argument("--trigger", default="manual", choices=["manual", "tick", "recover"], help=argparse.SUPPRESS)
+    x.set_defaults(fn=cmd_run)
+
+    x = sub.add_parser("tick", parents=[common],
+                       help="one scheduler pass: recover, then start at most one node per opted-in ticket "
+                            "(maxConcurrent in .sdlc/runner.local.json)")
+    x.add_argument("--foreground", action="store_true", help="run the nodes in this process instead of detached runs")
+    x.add_argument("--no-recover", action="store_true", help="skip the recover pass")
+    x.set_defaults(fn=cmd_tick)
+
+    x = sub.add_parser("recover", parents=[common],
+                       help="release leases whose runner is gone; restart orphaned nodes once (opted-in tickets)")
+    x.add_argument("--no-restart", action="store_true", help="only release / park, never restart")
+    x.add_argument("--foreground", action="store_true", help="restart in this process instead of a detached run")
+    x.set_defaults(fn=cmd_recover)
+
+    x = sub.add_parser("autonomy", parents=[ticketed],
+                       help="show or set whether tick may run this ticket unattended (off until you turn it on)")
+    x.add_argument("--set", choices=["on", "off"])
+    x.add_argument("--reason")
+    x.set_defaults(fn=cmd_autonomy)
+
+    x = sub.add_parser("unpark", parents=[ticketed], help="let the runner continue a parked ticket")
+    x.add_argument("--reason")
+    x.set_defaults(fn=cmd_unpark)
+
     x = sub.add_parser("host", parents=[common], help="show or set the local agent host binding (.sdlc/host.local.json)")
     x.add_argument("--set", choices=list(H.KNOWN_HOSTS), help="write/switch .sdlc/host.local.json to this host preset")
     x.add_argument("--node", help="also show resolved execution for this graph node")
@@ -1665,14 +1762,19 @@ def build_parser() -> argparse.ArgumentParser:
 
 READ_ONLY = {"status", "plan", "validate", "digest", "host", "onboard-scan", "onboard-verify", "onboard-write", "install",
              "tickets", "status-of", "web", "zed-setup", "contract", "ticket-detail", "gate-request",
-             "transcripts", "reflect-signals",
+             "transcripts", "cost", "reflect-signals",
              "decide"}  # decide takes the lock only for the gate it runs (through main), never while it waits for you
 NO_STATUS_REFRESH = READ_ONLY | {"git"}
+# Commands that take the ticket lock themselves, only around each write: a run lasts as long as its node, and the
+# agent's own `sdlc` calls need the lock meanwhile (harness/runner.py).
+SELF_LOCKING = {"run", "tick", "recover"}
 
 
 def _ticket_lock(args: argparse.Namespace):
     """One writer per ticket: every command that changes a ticket holds its lock for the whole read-modify-write."""
     from contextlib import nullcontext
+    if args.cmd in SELF_LOCKING:
+        return nullcontext()
     if ((args.cmd in READ_ONLY and not (args.cmd == "status" and args.accept_current_state))
             or not getattr(args, "ticket", None) or (args.cmd == "lang" and not (args.set or args.clear))):
         return nullcontext()

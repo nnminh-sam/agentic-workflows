@@ -75,6 +75,14 @@ It also works when the profile sits inside the repository (one repo open in the 
   node table, artifact preview, the decision log, and **Open in Zed** (uses the `zed` CLI, or `SDLC_EDITOR`).
   Read-only: approvals still happen in the agent thread, so the log records who approved.
 - **`sdlc tickets`** / **`sdlc status-of --path <file>`** give the same view as JSON.
+- **`sdlc cost --ticket T [--node N] [--json]`** measures usage from the agents' own session logs (Claude Code,
+  Codex, Antigravity, dispatch logs), counting each API message once, and puts it next to the tokens the agents
+  reported with `sdlc record --tokens`, which are a lower bound. `sdlc cost --since today` (or `--since D --until D`)
+  totals every ticket for a day or range. USD is the agent's own reported cost where it has one (Claude Code), else
+  tokens × your price table, else unknown. The price table is user config, never the repo: `$KANEKI_PRICES`, else
+  `$KANEKI_HOME/prices.json`, else `~/.kaneki/prices.json`. `sdlc cost --init-prices` writes a template with null
+  prices, and an entry counts as unverified until you set `"verified": true`. STATUS.md, `sdlc tickets` and the
+  board's Cost tab show the same measured total (cached under `~/.kaneki/cache/cost`).
 - **`sdlc zed-setup --target .`** adds Zed tasks (`task: spawn` → `kaneki: board (web)`, `kaneki: tickets`,
   `kaneki: ticket status (from open file)`, `kaneki: validate profile`). Your own tasks are kept.
 
@@ -103,6 +111,37 @@ Background and decisions: [docs/zed-workspace/plan.md](docs/zed-workspace/plan.m
    yourself. Its units run on its own subagents. Never start it from `sdlc dispatch` (the driver refuses), a script,
    `agy -p` or a community bridge: Antigravity's terms do not allow third-party software to drive it.
    Codex units run through `sdlc dispatch` (`codex exec -m <model> -c model_reasoning_effort=<effort> <prompt>`).
+
+## Unattended runs (Claude Code and Codex)
+
+The runner works a ticket's nodes while you are away, one node per fresh agent session, in the workspace folder:
+Claude Code as a background session (`claude --bg -n kaneki:<ticket>:<node>:<runId>`), Codex with `codex exec`.
+It never starts Antigravity, never crosses a user gate, and never commits, pushes or ships.
+
+```bash
+sdlc autonomy --ticket ISSUE-123 --set on        # opt in; nothing runs unattended without it
+sdlc run --ticket ISSUE-123 --max-nodes 3        # run now (--host claude|codex; default: the active binding)
+sdlc tick                                        # one scheduler pass: recover, then start one node per opted-in ticket
+sdlc recover                                     # after a shutdown: release dead runs, restart orphaned nodes once
+sdlc run --stop --ticket ISSUE-123               # stop the running session and release the run lease
+sdlc unpark --ticket ISSUE-123                   # let the runner continue a ticket it parked
+```
+
+- A node is done when its `gate` event is in `decisions.jsonl`, not when the session says so.
+- The runner **parks** a ticket (event `park`, an entry in `.sdlc/inbox.jsonl`, a desktop toast through the
+  notify-hook when it is installed) when the next node closes on you (`sdlc decide`), or when a session stops without
+  its gate: answer it with `claude attach <id>`. A parked ticket continues by itself once the gate is closed.
+- A usage-limit error writes `.sdlc/run/backoff-<host>.json`; nothing starts on that host until its retry time.
+- Settings live in `.sdlc/runner.local.json`: `maxConcurrent` (1), `pollSeconds` (15), `nodeTimeoutMinutes` (180),
+  `retries` (1), `backoffMinutes` (60), `claudeArgs`, `codexTier`, `notifyCommand` (argv with `{title}`
+  `{message}` `{ticket}` `{kind}`; `[]` turns it off), `notifyHook`.
+- Claude sessions start with `--permission-mode auto` unless `.sdlc/runner.local.json` sets `claudeArgs`. In auto
+  mode Claude decides on its own which tool calls need no confirmation, so a background session nobody watches does
+  not stop at a permission prompt (that would only park the ticket). The kaneki guard hook and the worktree git hooks
+  still block history changes (commit, push, rebase, `reset --hard`, `branch -D`, ...) in this mode; only
+  `kaneki-ship` commits, after your approval. To change it, set `claudeArgs`, for example
+  `["--permission-mode", "acceptEdits"]`; `[]` passes nothing extra, so your own Claude settings decide.
+- Run state per ticket: `run/lease.json` (separate from the 10-minute command lock) and `run/<runId>.jsonl`.
 
 ## Workspace layout
 

@@ -18,7 +18,8 @@ Scripts, in this skill's `scripts/` folder (use the skill folder's absolute path
 
 Zed has no command API, so the script drives it with keystrokes:
 1. A key bound to `workspace::NewCenterTerminal` opens a new terminal tab in the center pane. The view stays as it is: no split.
-2. It pastes a command into the new terminal that runs a generated launcher, which starts `claude -n <child> --append-system-prompt-file <protocol>` with the task. It pastes rather than types because input methods like Vietnamese Telex rewrite typed letters; the user's clipboard text is restored afterwards.
+2. Windows, when notify-hook and its Zed bindings are installed: it renames the new tab to the child's name (ctrl-alt-shift-6/7/8) and records it for the toast click handler, with a pre-assigned `claude --session-id`. Clicking the child's notification then switches to its tab.
+3. It pastes a command into the new terminal that runs a generated launcher, which starts `claude -n <child> --append-system-prompt-file <protocol>` with the task. It pastes rather than types because input methods like Vietnamese Telex rewrite typed letters; the user's clipboard text is restored afterwards.
 
 | | Windows | macOS | Linux |
 |---|---|---|---|

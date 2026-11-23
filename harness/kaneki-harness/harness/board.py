@@ -12,6 +12,7 @@ from typing import Any
 
 from .contract import CONTRACT_VERSION
 from .errors import HarnessError
+from .runner import runner_view
 
 HIDDEN_EVENTS = {"state-write"}
 STATUS_FILE = "STATUS.md"
@@ -95,6 +96,7 @@ def summarize(s: Any, events_limit: int = 40, detail: bool = False) -> dict[str,
         "questions": {"path": str(questions), "exists": questions.is_file()},
         "receipts": s.state.get("receipts") or {}, "shipped": s.state.get("shipped") or {},
         "events": shown[max(0, len(shown) - events_limit):], "integrity": problems or None,
+        "runner": runner_view(s.ticket.dir, events),  # autonomy / parked / run lease (harness/runner.py), additive
     }
     if detail:
         for n in nodes:
@@ -564,13 +566,15 @@ def inflight_report(profile: Path, now: float | None = None) -> dict[str, Any]:
         flying = in_flight(s, now)
         units += flying
         wait = waiting(s)
-        if not (flying or lock or wait["on"] == "user"):
-            continue
         events, _ = s.ticket.verify_log()
+        runner = runner_view(d, events)
+        if not (flying or lock or wait["on"] == "user" or runner["parked"] or runner["lease"]):
+            continue
         shown = [e for e in events if e.get("event") not in HIDDEN_EVENTS]
         tickets.append({
             "ticket": d.name, "title": _title(s), "waitingOn": wait["on"], "waitingNode": wait["node"],
             "waitingReason": wait["reason"], "inFlight": len(flying), "lock": lock,
+            "parked": runner["parked"], "lease": runner["lease"],
             "lastEventAt": shown[-1]["at"] if shown else None, "lastEventKind": shown[-1]["event"] if shown else None,
         })
     units.sort(key=lambda u: u["packetAt"])
@@ -635,11 +639,16 @@ def summarize_ticket(profile: Path, ticket: str) -> dict[str, Any]:
     return summarize(s)
 
 
-def list_tickets(profile: Path) -> list[dict[str, Any]]:
-    """Every initialised ticket under the profile's ticketRoot, newest activity first, without node detail."""
+def list_tickets(profile: Path, measured: bool = False) -> list[dict[str, Any]]:
+    """Every initialised ticket under the profile's ticketRoot, newest activity first, without node detail.
+    `measured=True` (`sdlc tickets`) adds each ticket's measured usage (cost.status_field), from one cached read."""
     from .cli import ticket_root
     from .profile import load_profile
     root = ticket_root(load_profile(profile), profile.parent)
+    fields: dict[str, Any] = {}
+    if measured:
+        from . import cost
+        fields = cost.all_status_fields(profile)
     out = []
     if root.is_dir():
         for d in sorted(root.iterdir()):
@@ -648,6 +657,8 @@ def list_tickets(profile: Path) -> list[dict[str, Any]]:
                 # contractVersion goes once on the wrapper (cmd_tickets, /api/tickets), not on every item.
                 brief = {k: v for k, v in full.items()
                          if k not in ("nodes", "events", "receipts", "repositories", "contractVersion")}
+                if measured and "error" not in brief:
+                    brief["measured"] = fields.get(d.name)
                 out.append(brief)
     out.sort(key=lambda t: t.get("updatedAt") or "", reverse=True)
     return out
@@ -694,6 +705,13 @@ def render_status_md(summary: dict[str, Any], mismatched_nodes: set[str] | None 
         lines += ["", "**In flight** (packet rendered, no result recorded): " + "; ".join(
             f"{r['node']}/{r['unit']} r{r['round']} on {r['host'] or '?'} ({r['model'] or '?'}) since "
             f"`{r['packetAt'][:19].replace('T', ' ')}`" for r in t["inFlight"])]
+    m = t.get("measured")
+    if m:
+        from .cost import usd_label
+        usd = "USD unknown" if m["usd"] is None else f"${m['usd']:,.2f} ({usd_label(m)})"
+        lines += ["", f"**Measured** (agents' own logs, each API message once): {m['tokens']:,} tokens · {usd}"
+                  + f" · reported {m['reportedTokens']:,}" + (f" (x{m['ratio']})" if m.get("ratio") is not None else "")
+                  + " · `sdlc cost --ticket " + t["ticket"] + "`"]
     if (tdir / "token-usage.md").is_file():
         lines += ["", "**Token usage per node and agent:** [token-usage.md](token-usage.md)"]
     if t["questions"]["exists"]:
@@ -730,7 +748,10 @@ def write_status(s: Any) -> Path:
         node for node, rec in (s.state.get("nodes") or {}).items()
         if any(u.get("generation") == rec.get("generation") and u.get("modelMismatch") for u in rec.get("units", []))
     }
-    path.write_text(render_status_md(summarize(s), mismatched_nodes=mismatched), encoding="utf-8", newline="\n")
+    summary = summarize(s)
+    from . import cost
+    summary["measured"] = cost.status_field(s.ppath, s.ctx["ticket"])  # cached by log fingerprint; None if unreadable
+    path.write_text(render_status_md(summary, mismatched_nodes=mismatched), encoding="utf-8", newline="\n")
     return path
 
 

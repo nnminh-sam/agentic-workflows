@@ -12,8 +12,10 @@
   of their `/*__DS:<name>__*/` markers, so the board works offline with no CDN and no static-file route.
 - Read-only JSON (additive to contract version 1): `/api/tickets`, `/api/ticket`, `/api/ticket-detail` (the
   `sdlc ticket-detail` summary), `/api/node` (board.node_view), `/api/transcripts` (sessions.transcripts, cached per
-  ticket by a stat-only fingerprint of the logs it reads) and `/api/inflight` (board.inflight_report). A ticket id must
-  name a folder directly under the ticket root.
+  ticket by a stat-only fingerprint of the logs it reads), `/api/inflight` (board.inflight_report) and `/api/cost`
+  (cost.ticket_report with `id` [`node`, `since`, `until`], or cost.range_report with `since` alone, e.g. `since=today`
+  for the top bar; cost.py caches by a stat-only fingerprint, and the board re-checks that fingerprint at most every
+  COST_RECHECK_SECONDS). A ticket id must name a folder directly under the ticket root.
 """
 
 from __future__ import annotations
@@ -33,7 +35,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-from . import board, sessions
+from . import board, cost, sessions
 from .contract import CONTRACT_VERSION
 from .errors import HarnessError
 
@@ -41,6 +43,7 @@ MAX_FILE_BYTES = 512 * 1024
 TX_TTL_SECONDS = 300      # a cached transcripts answer is re-read at least this often, even if no log changed
 TX_CACHE_ENTRIES = 64     # (ticket, node, maxSteps) answers kept; the oldest goes first
 MAX_STEPS_LIMIT = 1000
+COST_RECHECK_SECONDS = 10  # a /api/cost answer is served as-is this long before its log fingerprint is checked again
 PAGE = Path(__file__).with_name("web_page.html")
 DESIGN_SYSTEM = Path(__file__).resolve().parent.parent / "app" / "design-system"
 DS_FILES = ("tokens.css", "components.css", "icons.js")  # the only files the page may inline
@@ -126,6 +129,8 @@ class Board:
         self.token = secrets.token_urlsafe(16)
         self._tx_cache: dict[tuple[str, str | None, int], tuple[str, float, dict[str, Any]]] = {}
         self._tx_lock = threading.Lock()
+        self._cost_cache: dict[tuple[Any, ...], tuple[float, dict[str, Any]]] = {}
+        self._cost_lock = threading.Lock()
 
     def ticket_dir(self, ticket: str) -> Path:
         """The folder of an initialised ticket directly under the ticket root; anything else (`..`, a path, an unknown
@@ -160,6 +165,30 @@ class Board:
             self._tx_cache[key] = (fp, expires, res)
             while len(self._tx_cache) > TX_CACHE_ENTRIES:
                 self._tx_cache.pop(next(iter(self._tx_cache)))
+        return res
+
+    def cost(self, ticket: str | None, node: str | None, since: str | None, until: str | None) -> dict[str, Any]:
+        """cost.ticket_report / cost.range_report. cost.py answers from its fingerprint-keyed cache; this layer only
+        spares the fingerprint (a stat of every log) on polls closer together than COST_RECHECK_SECONDS."""
+        if ticket:
+            self.ticket_dir(ticket)
+        elif not since:
+            raise HarnessError("cost needs id (a ticket) or since (a day)")
+        elif node:
+            raise HarnessError("node needs id")
+        key = (ticket, node, cost.parse_day(since), cost.parse_day(until))
+        now = time.time()
+        with self._cost_lock:
+            hit = self._cost_cache.get(key)
+        if hit and now - hit[0] < COST_RECHECK_SECONDS:
+            return hit[1]
+        res = (cost.ticket_report(self.profile, ticket, node, since=since, until=until) if ticket
+               else cost.range_report(self.profile, since or "", until))
+        with self._cost_lock:
+            self._cost_cache.pop(key, None)
+            self._cost_cache[key] = (now, res)
+            while len(self._cost_cache) > TX_CACHE_ENTRIES:
+                self._cost_cache.pop(next(iter(self._cost_cache)))
         return res
 
     def ticket_file(self, ticket: str, name: str) -> Path:
@@ -222,6 +251,9 @@ def make_handler(b: Board):
                 elif url.path == "/api/transcripts":
                     steps = _int(q.get("maxSteps"), sessions.MAX_STEPS, 1, MAX_STEPS_LIMIT)
                     self._json(b.transcripts(q["id"], q.get("node") or None, steps))
+                elif url.path == "/api/cost":
+                    self._json(b.cost(q.get("id") or None, q.get("node") or None, q.get("since") or None,
+                                      q.get("until") or None))
                 elif url.path == "/api/inflight":
                     self._json(board.inflight_report(b.profile))
                 elif url.path == "/api/file":
