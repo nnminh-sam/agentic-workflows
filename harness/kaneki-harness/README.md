@@ -83,6 +83,15 @@ It also works when the profile sits inside the repository (one repo open in the 
   `$KANEKI_HOME/prices.json`, else `~/.kaneki/prices.json`. `sdlc cost --init-prices` writes a template with null
   prices, and an entry counts as unverified until you set `"verified": true`. STATUS.md, `sdlc tickets` and the
   board's Cost tab show the same measured total (cached under `~/.kaneki/cache/cost`).
+- **Budgets (gate G8)**: an optional profile block, every key optional, no block = no checks:
+  `"budgets": {"ticket": {"usd": 40, "tokens": 60000000}, "node": {"default": {"usd": 6, "tokens": 15000000},
+  "code-review": {"usd": 8}}, "daily": {"usd": 60, "tokens": 120000000}, "warnAt": 0.8, "action": "park"}`.
+  Ticket and daily (this machine's local day, every ticket) count everything measured; a node counts its unit
+  sessions plus the controller work attributed to it. When part of the usage has no USD, the token cap governs that
+  part and the level is at least `warn`. Over a cap, `sdlc packet` refuses with `G8` and the runner parks the node
+  (or stops a running one); `"action": "warn"` only warns. **`sdlc budget --ticket T`** shows caps, usage and level;
+  the user lets one node through for its current round with `sdlc budget --ticket T --allow-node N --reason ...
+  --actor user`. STATUS.md, `sdlc tickets`, the board and its Cost tab show the level.
 - **`sdlc zed-setup --target .`** adds Zed tasks (`task: spawn` → `kaneki: board (web)`, `kaneki: tickets`,
   `kaneki: ticket status (from open file)`, `kaneki: validate profile`). Your own tasks are kept.
 

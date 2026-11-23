@@ -875,6 +875,7 @@
     "G4": "NEEDS CHANGES remains after the loop cap (profile gates.loopCap, default 2).",
     "G5": "Test or rule applicability / expected value is ambiguous.",
     "G6": "Shared-state mutation, real device/hardware, missing runtime config, or ambiguous result.",
-    "G7": "Missing or unsafe prerequisite: file, path, adapter, tool, permission, model, or supervision evidence."
+    "G7": "Missing or unsafe prerequisite: file, path, adapter, tool, permission, model, or supervision evidence.",
+    "G8": "Budget: a profile budgets cap (ticket, node or local day) is reached. sdlc packet refuses and the runner parks or stops the node; proceed by raising the cap or by the user's one-node override (sdlc budget --allow-node --actor user)."
   }
 }

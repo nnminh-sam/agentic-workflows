@@ -467,6 +467,7 @@ def build_packet(s: Session, node: str, unit_id: str, facts_arg: str | None = No
     staged = s.stage_problem(node, unit_id)
     if staged:
         raise HarnessError(staged)
+    budget = budget_gate(s, node)
     tier, escalated = s.tier(node, unit_id)
     exe = s.execution(node, unit_id, tier)
     facts = json.loads(Path(facts_arg).read_text(encoding="utf-8")) if facts_arg else {}
@@ -534,12 +535,72 @@ def build_packet(s: Session, node: str, unit_id: str, facts_arg: str | None = No
            "handedTokens": estimate, "contextWindow": window}
     if escalated:
         res["escalated"] = {"from": unit["tier"], "why": escalated}
+    if budget is not None:
+        res["budget"] = _budget_brief(budget)
+        from . import budget as B
+        warn = B.warning(budget)
+        if warn:
+            res["budgetWarning"] = warn
     if signals_path is not None:
         res["signals"] = str(signals_path)
     if estimate > window // 4:
         res["contextWarning"] = (f"the packet and its inputs are ~{estimate:,} tokens, over a quarter of the {window:,}-token "
                                  f"window assumed for {tier}; trim the inputs or split the unit before dispatching")
     return res, exe
+
+
+def budget_gate(s: Session, node: str) -> dict[str, Any] | None:
+    """G8: refuse a packet while a budget is over (profile `budgets`, harness/budget.py). Returns the check (None
+    without a budgets block) so the packet can carry the level and a warning. The refusal is an error only: no
+    state change, no event."""
+    if s.profile.get("budgets") is None:
+        return None
+    from . import budget as B
+    events, _ = s.ticket.verify_log()
+    res = B.check(s.ppath, s.ctx["ticket"], node, prof=s.profile, events=events,
+                  generation=s.state["nodes"][node]["generation"])
+    if not res["allowed"]:
+        raise HarnessError(B.refusal(res))
+    return res
+
+
+def _budget_brief(res: dict[str, Any]) -> dict[str, Any]:
+    return {k: res.get(k) for k in ("level", "allowed", "over", "usage", "caps", "override")}
+
+
+def cmd_budget(args: argparse.Namespace) -> None:
+    """`sdlc budget --ticket T [--node N]`: caps, measured usage and level (read-only). With `--allow-node N --reason R
+    --actor user`: the user lets that node through G8 for its current round (a budget-override decision event)."""
+    from . import budget as B
+    s = Session(args)
+    node = args.allow_node or args.node or next_pending(s.state, s.order)
+    if node is not None and node not in s.order:
+        raise HarnessError(f"{node} is not in this ticket's trace: {s.order}")
+    if s.profile.get("budgets") is None:
+        if args.allow_node:
+            raise HarnessError("G8: this profile has no budgets block, so there is nothing to override")
+        out({"ok": True, "ticket": s.ctx["ticket"], "node": node, "configured": False, "level": "ok",
+             "note": "no budgets block in the profile: no budget checks"})
+        return
+    events, _ = s.ticket.verify_log()
+    gen = s.state["nodes"][node]["generation"] if node else None
+    res = B.check(s.ppath, s.ctx["ticket"], node, prof=s.profile, events=events, generation=gen)
+    if not args.allow_node:
+        out({"ok": True, **res, "warning": B.warning(res), "status": B.line(res)})
+        return
+    if args.actor != "user":
+        raise HarnessError("G8: letting a node through its budget is the user's decision: repeat with --actor user")
+    if not (args.reason or "").strip():
+        raise HarnessError("--reason is required: say why this node may spend past the budget")
+    scopes = args.scope or res["over"]
+    if not scopes:
+        raise HarnessError(f"G8: {node} is not over any budget ({res['level']}); nothing to override "
+                           "(pass --scope ticket|node|daily|all to record one ahead)")
+    ev = s.ticket.log({"event": "budget-override", "node": node, "generation": gen, "scopes": sorted(set(scopes)),
+                       "reason": args.reason.strip(), "actor": "user",
+                       "usage": {k: {"usd": v["usd"], "tokens": v["tokens"]} for k, v in res["usage"].items()}})
+    out({"ok": True, "ticket": s.ctx["ticket"], "node": node, "generation": gen, "override": ev["scopes"],
+         "note": f"G8 lets {node} through at generation {gen} only; a rerun or loop-back needs a new decision"})
 
 
 def cmd_packet(args: argparse.Namespace) -> None:
@@ -1719,6 +1780,17 @@ def build_parser() -> argparse.ArgumentParser:
                    help="write a price-table template (null prices, unverified) to the user config if missing")
     x.set_defaults(fn=cmd_cost)
 
+    x = sub.add_parser("budget", parents=[ticketed],
+                       help="budget caps, measured usage and level of a ticket (read-only); --allow-node lets one node "
+                            "through G8 (--actor user)")
+    x.add_argument("--node", help="node to check (default: next pending)")
+    x.add_argument("--allow-node", help="the user lets this node through G8 for its current round")
+    x.add_argument("--scope", action="append", choices=["ticket", "node", "daily", "all"],
+                   help="scope(s) the override covers (default: the scopes over now)")
+    x.add_argument("--reason")
+    x.add_argument("--actor", default="controller", choices=["controller", "user"])
+    x.set_defaults(fn=cmd_budget)
+
     x = sub.add_parser("contract", help="the data contract version the desktop app checks (read-only, no profile)")
     x.set_defaults(fn=cmd_contract)
 
@@ -1795,7 +1867,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 READ_ONLY = {"status", "plan", "validate", "digest", "host", "onboard-scan", "onboard-verify", "onboard-write", "install",
              "tickets", "status-of", "web", "zed-setup", "contract", "ticket-detail", "gate-request",
-             "transcripts", "cost", "reflect-signals",
+             "transcripts", "cost", "budget", "reflect-signals",
              "decide"}  # decide takes the lock only for the gate it runs (through main), never while it waits for you
 NO_STATUS_REFRESH = READ_ONLY | {"git"}
 # Commands that take the ticket lock themselves, only around each write: a run lasts as long as its node, and the
@@ -1809,6 +1881,7 @@ def _ticket_lock(args: argparse.Namespace):
     if args.cmd in SELF_LOCKING:
         return nullcontext()
     if ((args.cmd in READ_ONLY and not (args.cmd == "status" and args.accept_current_state))
+            and not (args.cmd == "budget" and args.allow_node)
             or not getattr(args, "ticket", None) or (args.cmd == "lang" and not (args.set or args.clear))):
         return nullcontext()
     try:
@@ -1829,7 +1902,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         with _ticket_lock(args):
             rc = args.fn(args)
-            if args.cmd not in NO_STATUS_REFRESH and getattr(args, "ticket", None):
+            if ((args.cmd not in NO_STATUS_REFRESH or (args.cmd == "budget" and args.allow_node))
+                    and getattr(args, "ticket", None)):
                 _refresh_status(args)
     except HarnessError as exc:
         out({"error": str(exc)})

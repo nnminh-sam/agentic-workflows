@@ -184,6 +184,10 @@ class Board:
             return hit[1]
         res = (cost.ticket_report(self.profile, ticket, node, since=since, until=until) if ticket
                else cost.range_report(self.profile, since or "", until))
+        if ticket:  # the Cost tab's budget line: G8 of the next pending node (None without a budgets block)
+            from .state import next_pending
+            s = self.session(ticket)
+            res = {**res, "budget": board.budget_view(s, next_pending(s.state, s.order))}
         with self._cost_lock:
             self._cost_cache.pop(key, None)
             self._cost_cache[key] = (now, res)

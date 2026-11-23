@@ -35,6 +35,8 @@ html,body{height:100%;overflow:hidden}
 .b-cost .k-table td.b-srccell{white-space:normal;min-width:120px;line-height:1.9}
 .b-cost .b-usd{font-weight:600;font-variant-numeric:tabular-nums;margin-right:4px}
 .b-cost .k-card + .k-card{margin-top:var(--space-3)}
+.b-budget__scope{display:inline-block;margin-right:12px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.b-budget__scope.is-warn b{color:var(--warn,inherit)}.b-budget__scope.is-over b{color:var(--bad,inherit)}
 .b-node-host{display:block;margin-top:2px;font-size:10.5px;color:var(--ink-3);text-align:center}
 .k-node{cursor:pointer}
 .b-ins-tabs{padding:0 var(--space-4);border-bottom:1px solid var(--border)}
@@ -413,6 +415,23 @@ function srcBadges(x) {   // where the USD comes from: the agent's own number, t
   return out.join(' ');
 }
 function ratio(r) { return r == null ? '<span class="k-muted">—</span>' : '×' + (r >= 10 ? r.toFixed(0) : r.toFixed(1)); }
+function budgetLine(b) {   // G8 (sdlc budget): used vs caps per scope, styled by level; nothing without a budgets block
+  if (!b) return '';
+  if (b.level === 'unknown') return '<div class="k-callout k-callout--warn b-budget">' + ic('alert', 1) + '<span>Budget not checked: ' + esc(b.error || '') + '</span></div>';
+  var cls = {ok: 'ok', warn: 'warn', over: 'bad'}[b.level] || 'info', parts = [];
+  ['ticket', 'node', 'daily'].forEach(function (sc) {
+    var cap = (b.caps || {})[sc], u = (b.usage || {})[sc];
+    if (!cap || !u) return;
+    var bits = [], lvl = u.level || 'ok';
+    if (cap.usd != null) bits.push(usd(u.usd || 0) + ' / ' + usd(cap.usd) + (u.partial ? ' <span class="k-badge k-badge--outline" title="' + tokens(u.unpricedTokens) + ' tokens unpriced: the token cap governs that part">partial</span>' : ''));
+    if (cap.tokens != null) bits.push(tokens(u.tokens) + ' / ' + tokens(cap.tokens) + ' tok');
+    parts.push('<span class="b-budget__scope is-' + lvl + '"><b>' + esc(sc === 'node' ? 'node ' + (b.node || '') : sc) + '</b> ' + bits.join(' · ') + '</span>');
+  });
+  var head = b.level === 'over' ? (b.allowed ? (b.override ? 'Over budget · user override' : 'Over budget (action warn)') : 'Over budget · G8 refuses the next packet')
+    : b.level === 'warn' ? 'Budget warning' : 'Within budget';
+  return '<div class="k-callout k-callout--' + cls + ' b-budget" title="' + esc((b.reasons || []).join('; ')) + '">' + ic(b.level === 'ok' ? 'info' : 'alert', 1) +
+    '<span><b>' + head + '</b> ' + parts.join(' ') + ' <span class="k-mono k-muted">sdlc budget --ticket ' + esc(b.ticket || '') + '</span></span></div>';
+}
 function costView(t) {
   if (data.costErr) return '<div class="k-banner k-banner--bad">' + ic('alert') + '<div class="k-banner__text"><div class="k-banner__title">Cannot measure cost</div><div class="k-banner__sub">' + esc(data.costErr) + '</div></div></div>';
   var c = data.cost && data.cost.ticket === t.ticket ? data.cost : null;
@@ -446,7 +465,7 @@ function costView(t) {
     (modelRows || '<tr><td colspan="7" class="k-muted">Nothing measured yet.</td></tr>') + '</tbody></table></div></div>' +
     '<footer class="k-card__foot"><span class="k-muted" style="font-size:12px;overflow-wrap:anywhere">' + priceNote + '</span></footer></article>';
   return '<div class="k-callout k-callout--info">' + ic('info', 1) + '<span>Measured from the agents\' own session logs, each API message counted once. <b>Reported</b> is what the agents passed to <span class="k-mono">sdlc record --tokens</span>, a lower bound. USD is the agent&#39;s own <b>reported</b> cost where it has one, else your price table (<b>unverified</b>), else unknown.</span></div>' +
-    stats + nodeCard + modelCard;
+    budgetLine(c.budget ? Object.assign({ticket: c.ticket}, c.budget) : null) + stats + nodeCard + modelCard;
 }
 function renderToday() {
   var x = data.today, el = $('#today');

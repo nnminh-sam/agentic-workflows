@@ -233,15 +233,27 @@ def retry_after(text: str, default_minutes: float, now: float | None = None) -> 
     return min(max(when, now + 60), now + 24 * 3600)
 
 
-# --- budget hook (M3·2 implements it) -------------------------------------------------------------------
+# --- budget hook (M3·2, harness/budget.py) ------------------------------------------------------------------
 
 def budget_allows(ctx: dict[str, Any]) -> tuple[bool, str | None]:
-    """Whether a node may start (`ctx["phase"] == "start"`) or keep running (`"running"`).
+    """Whether a node may start (`ctx["phase"] == "start"`) or keep running (`"running"`): gate G8.
 
     `ctx`: profile (Path), ticket, node, host, runId, phase, startedAt (epoch, running only). Returns
-    `(allowed, reason)`. The budget track (M3·2) replaces this body; until then everything is allowed. A refusal at
-    start parks the ticket (reason `budget`); a refusal while running stops the session and parks."""
-    return True, None
+    `(allowed, reason)`. A refusal at start parks the ticket (reason `budget`); a refusal while running stops the
+    session and parks. No `budgets` block = always allowed. A user `budget-override` of the node's current
+    generation lets it start and keep running. Usage comes from cost.py's cache, so this is cheap on every poll."""
+    from . import budget
+    from .profile import load_profile
+    try:
+        prof = load_profile(Path(ctx["profile"]))
+    except HarnessError as exc:
+        return True, f"budget not checked: {exc}"
+    if prof.get("budgets") is None:
+        return True, None
+    res = budget.check(ctx["profile"], ctx["ticket"], ctx.get("node"), prof=prof)
+    if res["allowed"]:
+        return True, budget.warning(res)
+    return False, budget.refusal(res)
 
 
 # --- configuration, notifications, back-off ----------------------------------------------------------------
@@ -592,9 +604,13 @@ class Runner:
         parked = runner_state(events)["parked"]
         if not parked:
             return None
+        later = events[parked["_index"] + 1:]
+        if parked.get("reason") == "budget" and any(
+                e.get("event") == "budget-override" and e.get("node") == parked.get("node") for e in later):
+            log_event(s.ticket, {"event": "unpark", "reason": "budget-override", "node": parked.get("node")})
+            return None  # the user let this node through G8; budget_allows re-checks the override's scopes
         if parked.get("reason") not in ("user-boundary", "loop-cap", "rejected-open", "session-waiting", "no-gate"):
             return parked  # failures, budget, retries: the user unparks by hand
-        later = events[parked["_index"] + 1:]
         moved = any(e.get("event") == "gate" for e in later) or (
             parked.get("node") and next_pending(s.state, s.order) != parked.get("node"))
         if not moved:
@@ -614,7 +630,7 @@ class Runner:
         if node:
             ev["generation"] = s.state["nodes"][node]["generation"]
         log_event(s.ticket, ev)
-        notify(self.pdir, self.cfg, "parked", s.ctx["ticket"],
+        notify(self.pdir, self.cfg, "budget" if reason == "budget" else "parked", s.ctx["ticket"],
                message + (f" Attach: {attach}" if attach else " Decide: sdlc decide" if reason in
                           ("user-boundary", "loop-cap", "rejected-open") else ""),
                node=node, reason=reason, attach=attach)
