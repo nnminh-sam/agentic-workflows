@@ -4,212 +4,705 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Kaneki Board</title>
+<!-- `sdlc web` board (layout and behaviour: app/design-system/board-zed-mock.html). Self-contained: the server inlines
+     the three design-system files below at request time (web.render_page), so nothing is loaded from elsewhere. -->
+<style>/*__DS:tokens.css__*/</style>
+<style>/*__DS:components.css__*/</style>
 <style>
-:root {
-  --bg: #f7f7f5; --panel: #ffffff; --ink: #1d1d1b; --muted: #6b6b66; --line: #e4e4df;
-  --accent: #2f6fdb; --done: #2e9d5b; --run: #d98b16; --stale: #b0479b; --pend: #a3a39c; --bad: #d1453b;
-  --chip: #f0f0ec; --code: #f4f4f0;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #161615; --panel: #1f1f1d; --ink: #ecece8; --muted: #9a9a93; --line: #31312e;
-    --accent: #6ea0ff; --done: #4cc382; --run: #f0aa3c; --stale: #d77ac2; --pend: #6d6d67; --bad: #f06b61;
-    --chip: #2a2a27; --code: #1a1a18;
-  }
-}
-* { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
-header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 2; }
-header h1 { font-size: 15px; margin: 0; font-weight: 650; }
-header .live { width: 8px; height: 8px; border-radius: 50%; background: var(--done); }
-header .live.off { background: var(--bad); }
-header .meta { color: var(--muted); font-size: 12px; margin-left: auto; }
-main { display: grid; grid-template-columns: minmax(260px, 340px) 1fr; min-height: calc(100vh - 49px); }
-#list { border-right: 1px solid var(--line); padding: 10px; overflow: auto; }
-#detail { padding: 16px 20px; overflow: auto; min-width: 0; }
-.card { display: block; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); margin-bottom: 8px; cursor: pointer; color: inherit; text-decoration: none; }
-.card.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
-.card .top { display: flex; gap: 6px; align-items: center; }
-.card .id { font-weight: 650; }
-.card .hint { color: var(--muted); font-size: 12px; margin-top: 4px; }
-.badge { font-size: 11px; padding: 1px 7px; border-radius: 10px; background: var(--chip); color: var(--muted); }
-.badge.lite { background: color-mix(in srgb, var(--done) 18%, transparent); color: var(--done); }
-.badge.full { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
-.strip { display: flex; gap: 2px; margin-top: 8px; }
-.strip i { flex: 1; height: 5px; border-radius: 2px; background: var(--pend); }
-.s-done { background: var(--done) !important; } .s-in_progress { background: var(--run) !important; }
-.s-stale { background: var(--stale) !important; } .s-pending { background: var(--pend) !important; }
-h2 { margin: 0 0 4px; font-size: 20px; }
-.sub { color: var(--muted); margin-bottom: 14px; }
-.next { padding: 10px 14px; border-left: 3px solid var(--accent); background: var(--panel); border-radius: 6px; margin-bottom: 16px; }
-.warn { padding: 10px 14px; border-left: 3px solid var(--bad); background: var(--panel); border-radius: 6px; margin-bottom: 16px; }
-table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
-th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
-th { font-size: 12px; color: var(--muted); font-weight: 600; }
-tr:last-child td { border-bottom: none; }
-tr.cur td { background: color-mix(in srgb, var(--accent) 7%, transparent); }
-.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
-.node { font-weight: 600; }
-.purpose { color: var(--muted); font-size: 12px; max-width: 46ch; }
-.chip { display: inline-block; font: 12px ui-monospace, Consolas, monospace; padding: 2px 7px; border-radius: 5px; background: var(--chip); margin: 0 4px 4px 0; cursor: pointer; border: 1px solid transparent; color: inherit; }
-.chip:hover, .chip.on { border-color: var(--accent); }
-.chip.missing { opacity: .45; cursor: default; }
-.num { font-variant-numeric: tabular-nums; }
-section { margin-top: 18px; }
-section h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 8px; }
-#preview { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
-#preview .bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); }
-#preview .bar .name { font: 12px ui-monospace, Consolas, monospace; }
-#preview pre { margin: 0; padding: 12px; max-height: 60vh; overflow: auto; background: var(--code); white-space: pre-wrap; word-break: break-word; font: 12.5px/1.5 ui-monospace, Consolas, monospace; }
-button { font: inherit; font-size: 12px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--chip); color: var(--ink); cursor: pointer; }
-button:hover { border-color: var(--accent); }
-.spacer { flex: 1; }
-.events { list-style: none; padding: 0; margin: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
-.events li { padding: 6px 12px; border-bottom: 1px solid var(--line); font-size: 13px; }
-.events li:last-child { border-bottom: none; }
-.events time { color: var(--muted); font: 12px ui-monospace, Consolas, monospace; margin-right: 8px; }
-.empty { color: var(--muted); padding: 40px 0; text-align: center; }
-.toast { position: fixed; bottom: 16px; right: 16px; background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: 6px; font-size: 13px; opacity: 0; transition: opacity .2s; }
-.toast.show { opacity: .92; }
-@media (max-width: 760px) {
-  main { grid-template-columns: 1fr; }
-  #list { border-right: none; border-bottom: 1px solid var(--line); max-height: 40vh; }
-  .purpose, .hide-sm { display: none; }
-  #detail { padding: 12px 16px; }
+html,body{height:100%;overflow:hidden}
+:root{--inspector-width:440px}
+.k-inspector__body{overflow-x:hidden}
+.k-pipeline{overflow-x:auto;padding-bottom:6px}
+.k-tier{white-space:nowrap}
+.b-back .k-icon{transform:rotate(180deg)}
+.b-art{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface-2);font-size:13px}
+.b-art .k-mono{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.b-art.is-missing{opacity:.6}
+.b-art__meta{flex-basis:100%;padding-left:22px;font-size:11px;color:var(--ink-3)}
+.b-tool summary{align-items:flex-start}
+.b-tool summary .b-cmd{flex:1;min-width:0;word-break:break-word}
+.b-url{font:12px/1 var(--font-mono);color:var(--ink-3);padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface-2)}
+.b-live{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-3);white-space:nowrap}
+.b-host{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:999px;border:1px solid var(--border);background:var(--surface-2);font-size:12px;color:var(--ink-2);white-space:nowrap}
+.b-host i{width:8px;height:8px;border-radius:50%;display:inline-block;background:var(--ink-4,var(--ink-3))}
+.b-host--claude i{background:var(--tier-deep)}.b-host--codex i{background:var(--ink)}.b-host--antigravity i{background:var(--accent)}.b-host--gemini i{background:var(--tier-light)}
+.b-switch{font-size:12px;color:var(--ink-3);display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
+.b-node-host{display:block;margin-top:2px;font-size:10.5px;color:var(--ink-3);text-align:center}
+.k-node{cursor:pointer}
+.b-ins-tabs{padding:0 var(--space-4);border-bottom:1px solid var(--border)}
+.b-ins-tabs .k-tabs{border-bottom:0}
+.b-actions{display:flex;flex-wrap:wrap;gap:var(--space-2)}
+.b-section{display:grid;gap:var(--space-2)}
+.b-section+.b-section{margin-top:16px}
+.b-section>h5{margin:0;font-size:11px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--ink-3)}
+.b-sess{display:grid;gap:4px;padding:10px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface);cursor:pointer;text-align:left;width:100%;color:var(--ink)}
+.b-sess:hover{background:var(--surface-3)}
+.b-sess__top{display:flex;align-items:center;gap:var(--space-2);font-weight:500;min-width:0}
+.b-sess__top .b-t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.b-sess__sub{font-size:12px;color:var(--ink-3);overflow-wrap:anywhere}
+.b-match{font-size:11px;padding:1px 6px;border-radius:999px;background:var(--ok-soft);color:var(--ok-text);white-space:nowrap}
+.b-match--heur{background:var(--warn-soft);color:var(--warn-text)}
+.b-tx{display:grid;gap:10px}
+.b-msg{display:grid;gap:4px}
+.b-msg__who{font-size:11px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;color:var(--ink-3)}
+.b-msg__text{font-size:13px;line-height:1.5;padding:8px 10px;border-radius:var(--radius-md);background:var(--surface-2);border:1px solid var(--border);white-space:pre-wrap;overflow-wrap:anywhere}
+.b-msg--user .b-msg__text{background:var(--accent-soft);border-color:transparent}
+.b-tool{border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface)}
+.b-tool summary{display:flex;gap:6px;padding:6px 10px;cursor:pointer;font:12px/1.4 var(--font-mono);color:var(--ink-2);list-style:none}
+.b-tool summary::-webkit-details-marker{display:none}
+.b-tool summary b{color:var(--ink);font-weight:600}
+.b-tool pre{margin:0;padding:8px 10px;border-top:1px solid var(--border);font:12px/1.55 var(--font-mono);white-space:pre-wrap;word-break:break-word;color:var(--ink-2);background:var(--surface-2);max-height:360px;overflow:auto}
+.b-src{font:11px/1.4 var(--font-mono);color:var(--ink-3);word-break:break-all}
+.b-back{display:inline-flex;align-items:center;gap:4px;border:0;background:none;color:var(--accent-text);font-size:12px;padding:0;cursor:pointer}
+.b-running{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--accent-text);white-space:nowrap}
+.b-note{font-size:12px;color:var(--ink-3)}
+.b-flight{display:grid;grid-template-columns:14px 96px minmax(0,1fr) auto;gap:var(--space-3);align-items:center;padding:7px 10px;border-radius:var(--radius-md);font-size:13px;cursor:pointer;width:100%;border:0;background:none;color:var(--ink);text-align:left}
+.b-flight:hover{background:var(--surface-3)}
+.b-flight .b-what{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.b-flight .k-mono{font-size:12px}
+.b-choice-row{display:grid;gap:8px}
+.k-choice.is-disabled{opacity:.6;cursor:not-allowed}
+.b-empty{padding:40px;text-align:center;color:var(--ink-3)}
+.b-kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:13px;margin:0}
+.b-kv dt{color:var(--ink-3)}
+.b-kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.k-ticket{text-align:left;width:100%;font:inherit;color:inherit;background:transparent}
+.k-ticket__title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.k-main__head{flex-wrap:wrap;row-gap:6px}
+.k-main__title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.k-log>div{overflow-wrap:anywhere}
+.k-toasts{bottom:calc(var(--dock-height) + 16px)}
+.b-offline .k-dot{background:var(--bad)}
+@media (max-width:1240px){:root{--inspector-width:380px;--rail-width:230px}.b-url{display:none}}
+@media (max-width:980px){
+  html,body{height:auto;overflow:auto}
+  .k-app{height:auto;min-height:100%;grid-template-columns:1fr;grid-template-rows:auto auto auto auto auto;
+    grid-template-areas:"top" "rail" "main" "insp" "dock"}
+  .k-topbar{flex-wrap:wrap;padding:8px 16px;min-height:var(--titlebar-height)}
+  .k-rail{border-right:0;border-bottom:1px solid var(--border);max-height:34vh}
+  .k-inspector{border-left:0;border-top:1px solid var(--border)}
+  .k-dock{grid-template-columns:1fr;max-height:none}
+  .k-dock>section{max-height:260px}
+  .k-dock>section+section{border-left:0;border-top:1px solid var(--border)}
+  .k-main__head,.k-main__tabs,.k-main__view{padding-left:16px;padding-right:16px}
+  .k-toasts{bottom:16px}
 }
 </style>
 </head>
 <body>
-<header>
-  <span class="live" id="live"></span>
-  <h1 id="project">Kaneki Board</h1>
-  <span class="meta" id="meta"></span>
-</header>
-<main>
-  <nav id="list"></nav>
-  <div id="detail"><div class="empty">Pick a ticket.</div></div>
-</main>
-<div class="toast" id="toast"></div>
+<script>/*__DS:icons.js__*/</script>
+<div class="k-app">
+  <header class="k-topbar">
+    <div class="k-brand"><span class="k-brand__mark"><svg class="k-icon" aria-hidden="true"><use href="#i-pipeline"/></svg></span>kaneki board</div>
+    <div class="k-breadcrumb"><svg class="k-icon k-icon--sm" aria-hidden="true"><use href="#i-chevron-right"/></svg><b id="project"></b></div>
+    <span class="b-url" id="host"></span>
+    <span class="k-spacer"></span>
+    <span class="b-live" id="live" role="status"><span class="k-dot k-dot--run" style="width:6px;height:6px"></span><span id="liveText">connecting…</span></span>
+    <button class="k-pill k-pill--attention" id="pill" hidden title="Jump to the first ticket that waits on you"><span class="k-pill__count" id="pillCount">0</span>need you</button>
+    <div class="k-segmented" id="theme" role="group" aria-label="Theme"><button data-t="light" aria-label="Light theme"><svg class="k-icon k-icon--sm" aria-hidden="true"><use href="#i-sun"/></svg></button><button data-t="dark" aria-label="Dark theme"><svg class="k-icon k-icon--sm" aria-hidden="true"><use href="#i-moon"/></svg></button></div>
+  </header>
+
+  <aside class="k-rail" aria-label="Tickets">
+    <div class="k-rail__head"><span class="k-overline">Tickets</span><span class="k-spacer"></span><span class="k-muted" style="font-size:12px" id="ticketCount"></span></div>
+    <div class="k-rail__list" id="rail"></div>
+    <div class="k-rail__foot"><div class="k-callout k-callout--info" style="font-size:12px"><span>Read-only board. Gates are approved in Zed (agent thread) or with <code class="k-mono">sdlc decide</code>.</span></div></div>
+  </aside>
+
+  <main class="k-main">
+    <div class="k-main__head" id="mainHead"></div>
+    <div class="k-main__tabs"><nav class="k-tabs" id="mainTabs" role="tablist">
+      <button class="k-tab" role="tab" data-v="pipeline"><svg class="k-icon k-icon--sm" aria-hidden="true"><use href="#i-pipeline"/></svg>Pipeline</button>
+      <button class="k-tab" role="tab" data-v="decisions"><svg class="k-icon k-icon--sm" aria-hidden="true"><use href="#i-list"/></svg>Decisions <span class="k-tab__count" id="decCount"></span></button>
+      <button class="k-tab" role="tab" data-v="cost"><svg class="k-icon k-icon--sm" aria-hidden="true"><use href="#i-coins"/></svg>Cost</button></nav></div>
+    <div class="k-main__view" id="mainView"><div class="b-empty">Loading…</div></div>
+  </main>
+
+  <aside class="k-inspector" aria-label="Node inspector">
+    <header class="k-inspector__head" id="insHead"></header>
+    <div class="b-ins-tabs"><nav class="k-tabs" id="insTabs" role="tablist">
+      <button class="k-tab" role="tab" data-t="overview"><svg class="k-icon k-icon--sm" aria-hidden="true"><use href="#i-eye"/></svg>Overview</button>
+      <button class="k-tab" role="tab" data-t="transcripts"><svg class="k-icon k-icon--sm" aria-hidden="true"><use href="#i-agent"/></svg>Transcripts <span class="k-tab__count" id="txCount"></span></button>
+      <button class="k-tab" role="tab" data-t="events"><svg class="k-icon k-icon--sm" aria-hidden="true"><use href="#i-activity"/></svg>Events <span class="k-tab__count" id="evCount"></span></button></nav></div>
+    <div class="k-inspector__body" id="insBody"></div>
+  </aside>
+
+  <section class="k-dock">
+    <section aria-label="In flight"><div class="k-dock__head"><span class="k-overline">In flight</span><span class="k-badge" id="flightCount">0</span><span class="k-muted" style="font-size:12px">packet rendered · no result recorded yet</span></div><div class="k-dock__list" id="flight" style="padding:0 6px"></div></section>
+    <section aria-label="Decision log"><div class="k-dock__head"><span class="k-overline">Decision log</span><span class="k-dot k-dot--run" style="width:6px;height:6px"></span><span class="k-muted" style="font-size:12px">all tickets · live</span></div><div class="k-dock__list" style="padding:0 16px"><div class="k-log" id="log"></div></div></section>
+  </section>
+</div>
+
+<div class="k-toasts" id="toasts" aria-live="polite"></div>
+
+<!-- Continue in Zed -->
+<div class="k-scrim" id="cont" hidden>
+<div class="k-dialog" role="dialog" aria-modal="true" aria-labelledby="contTitle">
+  <header class="k-dialog__head"><span class="k-dialog__icon" style="background:var(--accent-soft);color:var(--accent-text)"><svg class="k-icon" aria-hidden="true"><use href="#i-zed"/></svg></span><div style="flex:1;min-width:0"><h3 class="k-dialog__title" id="contTitle">Continue in Zed</h3><p class="k-dialog__sub" id="contSub"></p></div><button class="k-btn k-btn--ghost k-btn--icon k-btn--sm" aria-label="Close" data-close="1"><svg class="k-icon k-icon--sm" aria-hidden="true"><use href="#i-x"/></svg></button></header>
+  <div class="k-dialog__body">
+    <div class="k-banner k-banner--info"><svg class="k-icon" aria-hidden="true"><use href="#i-info"/></svg><div class="k-banner__text"><div class="k-banner__title">Zed can't open or fill a thread from outside yet</div><div class="k-banner__sub">So the board copies the prompt and brings Zed to the front: start a new thread with the agent in the Agent Panel and paste. The ticket resumes at <span class="k-mono">nextPending</span> from its files, so nothing is lost.</div></div></div>
+    <div class="k-field"><span class="k-label" id="agentLabel">Agent for the new thread</span>
+      <div class="k-segmented" id="agentPick" role="radiogroup" aria-labelledby="agentLabel"><button data-a="claude" role="radio">Claude Agent</button><button data-a="codex" role="radio">Codex</button><button data-a="antigravity" role="radio">Antigravity</button></div></div>
+    <label class="k-field"><span class="k-label">Prompt</span><textarea class="k-textarea k-mono" id="contPrompt" style="min-height:60px;font-size:12px" spellcheck="false"></textarea></label>
+    <div class="b-choice-row" id="contHow" role="radiogroup" aria-label="How to continue">
+      <label class="k-choice" data-h="copy"><input type="radio" name="how" value="copy"><span><span class="k-choice__title">Copy the prompt and bring Zed to the front</span><br><span class="k-choice__sub">Then, in the Agent Panel, start a new thread with the agent above and paste.</span></span></label>
+      <label class="k-choice" data-h="url"><input type="radio" name="how" value="url"><span><span class="k-choice__title">Copy the prompt and open Zed's Agent Panel</span><br><span class="k-choice__sub">Uses <span class="k-mono">zed://agent</span>. It only opens the panel; it does not fill in the prompt, so you still paste.</span></span></label>
+      <label class="k-choice is-disabled" aria-disabled="true" title="Zed has no link to an existing thread"><input type="radio" name="how" value="thread" disabled><span><span class="k-choice__title">Open this thread</span><br><span class="k-choice__sub">Not available: Zed has no link to an existing agent thread yet. Read the thread here under Transcripts.</span></span></label>
+    </div>
+    <div class="k-command"><div class="k-command__head"><svg class="k-icon k-icon--sm" aria-hidden="true"><use href="#i-terminal"/></svg><span class="k-overline">The board will run (on 127.0.0.1, with its token)</span></div><pre class="k-command__body" id="contCmd"></pre></div>
+  </div>
+  <footer class="k-dialog__foot"><span class="k-muted" style="font-size:12px">Nothing is sent to the agent until you press send in Zed.</span><span class="k-spacer"></span><button class="k-btn" data-close="1">Cancel</button><button class="k-btn k-btn--primary" id="contGo">Copy and focus Zed</button></footer>
+</div>
+</div>
+
 <script>
-const TOKEN = "__TOKEN__";
-const PROJECT = __PROJECT__;
-const COLORS = { done: "var(--done)", in_progress: "var(--run)", stale: "var(--stale)", pending: "var(--pend)" };
-let selected = decodeURIComponent(location.hash.slice(2)) || null;
-let lastList = "", lastDetail = "", preview = null, hasEditor = false;
+(function () {
+'use strict';
+var TOKEN = "__TOKEN__";
+var PROJECT = __PROJECT__;
+var WORKSPACE = __WORKSPACE__;   // {path, focus: argv of POST /api/focus or null}
+var POLL_MS = 5000, EVENTS_CAP = 200;
+var HOST = {claude: 'Claude Agent', codex: 'Codex', antigravity: 'Antigravity', gemini: 'Gemini CLI', cursor: 'Cursor',
+  opencode: 'OpenCode', generic: 'Generic agent', profile: 'Profile binding'};
+var REASON = {'user-boundary': 'approve', 'rejected-open': 'rejected, decide what next', 'loop-cap': 'loop cap reached',
+  'reviewer-fail': 'reviewer FAIL, fix round', 'running': 'running', 'needs-run': 'next to run', 'awaiting-gate': 'gate to close',
+  'integrity': 'integrity problem', 'done': 'done', 'shipped': 'shipped'};
 
-const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const $ = id => document.getElementById(id);
-document.getElementById("project").textContent = PROJECT + " · Kaneki Board";
+/* ------------------------------------------------------------------ state */
+var q = new URLSearchParams(location.search);
+var st = {t: q.get('t'), n: q.get('n'), itab: q.get('tab') || 'overview', tx: q.get('tx'), view: q.get('view') || 'pipeline',
+  agent: 'claude', how: 'copy', contNode: null};
+if (['overview', 'transcripts', 'events'].indexOf(st.itab) < 0) st.itab = 'overview';
+if (['pipeline', 'decisions', 'cost'].indexOf(st.view) < 0) st.view = 'pipeline';
+var data = {tickets: null, editor: false, inflight: null, detail: null, node: null, tx: null, logs: {}, txErr: null};
+var shown = {};   // last rendered HTML per region; a poll that changes nothing leaves the DOM (focus, open details) alone
 
-function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 2200); }
-
-async function getJSON(url) { const r = await fetch(url, { cache: "no-store" }); return r.json(); }
-
-async function openInEditor(path) {
-  if (!hasEditor) { navigator.clipboard?.writeText(path); toast("No editor CLI found — path copied"); return; }
-  const r = await fetch("/api/open", { method: "POST", headers: { "X-Kaneki-Token": TOKEN, "Content-Type": "application/json" }, body: JSON.stringify({ path }) });
-  const j = await r.json(); toast(j.ok ? "Opened in editor" : j.error);
+var $ = function (s) { return document.querySelector(s); };
+function $$(s, root) { return Array.prototype.slice.call((root || document).querySelectorAll(s)); }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]; }); }
+function ic(n, sm) { return '<svg class="k-icon' + (sm ? ' k-icon--sm' : '') + '" aria-hidden="true"><use href="#i-' + n + '"/></svg>'; }
+function hostName(h) { return HOST[h] || h; }
+function host(h) { return h ? '<span class="b-host b-host--' + esc(h) + '"><i></i>' + esc(hostName(h)) + '</span>' : ''; }
+function tokens(n) {
+  if (!n) return '0';
+  if (n >= 1e6) return (n / 1e6).toFixed(2).replace(/\.?0+$/, '') + 'M';
+  if (n >= 1e4) return Math.round(n / 1e3) + 'k';
+  return n.toLocaleString('en-US');
+}
+function when(iso) {
+  if (!iso) return '';
+  var d = new Date(iso); if (isNaN(d)) return String(iso).slice(0, 16);
+  var hm = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+  return d.toDateString() === new Date().toDateString() ? hm : (d.getMonth() + 1) + '/' + d.getDate() + ' ' + hm;
+}
+function age(sec) {
+  if (sec == null || isNaN(sec)) return '';
+  sec = Math.max(0, Math.round(sec));
+  if (sec < 60) return sec + 's';
+  var m = Math.floor(sec / 60); if (m < 60) return m + 'm';
+  return Math.floor(m / 60) + 'h ' + ('0' + (m % 60)).slice(-2) + 'm';
+}
+function sinceIso(iso) { return iso ? (Date.now() - new Date(iso).getTime()) / 1000 : null; }
+function set(sel, html) { if (shown[sel] === html) return false; shown[sel] = html; $(sel).innerHTML = html; return true; }
+function getJSON(url) {
+  return fetch(url, {cache: 'no-store'}).then(function (r) {
+    return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status)); return j; });
+  });
+}
+function post(url, body) {
+  return fetch(url, {method: 'POST', headers: {'X-Kaneki-Token': TOKEN, 'Content-Type': 'application/json'}, body: JSON.stringify(body || {})})
+    .then(function (r) { return r.json().then(function (j) { if (!r.ok || !j.ok) throw new Error(j.error || ('HTTP ' + r.status)); return j; }); });
+}
+function toast(title, body, kind) {
+  var el = document.createElement('div'); el.className = 'k-toast k-toast--' + (kind || 'ok'); el.setAttribute('role', 'status');
+  el.innerHTML = '<span class="k-toast__icon">' + ic(kind === 'bad' ? 'x-circle' : kind === 'attention' ? 'gate' : 'check-circle') + '</span><div class="k-toast__body"><span class="k-toast__title">' + esc(title) + '</span>' + (body || '') + '</div>';
+  $('#toasts').appendChild(el); setTimeout(function () { el.remove(); }, 4800);
+}
+function syncUrl() {
+  var p = new URLSearchParams();
+  if (st.t) p.set('t', st.t); if (st.n) p.set('n', st.n);
+  if (st.itab !== 'overview') p.set('tab', st.itab); if (st.tx) p.set('tx', st.tx);
+  if (st.view !== 'pipeline') p.set('view', st.view);
+  var th = q.get('theme'); if (th) p.set('theme', th);
+  var s = p.toString(); history.replaceState(null, '', location.pathname + (s ? '?' + s : ''));
 }
 
-function renderList(data) {
-  hasEditor = data.editor;
-  const tickets = data.tickets;
-  if (!tickets.length) { $("list").innerHTML = '<div class="empty">No tickets yet.<br>Start one with /kaneki-flow</div>'; return; }
-  if (!selected) selected = tickets[0].ticket;
-  $("list").innerHTML = tickets.map(t => `
-    <a class="card ${t.ticket === selected ? "sel" : ""}" href="#/${encodeURIComponent(t.ticket)}">
-      <div class="top"><span class="id">${esc(t.ticket)}</span>
-        <span class="badge ${esc(t.lane)}">${esc(t.lane || "?")}</span>
-        <span class="badge">${esc(t.kind || "")}</span>
-        <span class="spacer"></span><span class="num hint">${t.error ? "⚠" : `${t.settled}/${t.traceLength}`}</span></div>
-      ${t.error ? `<div class="hint">${esc(t.error).slice(0, 140)}</div>` : `
-      <div class="strip">${(t.strip || []).map(n => `<i class="s-${n.status}" title="${esc(n.node)}: ${n.status}"></i>`).join("")}</div>
-      <div class="hint">${esc(t.next)}</div>`}
-    </a>`).join("");
+/* ------------------------------------------------------------------ derived */
+function tk() { return (data.tickets || []).filter(function (x) { return x.ticket === st.t; })[0] || null; }
+function detail() { return data.detail && data.detail.ticket === st.t ? data.detail : null; }
+function dnode(name) { var d = detail(); return d ? d.nodes.filter(function (x) { return x.node === name; })[0] || null : null; }
+function nodeView() { return data.node && data.node.ticket === st.t && data.node.node === st.n ? data.node : null; }
+function defaultNode(t) {
+  if (!t) return null;
+  if (t.waitingNode) return t.waitingNode;
+  if (t.nextPending) return t.nextPending;
+  var s = t.strip || []; return s.length ? s[s.length - 1].node : null;
+}
+function flyingNodes(t) { var m = {}; (t && t.inFlight || []).forEach(function (u) { m[u.node] = (m[u.node] || 0) + 1; }); return m; }
+function nodeState(t, n, fly) {   // strip/detail node -> one of done | run | attention | stale | fail | todo
+  if (t.waitingOn === 'user' && t.waitingNode === n.node) return 'attention';
+  if (fly[n.node] || n.status === 'in_progress') return 'run';
+  if (n.verdict === 'rejected') return 'fail';
+  if (n.status === 'done') return 'done';
+  if (n.status === 'stale') return 'stale';
+  return 'todo';
+}
+function ticketDot(t) {
+  if (t.error || t.integrity) return 'bad';
+  if (t.waitingOn === 'user') return 'attention';
+  if ((t.inFlight || []).length) return 'run';
+  if (t.waitingOn === 'none') return 'ok';
+  return 'idle';
+}
+function who(t) {
+  if (t.error) return 'Cannot read this ticket';
+  if (t.integrity) return 'Integrity problem in the decision log';
+  var r = REASON[t.waitingReason] || t.waitingReason || '';
+  if (t.waitingOn === 'user') return 'You · ' + (t.waitingReason === 'user-boundary' ? 'approve ' + t.waitingNode : r + (t.waitingNode ? ' at ' + t.waitingNode : ''));
+  if (t.waitingOn === 'agent') return 'Agent · ' + t.waitingNode + ((t.inFlight || []).length ? ' in flight' : ' · ' + r);
+  if (t.shipped && Object.keys(t.shipped).length) return 'Shipped';
+  return 'Done · ' + (t.next || '');
+}
+function prevHost(t) {
+  var hs = (t.hosts || []).filter(function (h) { return h !== t.host; });
+  return t.hosts && t.hosts.length > 1 && hs.length ? hs[hs.length - 1] : null;
+}
+function sep(p) { return p.indexOf('\\') >= 0 ? '\\' : '/'; }
+
+/* ------------------------------------------------------------------ render: top + rail */
+function renderTop() {
+  $('#project').textContent = PROJECT;
+  $('#host').textContent = location.host;
+  var n = data.inflight ? data.inflight.needsYou : 0;
+  $('#pill').hidden = !n; $('#pillCount').textContent = String(n);
+}
+function renderRail() {
+  var T = data.tickets || [];
+  $('#ticketCount').textContent = T.length + (T.length === 1 ? ' ticket' : ' tickets');
+  if (!T.length) { set('#rail', '<div class="k-empty" style="padding:24px 12px;text-align:center"><div class="k-empty__title">No tickets yet</div><span class="k-muted" style="font-size:12px">Start one with <span class="k-mono">/kaneki-flow</span> in Zed.</span></div>'); return; }
+  set('#rail', T.map(function (t) {
+    var fly = flyingNodes(t);
+    var seg = (t.strip || []).map(function (n) {
+      var s = nodeState(t, n, fly);
+      return '<i class="' + ({done: 'is-ok', run: 'is-run', attention: 'is-attention', fail: 'is-bad'}[s] || '') + '" title="' + esc(n.node + ': ' + n.status) + '"></i>';
+    }).join('');
+    var dot = ticketDot(t), w = who(t);
+    return '<button class="k-ticket' + (t.ticket === st.t ? ' is-selected' : '') + '" data-t="' + esc(t.ticket) + '" aria-current="' + (t.ticket === st.t) + '">' +
+      '<div class="k-ticket__head"><span class="k-dot k-dot--' + dot + '"></span>' + esc(t.ticket) +
+      '<span class="k-ticket__count">' + (t.error ? '!' : (t.settled + '/' + t.traceLength)) + '</span></div>' +
+      '<div class="k-ticket__title" title="' + esc(t.title || '') + '">' + esc(t.title || (t.kind ? t.kind + ' · ' + t.lane + ' lane' : '')) + '</div>' +
+      (seg ? '<div class="k-segments">' + seg + '</div>' : '') +
+      '<div class="k-ticket__who" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><span>' + (dot === 'attention' ? '<b>' + esc(w) + '</b>' : esc(w)) + '</span>' + host(t.host) + '</div></button>';
+  }).join(''));
 }
 
-function renderDetail(t) {
-  if (t.error) { $("detail").innerHTML = `<h2>${esc(t.ticket)}</h2><div class="warn">${esc(t.error)}</div>`; return; }
-  const rows = t.nodes.map((n, i) => {
-    const who = (n.boundary === "user" ? "you approve · " : "") + (n.executor === "controller" ? "inline" : `${n.unitsDone.length}/${n.units.length} units`);
-    const arts = n.artifacts.map(a => `<span class="chip ${a.exists ? "" : "missing"} ${preview && preview.name === a.name ? "on" : ""}" ${a.exists ? `data-name="${esc(a.name)}" data-path="${esc(a.path)}"` : ""}>${esc(a.name)}</span>`).join("");
-    return `<tr class="${n.node === t.nextPending ? "cur" : ""}">
-      <td class="num">${i + 1}</td>
-      <td><span class="dot" style="background:${COLORS[n.status]}"></span><span class="node">${esc(n.node)}</span>${n.generation > 1 ? ` <span class="badge">gen ${n.generation}</span>` : ""}
-        <div class="purpose">${esc(n.purpose)}</div></td>
-      <td>${esc(n.status)}${n.verdict || n.lastUnitVerdict ? `<div class="purpose">${esc(n.verdict || n.lastUnitVerdict)}</div>` : ""}</td>
-      <td class="hide-sm">${esc(who)}</td>
-      <td class="hide-sm">${esc(n.models.join(", ") || "—")}</td>
-      <td class="num hide-sm">${n.tokens || ""}</td>
-      <td>${arts || "—"}</td></tr>`;
-  }).join("");
-  const events = [...t.events].reverse().map(e => {
-    const bits = ["node", "unit", "verdict", "actor", "lane", "from"].filter(k => e[k]).map(k => `${k}=${esc(e[k])}`);
-    if (e.stale) bits.push("stale=" + esc(e.stale.join(",")));
-    const note = e.note || e.reason;
-    return `<li><time>${esc((e.at || "").slice(0, 19).replace("T", " "))}</time><b>${esc(e.event)}</b> ${bits.join(" ")}${note ? ` — ${esc(String(note).slice(0, 200))}` : ""}</li>`;
-  }).join("");
-  const repos = t.repositories.map(r => `<span class="chip" data-path="${esc(r.worktree || r.path)}">${esc(r.id)} · ${esc(r.worktree || r.path)}</span>`).join("");
-  $("detail").innerHTML = `
-    <h2>${esc(t.ticket)}</h2>
-    <div class="sub"><span class="badge ${esc(t.lane)}">${esc(t.lane)}</span> <span class="badge">${esc(t.kind)}</span>
-      · ${t.settled}/${t.traceLength} nodes · ${t.tokensTotal} tokens${t.reviewRound ? ` · review round ${t.reviewRound}` : ""}
-      · updated ${esc((t.updatedAt || "").slice(0, 19).replace("T", " "))}</div>
-    ${t.integrity ? `<div class="warn"><b>Integrity problem:</b> ${esc(t.integrity.join("; "))}</div>` : ""}
-    <div class="next"><b>Next:</b> ${esc(t.next)}</div>
-    <table><thead><tr><th>#</th><th>Node</th><th>Status</th><th class="hide-sm">Who</th><th class="hide-sm">Model</th><th class="hide-sm">Tokens</th><th>Artifacts</th></tr></thead><tbody>${rows}</tbody></table>
-    <section id="pv"></section>
-    <section><h3>Files</h3>
-      <span class="chip" data-path="${esc(t.ticketDir)}/STATUS.md">STATUS.md</span>
-      ${t.questions.exists ? `<span class="chip" data-name="questions.md" data-path="${esc(t.questions.path)}">questions.md</span>` : ""}
-      ${repos}</section>
-    <section><h3>Decisions</h3><ul class="events">${events || "<li>none yet</li>"}</ul></section>`;
-  renderPreview();
+/* ------------------------------------------------------------------ render: main */
+function eventLine(e, withTicket) {
+  var kind = e.event || '?';
+  var cls = 'is-accent';
+  if (kind === 'gate') cls = e.verdict === 'approved' ? 'is-ok' : 'is-bad';
+  else if (kind === 'invalidate' || /switch|reject|stop|escalat/.test(kind)) cls = 'is-bad';
+  var bits = [];
+  if (withTicket && e._t) bits.push(e._t);
+  if (e.node) bits.push(e.node);
+  if (e.unit) bits.push(e.unit);
+  if (e.verdict) bits.push(e.verdict);
+  if (e.model) bits.push(e.model);
+  if (e.host) bits.push('on ' + hostName(e.host));
+  if (e.from) bits.push(e.from + ' →');
+  if (e.actor) bits.push('by ' + e.actor);
+  if (e.generation > 1) bits.push('g' + e.generation);
+  if (e.tokens) bits.push(tokens(e.tokens) + ' tok');
+  if (e.stale && e.stale.length) bits.push('stale: ' + e.stale.join(', '));
+  var note = e.note || e.reason;
+  if (note) bits.push('— ' + String(note).slice(0, 200));
+  return '<div><span title="' + esc(e.at || '') + '">' + esc(when(e.at)) + '</span> <span class="' + cls + '">' + esc(kind) + '</span> <b>' + esc(bits.join(' · ')) + '</b></div>';
+}
+function latest(events, cap) { return (events || []).slice(-cap).reverse(); }
+
+function renderMain() {
+  var t = tk(), d = detail();
+  $$('#mainTabs .k-tab').forEach(function (b) { var on = b.dataset.v === st.view; b.classList.toggle('is-selected', on); b.setAttribute('aria-selected', String(on)); });
+  if (!t) {
+    set('#mainHead', '<h1 class="k-main__title">' + esc(data.tickets && data.tickets.length ? 'Pick a ticket' : 'No tickets yet') + '</h1>');
+    set('#mainView', '<div class="b-empty">' + (data.tickets && !data.tickets.length ? 'Tickets appear here as soon as <span class="k-mono">sdlc init</span> creates one.' : 'Pick a ticket on the left.') + '</div>');
+    $('#decCount').textContent = ''; return;
+  }
+  var prev = prevHost(t);
+  set('#mainHead', '<h1 class="k-main__title" title="' + esc(t.title || '') + '">' + esc(t.ticket) + (t.title ? ' · ' + esc(t.title) : '') + '</h1>' +
+    (t.lane ? '<span class="k-badge">' + esc(t.lane) + ' lane</span>' : '') + (t.kind ? '<span class="k-badge k-badge--outline">' + esc(t.kind) + '</span>' : '') +
+    host(t.host) + (prev ? '<span class="b-switch">' + ic('reopen', 1) + 'switched from ' + esc(hostName(prev)) + '</span>' : '') +
+    (t.reviewRound ? '<span class="k-badge k-badge--warn">review round ' + esc(t.reviewRound) + '</span>' : '') +
+    '<span class="k-spacer"></span><span class="k-muted" style="font-size:12px">' + tokens(t.tokensTotal) + ' tokens</span>' +
+    (t.ticketDir ? '<button class="k-btn k-btn--sm" data-open="' + esc(t.ticketDir + sep(t.ticketDir) + 'STATUS.md') + '">' + ic('zed', 1) + 'STATUS.md in Zed</button>' : ''));
+  $('#decCount').textContent = d ? String(Math.min(d.events.length, EVENTS_CAP)) : '';
+  if (t.error) { set('#mainView', '<div class="k-banner k-banner--bad">' + ic('alert') + '<div class="k-banner__text"><div class="k-banner__title">This ticket cannot be read</div><div class="k-banner__sub">' + esc(t.error) + '</div></div></div>'); return; }
+  if (!d) { set('#mainView', '<div class="b-empty">Loading ' + esc(t.ticket) + '…</div>'); return; }
+
+  if (st.view === 'decisions') {
+    var ev = latest(d.events, EVENTS_CAP);
+    set('#mainView', '<article class="k-card"><header class="k-card__head"><h4 class="k-card__title">Decision log · ' + esc(t.ticket) + '</h4><span class="k-spacer"></span><span class="k-muted" style="font-size:12px">latest ' + ev.length + ', newest first · hash-chained in <span class="k-mono">events.jsonl</span></span></header><div class="k-card__body">' +
+      (ev.length ? '<div class="k-log">' + ev.map(function (e) { return eventLine(e); }).join('') + '</div>' : '<span class="k-muted">No decisions yet.</span>') + '</div></article>');
+    return;
+  }
+  if (st.view === 'cost') {
+    var rows = d.nodes.filter(function (n) { return n.tokens || n.tokensAllGenerations; });
+    set('#mainView', '<div class="k-callout k-callout--info">' + ic('info', 1) + '<span>Measured cost (from the agents\' session logs, each API message counted once) arrives with <span class="k-mono">sdlc cost</span> in M3. Below are the tokens the agents <b>reported</b> with <span class="k-mono">sdlc record</span>: lower bounds.</span></div>' +
+      '<article class="k-card"><div class="k-card__body"><div class="k-table-wrap"><table class="k-table k-table--compact"><thead><tr><th>Node</th><th>Agents</th><th class="is-num">This generation</th><th class="is-num">All generations</th></tr></thead><tbody>' +
+      (rows.length ? rows.map(function (n) { return '<tr><td>' + esc(n.node) + (n.generation > 1 ? ' <span class="k-badge k-badge--outline">g' + n.generation + '</span>' : '') + '</td><td>' + (n.hosts || []).map(host).join(' ') + '</td><td class="is-num">' + tokens(n.tokens) + '</td><td class="is-num">' + tokens(n.tokensAllGenerations || n.tokens) + '</td></tr>'; }).join('')
+        : '<tr><td colspan="4" class="k-muted">Nothing recorded yet.</td></tr>') +
+      '</tbody><tfoot><tr><th>Total</th><th></th><th class="is-num">' + tokens(t.tokensTotal) + '</th><th></th></tr></tfoot></table></div></div></article>');
+    return;
+  }
+
+  var fly = flyingNodes(t);
+  var pipe = d.nodes.map(function (n, i) {
+    var s = nodeState(t, n, fly);
+    var cls = {done: 'k-node--done', run: 'k-node--run', attention: 'k-node--attention', stale: 'k-node--stale', fail: 'k-node--fail'}[s] || '';
+    var dot = s === 'done' ? ic('check') : s === 'run' ? '<span class="k-spinner" style="width:12px;height:12px"></span>' : s === 'attention' ? ic('gate') :
+      s === 'stale' ? ic('reopen') : s === 'fail' ? ic('x') : String(i + 1);
+    var gen = n.generation > 1 ? '<span class="k-node__gen">g' + n.generation + '</span>' : '';
+    var hs = (n.hosts || []).filter(function (h) { return h !== 'profile'; });
+    var prevDone = i && d.nodes[i - 1].status === 'done';
+    return (i ? '<span class="k-edge' + (prevDone ? ' k-edge--done' : '') + '"></span>' : '') +
+      '<button class="k-node ' + cls + (n.node === st.n ? ' is-selected' : '') + '" data-n="' + esc(n.node) + '" aria-pressed="' + (n.node === st.n) + '" title="' + esc(n.node + ' · ' + n.status + (n.boundary === 'user' ? ' · closes on your approval' : '')) + '"><span class="k-node__dot">' + dot + gen + '</span><span class="k-node__label">' + esc(n.node) +
+      (hs.length ? '<span class="b-node-host">' + esc(hs.map(hostName).join(' · ')) + '</span>' : '') + '</span></button>';
+  }).join('');
+  var loop = '';
+  if (d.loopBacks && d.loopBacks.length) {
+    var lb = d.loopBacks[d.loopBacks.length - 1];
+    loop = '<div class="k-loopnote">' + ic('reopen', 1) + '<b>' + esc((lb.byNode || 'a gate') + (lb.byGateVerdict ? ' ' + lb.byGateVerdict.toUpperCase().replace('-', ' ') : '') + ' → ' + lb.node + ' reopened · ' + when(lb.at)) + '</b>' +
+      (d.loopBacks.length > 1 ? '<span class="k-muted">' + d.loopBacks.length + ' loop-backs on this ticket · cap ' + esc(d.loopCap) + '</span>' : '') + '</div>';
+  }
+  var gate = '';
+  if (t.waitingOn === 'user') {
+    var nv = [data.node, data.gateNode].filter(function (x) { return x && x.ticket === t.ticket && x.node === t.waitingNode; })[0];
+    var gq = nv && nv.gateRequest ? nv.gateRequest.question : null;
+    gate = '<div class="k-banner k-banner--attention">' + ic('gate') + '<div class="k-banner__text"><div class="k-banner__title">' + esc((t.waitingNode ? t.waitingNode + ': ' : '') + (gq || 'waiting for you · ' + (REASON[t.waitingReason] || t.waitingReason))) + '</div>' +
+      '<div class="k-banner__sub">Answer it in the agent thread in Zed, or run <span class="k-mono">sdlc decide --ticket ' + esc(t.ticket) + '</span> from a Zed task.</div></div>' +
+      '<button class="k-btn k-btn--attention k-btn--sm" data-cont="' + esc(t.waitingNode || '') + '">' + ic('zed', 1) + 'Continue in Zed</button></div>';
+  }
+  var n = dnode(st.n) || d.nodes[0];
+  var card = '';
+  if (n) {
+    var facts = '<dl class="b-kv"><dt>Status</dt><dd>' + esc(n.status) + (n.verdict ? ' · ' + esc(n.verdict) : '') + (n.attempts > 1 ? ' · attempt ' + esc(n.attempts) : '') + '</dd>' +
+      '<dt>Closes</dt><dd>' + (n.boundary === 'user' ? 'on your approval' : 'by the controller') + (n.gates && n.gates.length ? ' · gates ' + esc(n.gates.join(', ')) : '') + '</dd>' +
+      '<dt>Runs as</dt><dd>' + (n.executor === 'controller' ? 'inline in the controller thread' : esc((n.units || []).length + ' subagent unit(s): ' + (n.units || []).join(', '))) + '</dd>' +
+      (n.node === d.nextPending ? '<dt>Next</dt><dd>' + esc(d.next) + '</dd>' : '') +
+      (n.missing && n.missing.length ? '<dt>Waits for</dt><dd>' + esc(n.missing.join(', ')) + '</dd>' : '') +
+      (n.loopBackTo ? '<dt>On FAIL</dt><dd>reopens ' + esc(n.loopBackTo) + '</dd>' : '') + '</dl>';
+    card = '<article class="k-card"><header class="k-card__head"><h4 class="k-card__title">' + esc(n.node) + '</h4>' + (n.generation ? '<span class="k-badge k-badge--outline">generation ' + esc(n.generation) + '</span>' : '') +
+      (n.hosts || []).filter(function (h) { return h !== 'profile'; }).map(host).join('') +
+      '<span class="k-spacer"></span><span class="k-muted" style="font-size:12px">Click any node · details on the right →</span></header><div class="k-card__body" style="display:grid;gap:12px"><p style="margin:0;color:var(--ink-2)">' + esc(n.purpose) + '</p>' + facts + '</div></article>';
+  }
+  if (d.integrity) gate = '<div class="k-banner k-banner--bad">' + ic('alert') + '<div class="k-banner__text"><div class="k-banner__title">Integrity problem</div><div class="k-banner__sub">' + esc(d.integrity.join('; ')) + '</div></div></div>' + gate;
+  set('#mainView', '<div class="k-pipeline" role="group" aria-label="Pipeline">' + pipe + '</div>' + loop + gate + card);
 }
 
-async function renderPreview() {
-  const el = $("pv"); if (!el) return;
-  if (!preview) { el.innerHTML = ""; return; }
-  const r = await fetch(`/api/file?id=${encodeURIComponent(selected)}&name=${encodeURIComponent(preview.name)}`, { cache: "no-store" });
-  const text = r.ok ? await r.text() : "(cannot read this file)";
-  el.innerHTML = `<div id="preview"><div class="bar"><span class="name">${esc(preview.name)}</span><span class="spacer"></span>
-    <button data-open="${esc(preview.path)}">Open in Editor</button><button data-close>Close</button></div><pre>${esc(text)}</pre></div>`;
+/* ------------------------------------------------------------------ render: inspector */
+function verdict(u) {
+  if (u.inFlight) return '<span class="b-running"><span class="k-spinner" style="width:11px;height:11px"></span>running</span>';
+  var v = u.verdict;
+  if (v === 'PASS' || v === 'APPROVED') return '<span class="k-verdict k-verdict--pass">' + ic('check-circle', 1) + esc(v) + '</span>';
+  if (v === 'FAIL' || v === 'NEEDS CHANGES') return '<span class="k-verdict k-verdict--fail">' + ic('x-circle', 1) + esc(v) + '</span>';
+  if (u.status) return '<span class="k-verdict k-verdict--pending">' + ic('clock', 1) + esc(v || ('recorded' + (u.status !== 'ok' ? ' · ' + u.status : ''))) + '</span>';
+  return '<span class="k-muted">not run</span>';
 }
-
-document.addEventListener("click", e => {
-  const open = e.target.closest("[data-open]");
-  if (open) { openInEditor(open.dataset.open); return; }
-  if (e.target.closest("[data-close]")) { preview = null; renderPreview(); document.querySelectorAll(".chip.on").forEach(c => c.classList.remove("on")); return; }
-  const chip = e.target.closest(".chip[data-path]");
-  if (!chip) return;
-  if (chip.dataset.name && !e.altKey) {
-    preview = { name: chip.dataset.name, path: chip.dataset.path };
-    document.querySelectorAll(".chip.on").forEach(c => c.classList.remove("on")); chip.classList.add("on");
-    renderPreview();
-  } else openInEditor(chip.dataset.path);
-});
-
-window.addEventListener("hashchange", () => { selected = decodeURIComponent(location.hash.slice(2)) || null; preview = null; lastDetail = ""; lastList = ""; tick(); });
-
-async function tick() {
-  try {
-    const list = await getJSON("/api/tickets");
-    const ls = JSON.stringify(list) + selected;
-    if (ls !== lastList) { lastList = ls; renderList(list); }
-    if (selected) {
-      const d = await getJSON(`/api/ticket?id=${encodeURIComponent(selected)}`);
-      const ds = JSON.stringify(d);
-      if (ds !== lastDetail) { lastDetail = ds; renderDetail(d); }
+function artRow(name, path, exists, meta) {
+  return '<div class="b-art' + (exists ? '' : ' is-missing') + '">' + ic('file', 1) + '<span class="k-mono" title="' + esc(path) + '">' + esc(name) + '</span>' +
+    '<button class="k-btn k-btn--sm" data-open="' + esc(path) + '"' + (exists ? '' : ' disabled title="Not written yet"') + '>' + ic('zed', 1) + 'Open in Zed</button>' +
+    (meta ? '<span class="b-art__meta">' + esc(meta) + '</span>' : '') + '</div>';
+}
+function baseName(p) { return String(p || '').split(/[\\/]/).pop(); }
+function txSessions() {
+  var tx = data.tx && data.tx.ticket === st.t && data.tx._node === st.n ? data.tx : null;
+  if (!tx) return null;
+  var nd = (tx.nodes || {})[st.n] || {units: [], controller: []};
+  var all = [];
+  (nd.controller || []).forEach(function (s) { all.push({kind: 'ctl', s: s}); });
+  (nd.units || []).forEach(function (s) { all.push({kind: 'unit', s: s}); });
+  all.forEach(function (x) { x.id = (x.s.agent || '') + ':' + (x.s.sessionId || x.s.source); });
+  return all;
+}
+function sessTitle(x) {
+  var s = x.s;
+  if (x.kind === 'ctl') return 'Controller thread' + (s.title ? ' · ' + s.title : '');
+  return (s.unit || 'unit') + (s.round > 1 ? ' · round ' + s.round : '') + (s.generation ? ' · g' + s.generation : '');
+}
+function renderInspector() {
+  var t = tk(), d = detail(), nv = nodeView();
+  $$('#insTabs .k-tab').forEach(function (b) { var on = b.dataset.t === st.itab; b.classList.toggle('is-selected', on); b.setAttribute('aria-selected', String(on)); });
+  if (!t || !st.n) { set('#insHead', ic('pipeline') + '<b>No node selected</b>'); set('#insBody', '<span class="k-muted">Pick a ticket and a node.</span>'); return; }
+  var dn = dnode(st.n);
+  set('#insHead', ic('pipeline') + '<b>' + esc(st.n) + '</b>' + (dn && dn.generation ? '<span class="k-badge k-badge--outline">g' + esc(dn.generation) + '</span>' : '') + '<span class="k-spacer"></span><span class="k-muted" style="font-size:12px">' + esc(t.ticket) + '</span>');
+  var sess = txSessions();
+  $('#txCount').textContent = sess ? String(sess.length) : '';
+  $('#evCount').textContent = nv ? String(Math.min(nv.events.length, EVENTS_CAP)) : '';
+  var body = '';
+  if (st.itab === 'overview') {
+    if (!nv) body = '<span class="k-muted">Loading…</span>';
+    else {
+      body += '<div class="b-section"><h5>Units</h5>' + (nv.units.length ? '<div class="k-table-wrap"><table class="k-table k-table--compact"><thead><tr><th>Unit</th><th>Tier · model · agent</th><th>Verdict</th><th class="is-num">Tokens</th></tr></thead><tbody>' +
+        nv.units.map(function (u) {
+          var model = u.recordedModel || u.model, h = u.recordedHost || (u.inFlight && u.inFlight.host) || u.host;
+          return '<tr><td>' + esc(u.unit) + (u.rounds > 1 ? '<div class="k-muted" style="font-size:11px">' + u.rounds + ' rounds</div>' : '') + '</td><td><span class="k-tier k-tier--' + esc(u.tier) + '">' + esc(u.tier) + ' <span class="k-tier__model">· ' + esc(model) + '</span></span>' +
+            (u.escalated ? '<div class="k-muted" style="font-size:11px">escalated from ' + esc(u.escalated.from) + '</div>' : '') + '<div style="margin-top:3px">' + host(h) + '</div></td><td>' + verdict(u) + '</td><td class="is-num">' + (u.tokens ? tokens(u.tokens) : '—') + '</td></tr>';
+        }).join('') + '</tbody></table></div>' : '<span class="k-muted" style="font-size:13px">Runs inline in the controller thread (no subagent units).</span>') + '</div>';
+      var arts = nv.artifacts.map(function (a) { return artRow(a.name, a.path, a.exists, a.exists ? '' : 'not written yet'); });
+      nv.units.forEach(function (u) { if (u.result) arts.push(artRow(baseName(u.result), u.result, u.resultExists, 'result · ' + u.unit)); });
+      (nv.inFlight || []).forEach(function (f) { arts.push(artRow(baseName(f.packetPath), f.packetPath, true, 'packet in flight · ' + f.unit + ' · ' + f.model)); });
+      body += '<div class="b-section"><h5>Artifacts</h5>' + (arts.length ? arts.join('') : '<span class="k-muted" style="font-size:13px">None yet.</span>') + '</div>';
+      body += '<div class="b-section"><h5>Zed</h5><div class="b-actions"><button class="k-btn k-btn--primary k-btn--sm" data-cont="' + esc(st.n) + '">' + ic('zed', 1) + 'Continue in Zed</button>' +
+        '<button class="k-btn k-btn--sm" disabled title="Zed has no link to an existing thread yet">' + ic('external', 1) + 'Open this thread</button></div>' +
+        '<span class="b-note">"Open this thread" lights up when Zed ships thread links. Until then, read the thread here under Transcripts.</span></div>';
     }
-    $("live").classList.remove("off");
-    $("meta").textContent = "live · " + new Date().toLocaleTimeString();
-  } catch (err) {
-    $("live").classList.add("off");
-    $("meta").textContent = "board server not reachable";
+  } else if (st.itab === 'transcripts') {
+    if (data.txErr) body = '<div class="k-callout k-callout--bad" style="font-size:12px">' + esc(data.txErr) + '</div>';
+    else if (!sess) body = '<span class="k-muted">Reading session logs…</span>';
+    else if (!sess.length) body = '<span class="k-muted">No sessions found for ' + esc(st.n) + '.</span><div class="k-callout k-callout--info" style="margin-top:14px;font-size:12px">Sessions are matched from each agent\'s own log on this machine (packet path, or the controller\'s <span class="k-mono">sdlc … --node</span> calls). Antigravity transcripts are best-effort.</div>';
+    else {
+      var x = st.tx ? sess.filter(function (y) { return y.id === st.tx; })[0] : null;
+      if (!x) {
+        body = '<div class="b-section"><h5>Sessions that worked on ' + esc(st.n) + '</h5>' + sess.map(function (x) {
+          var s = x.s, exact = s.match === 'exact';
+          return '<button class="b-sess" data-tx="' + esc(x.id) + '"><span class="b-sess__top">' + ic(x.kind === 'ctl' ? 'agent' : 'layers', 1) + '<span class="b-t">' + esc(sessTitle(x)) + '</span>' +
+            (s.running ? '<span class="b-running"><span class="k-spinner" style="width:10px;height:10px"></span>live</span>' : '') +
+            '<span class="k-spacer"></span><span class="b-match' + (exact ? '' : ' b-match--heur') + '">' + (exact ? 'exact' : 'heuristic') + '</span></span>' +
+            '<span class="b-sess__sub">' + esc(hostName(s.agent)) + (x.kind === 'unit' ? ' · subagent' : ' · thread') + ' · ' + esc(s.stepCount != null ? s.stepCount : (s.steps || []).length) + ' steps · ' + esc(when(s.updatedAt)) + '</span>' +
+            (s.matchedBy ? '<span class="b-sess__sub">Matched by ' + esc(s.matchedBy) + '</span>' : '') + '</button>';
+        }).join('') + '</div><div class="k-callout k-callout--info" style="margin-top:14px;font-size:12px">Read-only, from each agent\'s own session log on this machine. Nothing leaves 127.0.0.1.</div>';
+      } else {
+        var s = x.s, exact = s.match === 'exact', steps = s.steps || [];
+        body = '<button class="b-back" data-back="1">' + ic('chevron-right', 1) + 'All sessions</button>' +
+          '<div style="display:flex;align-items:center;gap:8px;margin:8px 0 2px;flex-wrap:wrap"><b>' + esc(sessTitle(x)) + '</b>' + host(s.agent) + '<span class="b-match' + (exact ? '' : ' b-match--heur') + '">' + esc(exact ? 'exact' : 'heuristic') + '</span></div>' +
+          (s.matchedBy ? '<div class="b-note">Matched by ' + esc(s.matchedBy) + '</div>' : '') +
+          '<div class="b-src">' + esc(s.source) + '</div>' +
+          (s.truncated ? '<div class="b-note" style="margin-top:6px">' + esc(s.truncated) + ' earlier steps not shown (first step + the most recent).</div>' : '') +
+          '<div class="b-tx" style="margin-top:12px">' + steps.map(function (m) {
+            if (m.role === 'tool' && m.tool) {
+              var inp = m.tool.input, head = typeof inp === 'string' ? inp : (inp && (inp.command || inp.file_path || inp.path || inp.pattern || inp.description || inp.prompt)) || JSON.stringify(inp || {});
+              return '<details class="b-tool"><summary>' + ic('terminal', 1) + '<b>' + esc(m.tool.name) + '</b><span class="b-cmd">' + esc(String(head).slice(0, 400)) + '</span></summary><pre>' +
+                esc((typeof inp === 'string' ? '' : JSON.stringify(inp, null, 2) + '\n─────\n') + (m.tool.output == null ? '' : m.tool.output)) + '</pre></details>';
+            }
+            var whoS = m.role === 'user' ? (x.kind === 'ctl' ? 'You' : 'Controller → unit') : m.role === 'agent' ? hostName(s.agent) : m.role;
+            return '<div class="b-msg b-msg--' + esc(m.role) + '"><span class="b-msg__who">' + esc(whoS) + ' <span style="font-weight:400;text-transform:none">' + esc(when(m.at)) + '</span></span><div class="b-msg__text">' + esc(m.text) + '</div></div>';
+          }).join('') + (s.running ? '<span class="b-running"><span class="k-spinner" style="width:11px;height:11px"></span>still running · updates as the log grows</span>' : '') + '</div>' +
+          (x.kind === 'ctl' ? '<div class="b-actions" style="margin-top:14px"><button class="k-btn k-btn--sm k-btn--primary" data-cont="' + esc(st.n) + '">' + ic('zed', 1) + 'Continue in Zed</button></div>' : '');
+      }
+    }
+  } else {
+    if (!nv) body = '<span class="k-muted">Loading…</span>';
+    else {
+      var ev = latest(nv.events, EVENTS_CAP);
+      body = ev.length ? '<div class="k-log">' + ev.map(function (e) { return eventLine(e); }).join('') + '</div>' + (nv.events.length > EVENTS_CAP ? '<div class="b-note" style="margin-top:8px">Showing the latest ' + EVENTS_CAP + ' of ' + nv.events.length + '.</div>' : '')
+        : '<span class="k-muted">No events recorded for this node yet.</span>';
+    }
+  }
+  var el = $('#insBody'), top = el.scrollTop;
+  var openDetails = $$('details.b-tool', el).map(function (x) { return x.open; });
+  if (set('#insBody', body)) {
+    $$('details.b-tool', el).forEach(function (x, i) { if (openDetails[i]) x.open = true; });
+    el.scrollTop = top;
   }
 }
-tick();
-setInterval(tick, 2500);
+
+/* ------------------------------------------------------------------ render: dock */
+function renderDock() {
+  var f = data.inflight || {units: [], tickets: []};
+  var rows = f.units.map(function (u) {
+    return {dot: 'run', t: u.ticket, n: u.node, what: '<span class="k-mono">' + esc(u.node) + '</span> · ' + esc(u.unit) + ' · ' + esc(u.model) + (u.host ? ' · ' + esc(hostName(u.host)) : ''), age: u.ageSeconds, title: u.packetPath};
+  });
+  f.tickets.forEach(function (t) {
+    if (t.waitingOn === 'user') rows.push({dot: 'attention', t: t.ticket, n: t.waitingNode, what: '<span class="k-mono">' + esc(t.waitingNode) + '</span> · waiting on you (' + esc(REASON[t.waitingReason] || t.waitingReason) + ')', age: sinceIso(t.lastEventAt)});
+    if (t.lock) rows.push({dot: 'idle', t: t.ticket, n: t.waitingNode, what: ic('lock', 1) + ' locked by <span class="k-mono">' + esc(t.lock.command || '?') + '</span>' + (t.lock.pid ? ' · pid ' + esc(t.lock.pid) : ''), age: sinceIso(t.lock.since)});
+  });
+  $('#flightCount').textContent = String(f.units.length);
+  set('#flight', rows.length ? rows.map(function (r) {
+    return '<button class="b-flight" data-t="' + esc(r.t) + '" data-n="' + esc(r.n || '') + '"' + (r.title ? ' title="' + esc(r.title) + '"' : '') + '><span class="k-dot k-dot--' + r.dot + '"></span><b>' + esc(r.t) + '</b><span class="b-what">' + r.what + '</span><span class="k-muted" style="font-size:12px">' + esc(age(r.age)) + '</span></button>';
+  }).join('') : '<div class="k-muted" style="padding:8px 10px;font-size:13px">Nothing in flight.</div>');
+  var all = [];
+  Object.keys(data.logs).forEach(function (id) { (data.logs[id].events || []).forEach(function (e) { all.push(Object.assign({_t: id}, e)); }); });
+  all.sort(function (a, b) { return (a.at || '') < (b.at || '') ? -1 : (a.at || '') > (b.at || '') ? 1 : 0; });
+  set('#log', all.length ? latest(all, EVENTS_CAP).map(function (e) { return eventLine(e, true); }).join('') : '<span class="k-muted">No decisions yet.</span>');
+}
+
+function renderAll() { renderTop(); renderRail(); renderMain(); renderInspector(); renderDock(); }
+
+/* ------------------------------------------------------------------ polling */
+var timer = null, busy = false;
+function setLive(ok, msg) {
+  var el = $('#live'); el.classList.toggle('b-offline', !ok);
+  $('#liveText').textContent = ok ? 'live · ' + new Date().toLocaleTimeString() : msg;
+}
+function pickDefaults() {
+  var T = data.tickets || [];
+  if (!T.length) { st.t = null; st.n = null; return; }
+  if (!tk()) { st.t = T[0].ticket; st.n = null; }
+  var t = tk();
+  var names = (t.strip || []).map(function (s) { return s.node; });
+  if (!st.n || names.indexOf(st.n) < 0) { if (names.length) st.n = defaultNode(t); }
+}
+function refreshLogs() {
+  // the dock's decision log: every ticket's latest events, re-read only when that ticket's last event changed
+  var T = data.tickets || [], jobs = [];
+  T.forEach(function (t) {
+    var have = data.logs[t.ticket];
+    if (t.error) return;
+    if (have && have.key === t.lastEventAt) return;
+    jobs.push(getJSON('/api/ticket?id=' + encodeURIComponent(t.ticket)).then(function (j) {
+      data.logs[t.ticket] = {key: t.lastEventAt, events: j.events || []};
+    }).catch(function () {}));
+  });
+  Object.keys(data.logs).forEach(function (id) { if (!T.some(function (t) { return t.ticket === id; })) delete data.logs[id]; });
+  return Promise.all(jobs);
+}
+function refreshSelected() {
+  if (!st.t) { data.detail = null; data.node = null; data.tx = null; return Promise.resolve(); }
+  var t = st.t, n = st.n, jobs = [];
+  jobs.push(getJSON('/api/ticket-detail?id=' + encodeURIComponent(t) + '&events=' + EVENTS_CAP).then(function (j) { data.detail = j; }));
+  if (n) jobs.push(getJSON('/api/node?id=' + encodeURIComponent(t) + '&node=' + encodeURIComponent(n)).then(function (j) { data.node = j; }));
+  var tt = tk();
+  if (tt && tt.waitingOn === 'user' && tt.waitingNode && tt.waitingNode !== n && st.view === 'pipeline') {
+    // the gate banner shows the waiting node's question even while another node is selected
+    jobs.push(getJSON('/api/node?id=' + encodeURIComponent(t) + '&node=' + encodeURIComponent(tt.waitingNode)).then(function (j) { data.gateNode = j; }));
+  }
+  if (n && st.itab === 'transcripts') jobs.push(getJSON('/api/transcripts?id=' + encodeURIComponent(t) + '&node=' + encodeURIComponent(n)).then(function (j) {
+    j._node = n; data.tx = j; data.txErr = null; }, function (e) { data.txErr = 'Cannot read session logs: ' + e.message; }));
+  return Promise.all(jobs);
+}
+function tick() {
+  if (busy) return Promise.resolve();
+  busy = true;
+  return Promise.all([getJSON('/api/tickets'), getJSON('/api/inflight')]).then(function (r) {
+    data.tickets = r[0].tickets; data.editor = r[0].editor; data.inflight = r[1];
+    pickDefaults(); syncUrl();
+    return Promise.all([refreshSelected(), refreshLogs()]);
+  }).then(function () { setLive(true); renderAll(); }, function (e) { setLive(false, 'board server not reachable'); renderAll(); void e; })
+    .then(function () { busy = false; });
+}
+function schedule() { clearTimeout(timer); timer = setTimeout(function () { tick().then(schedule); }, POLL_MS); }
+function select(t, n) {
+  var changedTicket = t !== st.t;
+  st.t = t; st.n = n || null; st.tx = null;
+  if (changedTicket) { data.detail = null; st.view = 'pipeline'; }
+  data.node = null; data.tx = null; data.txErr = null;
+  pickDefaults(); syncUrl(); renderAll();
+  refreshSelected().then(renderAll, renderAll);
+}
+
+/* ------------------------------------------------------------------ Zed hand-offs */
+function copyText(text) {
+  if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
+  return new Promise(function (ok, bad) {
+    var ta = document.createElement('textarea'); ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy') ? ok() : bad(new Error('copy refused')); } catch (e) { bad(e); } finally { ta.remove(); }
+  });
+}
+function openInZed(path, line) {
+  if (!data.editor) {
+    copyText(path).then(function () { toast('No editor CLI found', 'Path copied. Install Zed\'s <span class="k-mono">zed</span> CLI or set <span class="k-mono">SDLC_EDITOR</span>.', 'attention'); });
+    return;
+  }
+  var body = {path: path}; if (line) body.line = line;
+  post('/api/open', body).then(function (j) { toast('Opened in Zed', '<span class="k-mono" style="font-size:11px;overflow-wrap:anywhere">' + esc(j.opened) + '</span>'); },
+    function (e) { toast('Could not open', esc(e.message), 'bad'); });
+}
+function promptFor(agent, t, n) {
+  return agent === 'claude' ? '/kaneki-flow ' + t + ' --node ' + n : 'Use the kaneki-flow skill for ' + t + ' and continue at node ' + n + '.';
+}
+function quoteArg(a) { return /[\s"]/.test(a) ? '"' + a.replace(/"/g, '\\"') + '"' : a; }
+function contCmd() {
+  var p = $('#contPrompt').value;
+  var lines = ['<span class="t-dim">clipboard</span> ← ' + esc(p)];
+  if (st.how === 'url') lines.push('<span class="t-dim">open</span> zed://agent');
+  else lines.push(WORKSPACE.focus ? esc(WORKSPACE.focus.map(quoteArg).join(' ')) : '<span class="t-dim"># no editor CLI found: install Zed\'s zed CLI or set SDLC_EDITOR</span>');
+  $('#contCmd').innerHTML = lines.join('\n');
+  $('#contGo').textContent = st.how === 'url' ? 'Copy and open Agent Panel' : 'Copy and focus Zed';
+}
+function syncPickers() {
+  $$('#agentPick button').forEach(function (b) { var on = b.dataset.a === st.agent; b.classList.toggle('is-selected', on); b.setAttribute('aria-checked', String(on)); });
+  $$('#contHow .k-choice').forEach(function (l) { var on = l.dataset.h === st.how; l.classList.toggle('is-selected', on); l.querySelector('input').checked = on; });
+}
+var lastFocus = null;
+function openCont(node) {
+  var t = tk(); if (!t) return;
+  st.contNode = node || st.n;
+  st.agent = 'claude';  // the default; the ticket's own agent is preselected when it is one of the three
+  if (t.host === 'codex' || t.host === 'antigravity') st.agent = t.host;
+  st.how = 'copy';
+  syncPickers();
+  $('#contSub').textContent = t.ticket + ' · ' + st.contNode + ' · resumes at nextPending' + (t.host ? ' · last agent: ' + hostName(t.host) : '');
+  $('#contPrompt').value = promptFor(st.agent, t.ticket, st.contNode); contCmd();
+  lastFocus = document.activeElement;
+  $('#cont').hidden = false;
+  $('#agentPick .is-selected').focus();
+}
+function closeCont() { if ($('#cont').hidden) return; $('#cont').hidden = true; if (lastFocus && lastFocus.focus) lastFocus.focus(); }
+$$('#agentPick button').forEach(function (b) { b.onclick = function () {
+  st.agent = b.dataset.a; syncPickers(); $('#contPrompt').value = promptFor(st.agent, st.t, st.contNode); contCmd(); }; });
+$$('#contHow .k-choice').forEach(function (l) { l.querySelector('input').onchange = function () {
+  if (l.classList.contains('is-disabled')) return; st.how = l.dataset.h; syncPickers(); contCmd(); }; });
+$('#contPrompt').oninput = contCmd;
+$('#contGo').onclick = function () {
+  var p = $('#contPrompt').value, agent = hostName(st.agent), how = st.how;
+  copyText(p).then(function () {
+    closeCont();
+    if (how === 'url') {
+      window.location.href = 'zed://agent';
+      toast('Prompt copied · Agent Panel opening', 'Start a new <b>' + esc(agent) + '</b> thread and paste.');
+      return;
+    }
+    post('/api/focus', {}).then(function () { toast('Prompt copied · Zed in front', 'In the Agent Panel, start a new <b>' + esc(agent) + '</b> thread and paste.'); },
+      function (e) { toast('Prompt copied', 'Could not bring Zed to the front: ' + esc(e.message), 'attention'); });
+  }, function (e) { toast('Could not copy the prompt', esc(e.message) + ' — select it in the dialog and copy it by hand.', 'bad'); });
+};
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape') closeCont();
+  if (e.key === 'Tab' && !$('#cont').hidden) {   // keep focus inside the dialog
+    var f = $$('#cont button:not([disabled]), #cont textarea, #cont input:not([disabled])').filter(function (x) { return x.offsetParent !== null; });
+    if (!f.length) return;
+    var first = f[0], last = f[f.length - 1];
+    if (e.shiftKey && document.activeElement === first) { last.focus(); e.preventDefault(); }
+    else if (!e.shiftKey && document.activeElement === last) { first.focus(); e.preventDefault(); }
+  }
+});
+$('#cont').addEventListener('click', function (e) { if (e.target.id === 'cont' || e.target.closest('[data-close]')) closeCont(); });
+
+/* ------------------------------------------------------------------ events (delegated) */
+document.addEventListener('click', function (e) {
+  var el;
+  if ((el = e.target.closest('[data-open]')) && !el.disabled) { openInZed(el.dataset.open, el.dataset.line); return; }
+  if ((el = e.target.closest('[data-cont]'))) { openCont(el.dataset.cont || st.n); return; }
+  if ((el = e.target.closest('#rail .k-ticket'))) { if (el.dataset.t !== st.t) select(el.dataset.t, null); return; }
+  if ((el = e.target.closest('#mainView .k-node'))) { st.n = el.dataset.n; st.tx = null; data.node = null; data.tx = null; syncUrl(); renderAll(); refreshSelected().then(renderAll, renderAll); return; }
+  if ((el = e.target.closest('.b-flight'))) { select(el.dataset.t, el.dataset.n || null); return; }
+  if ((el = e.target.closest('[data-tx]'))) { st.tx = el.dataset.tx; syncUrl(); renderInspector(); $('#insBody').scrollTop = 0; return; }
+  if (e.target.closest('[data-back]')) { st.tx = null; syncUrl(); renderInspector(); return; }
+});
+$$('#insTabs .k-tab').forEach(function (b) { b.onclick = function () {
+  st.itab = b.dataset.t; st.tx = null; syncUrl(); renderInspector();
+  if (st.itab === 'transcripts') refreshSelected().then(renderAll, renderAll); }; });
+$$('#mainTabs .k-tab').forEach(function (b) { b.onclick = function () { st.view = b.dataset.v; syncUrl(); renderMain(); }; });
+$('#pill').onclick = function () {
+  var w = (data.inflight && data.inflight.tickets || []).filter(function (t) { return t.waitingOn === 'user'; })[0];
+  if (w) select(w.ticket, w.waitingNode);
+};
+
+/* ------------------------------------------------------------------ theme */
+function storedTheme() { try { return localStorage.getItem('kaneki-board-theme'); } catch (e) { return null; } }
+function setTheme(t, save) {
+  document.documentElement.setAttribute('data-theme', t);
+  $$('#theme button').forEach(function (b) { var on = b.dataset.t === t; b.classList.toggle('is-selected', on); b.setAttribute('aria-pressed', String(on)); });
+  if (save) { try { localStorage.setItem('kaneki-board-theme', t); } catch (e) { /* private window: not remembered */ } }
+}
+$$('#theme button').forEach(function (b) { b.onclick = function () { setTheme(b.dataset.t, true); }; });
+var dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+setTheme(q.get('theme') || storedTheme() || (dark ? 'dark' : 'light'), false);
+
+/* ------------------------------------------------------------------ start */
+renderAll();
+tick().then(function () { if (q.get('open') === 'continue' && tk()) openCont(st.n); schedule(); });
+})();
 </script>
 </body>
 </html>
