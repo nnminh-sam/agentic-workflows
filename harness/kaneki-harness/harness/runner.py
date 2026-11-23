@@ -54,11 +54,16 @@ DEFAULTS: dict[str, Any] = {
     "retries": 1,               # restarts of a node after a failure / orphan before the ticket parks
     "backoffMinutes": 60,       # usage-limit back-off when the error names no retry time
     "leaseStaleSeconds": 900,   # a lease whose heartbeat is older than this has a dead runner
-    "claudeArgs": [],           # extra `claude --bg` arguments, e.g. ["--permission-mode", "acceptEdits"]
+    "claudeArgs": None,         # extra `claude --bg` arguments; None (unset) = DEFAULT_CLAUDE_ARGS, [] = none
     "codexTier": "routine",     # tier of the host binding a Codex controller session runs on
     "notifyCommand": None,      # argv with {title} {message} {ticket} {kind}; [] disables; None = notify-hook
     "notifyHook": None,         # notify.py path (default ~/.claude/hooks/notify-hook/notify.py when present)
 }
+
+# Unattended Claude sessions use the auto permission mode unless runner.local.json sets `claudeArgs` (even `[]`):
+# a permission prompt in a background session nobody watches would only park the ticket. The kaneki guard hook and
+# the worktree git hooks still block history changes (commit, push, reset --hard, branch -D, ...) in this mode.
+DEFAULT_CLAUDE_ARGS = ["--permission-mode", "auto"]
 
 CLAUDE_PROMPT = (
     "Use the kaneki-flow skill for ticket {ticket}. Run exactly one node: {node}. "
@@ -346,7 +351,8 @@ class ClaudeCLI:
                               errors="replace", timeout=timeout, stdin=subprocess.DEVNULL, **kw)
 
     def start(self, name: str, prompt: str, cwd: Path, env: dict[str, str]) -> tuple[str | None, str]:
-        extra = [str(a) for a in (self.cfg.get("claudeArgs") or [])]
+        configured = self.cfg.get("claudeArgs")
+        extra = [str(a) for a in (DEFAULT_CLAUDE_ARGS if configured is None else configured)]
         proc = self._run(["--bg", "-n", name, *extra, prompt], timeout=120, cwd=str(cwd), env=env)
         text = (proc.stdout or "") + "\n" + (proc.stderr or "")
         sid = None

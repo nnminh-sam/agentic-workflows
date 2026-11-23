@@ -127,6 +127,12 @@ sdlc unpark --ticket ISSUE-123                   # let the runner continue a tic
 - Settings live in `.sdlc/runner.local.json`: `maxConcurrent` (1), `pollSeconds` (15), `nodeTimeoutMinutes` (180),
   `retries` (1), `backoffMinutes` (60), `claudeArgs`, `codexTier`, `notifyCommand` (argv with `{title}`
   `{message}` `{ticket}` `{kind}`; `[]` turns it off), `notifyHook`.
+- Claude sessions start with `--permission-mode auto` unless `.sdlc/runner.local.json` sets `claudeArgs`. In auto
+  mode Claude decides on its own which tool calls need no confirmation, so a background session nobody watches does
+  not stop at a permission prompt (that would only park the ticket). The kaneki guard hook and the worktree git hooks
+  still block history changes (commit, push, rebase, `reset --hard`, `branch -D`, ...) in this mode; only
+  `kaneki-ship` commits, after your approval. To change it, set `claudeArgs`, for example
+  `["--permission-mode", "acceptEdits"]`; `[]` passes nothing extra, so your own Claude settings decide.
 - Run state per ticket: `run/lease.json` (separate from the 10-minute command lock) and `run/<runId>.jsonl`.
 
 ## Workspace layout

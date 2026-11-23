@@ -135,6 +135,24 @@ class RunTests(RunnerBase):
         log = runner.run_dir(self.tdir(t)) / f"{start[0]['runId']}.jsonl"
         self.assertEqual([json.loads(l)["kind"] for l in log.read_text(encoding="utf-8").splitlines()][-1], "end")
 
+    def test_claude_permission_mode_defaults_to_auto_and_claude_args_replace_it(self) -> None:
+        t = "R-PERM"
+        self.lite_ticket(t)
+        code, res = run("run", "--ticket", t, "--host", "claude", *self.p)
+        self.assertEqual((code, res["result"]), (0, "done"))
+        argv = self.bg_calls()[-1]["argv"]
+        i = argv.index("--permission-mode")
+        self.assertEqual(argv[i + 1], "auto")
+        self.config({"claudeArgs": ["--permission-mode", "acceptEdits"]})
+        run("run", "--ticket", t, "--host", "claude", *self.p)
+        argv = self.bg_calls()[-1]["argv"]
+        self.assertEqual(argv[argv.index("--permission-mode") + 1], "acceptEdits")
+        self.assertNotIn("auto", argv)
+        self.config({"claudeArgs": []})
+        run("run", "--ticket", t, "--host", "claude", *self.p)
+        self.assertNotIn("--permission-mode", self.bg_calls()[-1]["argv"])
+        self.assertEqual(len(self.bg_calls()), 3)
+
     def test_continues_to_the_next_node(self) -> None:
         t = "R-TWO"
         self.lite_ticket(t)
