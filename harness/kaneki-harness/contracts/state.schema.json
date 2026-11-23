@@ -113,6 +113,14 @@
         "lane": {
           "type": "string",
           "description": "Lane picked at init (`full` when absent: tickets created before lanes existed)."
+        },
+        "reflect": {
+          "enum": [
+            "always",
+            "on-signal",
+            "off"
+          ],
+          "description": "learning.reflect of the profile in force (refreshed on every load; on-signal when absent)."
         }
       }
     },

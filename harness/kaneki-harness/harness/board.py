@@ -203,6 +203,14 @@ DECIDE_HINT = " (or run `sdlc decide`)"
 
 
 def next_hint(s: Any, node: str | None) -> str:
+    from .state import settled
+    hint = _next_hint(s, node)
+    if node == "reflect" and settled(s.state, "deliverable-ready") and not s.state.get("shipped"):
+        hint += " — ship does not wait for it (/kaneki-ship)"
+    return hint
+
+
+def _next_hint(s: Any, node: str | None) -> str:
     if node is None:
         return "done: ship with /kaneki-ship" if not s.state.get("shipped") else "shipped"
     spec = s.spec(node)

@@ -103,7 +103,7 @@ def _load_extensions(home: Path, profile: dict[str, Any], profile_dir: Path) -> 
 
 
 def when_matches(cond: dict[str, Any] | None, ctx: dict[str, Any]) -> bool:
-    """Every key must match. A list value means any-of. Keys: kind, family, surface, stack, reviewRound."""
+    """Every key must match. A list value means any-of. Keys: kind, family, surface, stack, reviewRound, reflect."""
     if not cond:
         return True
     for key, want in cond.items():
@@ -118,6 +118,8 @@ def when_matches(cond: dict[str, Any] | None, ctx: dict[str, Any]) -> bool:
             ok = bool(set(wants) & {r["stack"] for r in ctx.get("repositories", [])})
         elif key == "reviewRound":
             ok = (ctx.get("reviewRound", 0) > 0) == bool(want)
+        elif key == "reflect":  # learning.reflect: off drops the reflect node (always / on-signal keep it)
+            ok = ((ctx.get("reflect") or "on-signal") != "off") == bool(want)
         else:
             raise HarnessError(f"unknown 'when' key: {key}")
         if not ok:

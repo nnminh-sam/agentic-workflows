@@ -175,6 +175,12 @@ def validate_profile(p: dict[str, Any]) -> None:
             errors.append(f"locale.{key} is unknown (keys: {', '.join(LOCALE_KEYS)})")
         elif not isinstance(val, str) or not LANG_RE.match(val):
             errors.append(f"locale.{key} must be a language tag such as en, vi, ja, pt-BR")
+    learning = p.get("learning")
+    if learning is not None:
+        if not isinstance(learning, dict):
+            errors.append("learning must be an object")
+        elif learning.get("reflect", "on-signal") not in ("always", "on-signal", "off"):
+            errors.append("learning.reflect must be one of always, on-signal, off")
     node_overrides = p.get("nodeOverrides")
     if node_overrides is not None:
         if not isinstance(node_overrides, dict):
@@ -198,7 +204,7 @@ def validate_profile(p: dict[str, Any]) -> None:
                                 errors.append(f"nodeOverrides.{node_id}.units.{uid}.tier must be one of {', '.join(ALL_TIERS)}")
     known = {"schemaVersion", "meta", "project", "locale", "paths", "models", "tracker", "repositories", "rulepacks",
              "testcase", "evidence", "delivery", "families", "gates", "environment", "git", "contextWindow",
-             "nodeOverrides"}
+             "nodeOverrides", "learning"}
     extra = sorted(k for k in p if k not in known and not k.startswith("_"))
     if extra:
         errors.append(f"unknown top-level keys {extra}")
@@ -292,6 +298,7 @@ def build_context(profile: dict[str, Any], ticket: str, kind: str, repos: list[s
         "kind": kind,
         "maturity": "new",
         "reviewRound": 0,
+        "reflect": (profile.get("learning") or {}).get("reflect") or "on-signal",
         "families": fams,
         "surfaces": surfaces,
         "repositories": [{"id": r, "stack": by_id[r]["stack"], "path": _abs(by_id[r]["path"], profile),

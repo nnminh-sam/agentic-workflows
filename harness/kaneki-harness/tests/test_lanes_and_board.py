@@ -19,7 +19,7 @@ from harness import graph as G  # noqa: E402
 from harness import web, zed  # noqa: E402
 from harness.profile import build_context, load_profile  # noqa: E402
 
-LITE = ["scope", "change", "check", "delivery-drafts", "deliverable-ready"]
+LITE = ["scope", "change", "check", "delivery-drafts", "deliverable-ready", "reflect"]
 
 
 class LiteLaneTests(Base):
@@ -69,6 +69,9 @@ class LiteLaneTests(Base):
         self.complete(t, "delivery-drafts")
         self.complete(t, "deliverable-ready", actor="user")
         code, st = run("status", "--ticket", t, "--compact", *self.p)
+        self.assertEqual((st["lane"], st["nextPending"]), ("lite", "reflect"))  # the check loop-back is a signal
+        self.complete(t, "reflect")
+        code, st = run("status", "--ticket", t, "--compact", *self.p)
         self.assertEqual((st["lane"], st["nextPending"]), ("lite", None))
 
         status_md = (self.tdir(t) / "STATUS.md").read_text(encoding="utf-8")
@@ -77,7 +80,7 @@ class LiteLaneTests(Base):
         code, res = run("tickets", *self.p)
         self.assertEqual([x["ticket"] for x in res["tickets"]], [t])
         code, res = run("status-of", "--path", str(self.tdir(t) / "scope.md"), *self.p)
-        self.assertEqual((res["ticket"], res["settled"]), (t, 5))
+        self.assertEqual((res["ticket"], res["settled"]), (t, 6))
 
     def test_escalate_lite_to_full(self) -> None:
         t = "CSS-2"

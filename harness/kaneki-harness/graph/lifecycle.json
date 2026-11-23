@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "graphId": "sdlc-lifecycle@1",
-  "description": "Generic ticket lifecycle. Layers 1-2 (analysis, implementation) port wms-flow almost 1:1; layers 3-4 keep only the generic delivery and after-PR nodes. Project specifics come from the project profile and adapters, never from this file. Each node's `checks` names the sections and parsers its gate verifies on the live text of each artifact. `lanes` picks a shorter trace for small changes: a lane with its own `order` replaces the main order; nodes in its `inline` list are done by the controller itself (no subagent). Tiers: `light` (optional profile model, falls back to routine) codes from the approved plan and does intake and drafts; `routine` analyses, writes and reviews test cases, does the technical review and the evidence; `deep` diagnoses, plans and does the semantic review, which runs only after the technical review passed.",
+  "description": "Generic ticket lifecycle. Layers 1-2 (analysis, implementation) port wms-flow almost 1:1; layers 3-4 keep only the generic delivery and after-PR nodes. Project specifics come from the project profile and adapters, never from this file. Each node's `checks` names the sections and parsers its gate verifies on the live text of each artifact. `lanes` picks a shorter trace for small changes: a lane with its own `order` replaces the main order; nodes in its `inline` list are done by the controller itself (no subagent). Tiers: `light` (optional profile model, falls back to routine) codes from the approved plan and does intake and drafts; `routine` analyses, writes and reviews test cases, does the technical review and the evidence; `deep` diagnoses, plans and does the semantic review, which runs only after the technical review passed. The `learning` layer's reflect node closes the trace: it requires `release-ready` (and `review-reply` in a review round, a token no node produces in a first delivery), so ship never depends on it.",
   "layers": [
     {
       "id": "analysis",
@@ -18,6 +18,10 @@
     {
       "id": "after-pr",
       "label": "After PR · review-fix (reuses the main graph through reopen)"
+    },
+    {
+      "id": "learning",
+      "label": "Learning · reflect on what went wrong and propose lessons (never blocks ship)"
     }
   ],
   "order": [
@@ -39,7 +43,8 @@
     "deliverable-ready",
     "read-review",
     "triage-review",
-    "respond-review"
+    "respond-review",
+    "reflect"
   ],
   "lanes": {
     "full": {
@@ -55,7 +60,8 @@
         "deliverable-ready",
         "read-review",
         "triage-review",
-        "respond-review"
+        "respond-review",
+        "reflect"
       ],
       "inline": [
         "delivery-drafts",
@@ -814,6 +820,49 @@
           ],
           "parsers": [
             "verdict"
+          ]
+        }
+      }
+    },
+    "reflect": {
+      "layer": "learning",
+      "when": {
+        "reflect": true
+      },
+      "purpose": "Read the ticket's signals (loop-backs, invalidations, escalations, gate firings, answered HIGH questions, accepted PR findings) and write a cited reflection plus proposals (lessons, rules, profile or harness changes). Proposals change nothing until the user approves them (D10). Ship never waits for this node. With learning.reflect on-signal (default) and no new signal, the driver closes it without a unit.",
+      "requires": [
+        "release-ready",
+        "review-reply"
+      ],
+      "produces": [
+        "reflection"
+      ],
+      "mutability": "artifacts",
+      "units": [
+        {
+          "id": "worker",
+          "role": "worker",
+          "tier": "routine"
+        }
+      ],
+      "boundary": "controller",
+      "gates": [],
+      "artifacts": [
+        "reflection.md",
+        "proposals.json"
+      ],
+      "card": "references/nodes/reflect.md",
+      "checks": {
+        "reflection.md": {
+          "sections": [
+            "## Signals",
+            "## Causes",
+            "## Proposals"
+          ]
+        },
+        "proposals.json": {
+          "parsers": [
+            "proposals"
           ]
         }
       }

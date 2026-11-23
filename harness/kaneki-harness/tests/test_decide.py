@@ -124,9 +124,11 @@ class DecideTests(Base):
                          "gate --ticket D-OK --node deliverable-ready --status approved --actor user --note"):
             self.assertIn(expected, text)
         self.assertEqual((res["node"], res["verdict"]), ("deliverable-ready", "approved"))
-        gate = [e for e in self.events(t) if e["event"] == "gate"][-1]
-        self.assertEqual((gate["actor"], gate["node"], gate["verdict"], gate["note"]),
+        gates = [e for e in self.events(t) if e["event"] == "gate"]
+        self.assertEqual((gates[-2]["actor"], gates[-2]["node"], gates[-2]["verdict"], gates[-2]["note"]),
                          ("user", "deliverable-ready", "approved", "looks good"))
+        # nothing went wrong: the driver closed reflect right after (learning.reflect on-signal)
+        self.assertEqual((gates[-1]["actor"], gates[-1]["node"], gates[-1].get("auto")), ("controller", "reflect", True))
         self.assertIn("deliverable-ready", (self.tdir(t) / "STATUS.md").read_text(encoding="utf-8"))
 
     def test_reopen_rejects_then_invalidates(self) -> None:
@@ -138,7 +140,7 @@ class DecideTests(Base):
         code, text, res = self.decide("--ticket", t, answers=[pick, "", "commit message too long", "y"])
         self.assertEqual(code, 0, text)
         self.assertIn("This choice needs a note", text)
-        self.assertEqual(res["stale"], ["delivery-drafts", "deliverable-ready"])
+        self.assertEqual(res["stale"], ["delivery-drafts", "deliverable-ready", "reflect"])
         gate = [e for e in self.events(t) if e["event"] == "gate"][-1]
         self.assertEqual((gate["actor"], gate["verdict"]), ("user", "rejected"))
         inv = [e for e in self.events(t) if e["event"] == "invalidate"][-1]
