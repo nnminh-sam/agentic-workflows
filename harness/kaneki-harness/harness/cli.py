@@ -483,6 +483,8 @@ def build_packet(s: Session, node: str, unit_id: str, facts_arg: str | None = No
     result_path = s.ticket.dir / "results" / f"{dispatch}.md"
     adapters = _adapters_for(node, spec, resolve_adapters(HOME, s.pdir, s.profile, s.ctx))
     inputs = packet_inputs(s, node, pdir / f"{dispatch}.inputs")
+    from . import learn as LS
+    lessons = LS.packet_lessons(s, node, facts, rules, pdir / f"{dispatch}.lessons.json")
     signals_path = None
     if node == L.REFLECT:  # the unit reflects on exactly what `sdlc reflect-signals` reported, pinned by digest
         signals_path = pdir / f"{dispatch}.signals.json"
@@ -517,6 +519,7 @@ def build_packet(s: Session, node: str, unit_id: str, facts_arg: str | None = No
         f"- `{s.ticket.dir}` only: write `reflection.md` and `proposals.json` there and nothing anywhere else. "
         "Proposals change nothing until the user approves them.",
         "findingsToFix": _bullets(facts.get("findingsToFix")),
+        "lessons": lessons["text"],
         "languages": _languages_block(s, node),
         "git": _git_block(s, exe["host"]),
     }
@@ -543,6 +546,10 @@ def build_packet(s: Session, node: str, unit_id: str, facts_arg: str | None = No
             res["budgetWarning"] = warn
     if signals_path is not None:
         res["signals"] = str(signals_path)
+    if lessons["lessons"] or lessons["learnedRules"]:
+        res.update({k: lessons[k] for k in ("lessons", "learnedRules", "lessonsDigest")})
+    if lessons["warning"]:
+        res["lessonsWarning"] = lessons["warning"]
     if estimate > window // 4:
         res["contextWarning"] = (f"the packet and its inputs are ~{estimate:,} tokens, over a quarter of the {window:,}-token "
                                  f"window assumed for {tier}; trim the inputs or split the unit before dispatching")
@@ -722,6 +729,11 @@ def record_unit(s: Session, node: str, unit_id: str, result_path: Path, model: s
         entry["plannedModel"] = exe["model"]
     if mismatch:
         entry["modelMismatch"] = True
+    from . import learn as LS
+    round_no = 1 + sum(1 for u in rec["units"] if u["unit"] == unit_id and u["generation"] == rec["generation"])
+    # the lesson ids and learned rules this round's packet handed over (build_packet's sidecar), so the retro can
+    # measure their effect from the ticket's own log
+    entry.update(LS.unit_lessons(s.ticket.dir / "packets" / f"{node}.g{rec['generation']}.{unit_id}.r{round_no}.lessons.json"))
     previous = _last_recorded_unit(s)
     rec["units"].append(entry)
     rec["status"] = "in_progress" if rec["status"] in ("pending", "stale") else rec["status"]
@@ -1462,6 +1474,47 @@ def cmd_reflect_signals(args: argparse.Namespace) -> None:
     out(s.signals())
 
 
+def _learn_session(args: argparse.Namespace) -> Session:
+    return Session(argparse.Namespace(profile=args.profile, ticket=args.ticket, host=getattr(args, "host", None)))
+
+
+def cmd_learn(args: argparse.Namespace) -> int | None:
+    """`sdlc learn`: review reflect proposals (people only, D10), the workspace learning store, retro (harness/learn.py)."""
+    from . import learn as LS
+    ppath = profile_path(args)
+    pdir = ppath.parent
+    act = args.learn_cmd
+    if act == "list":
+        prof = load_profile(ppath)
+        out(LS.list_learning(pdir, ticket_root(prof, pdir), args.ticket, args.status))
+    elif act == "apply":
+        out(LS.apply(_learn_session(args), args.id, args.actor, args.note, args.phase, args.severity))
+        _refresh_status(args)
+    elif act == "reject":
+        out(LS.reject(_learn_session(args), args.id, args.actor, args.reason))
+        _refresh_status(args)
+    elif act == "revert":
+        out(LS.revert(pdir, args.id, args.actor, args.reason))
+    elif act == "verify":
+        if args.accept_current:
+            out(LS.accept_current(pdir, args.reason))
+        else:
+            store = LS.Store(pdir)
+            problems = store.problems()
+            out({"ok": not problems, "store": str(store.dir), "problems": problems or None})
+    elif act == "retro":
+        prof = load_profile(ppath)
+        out(LS.retro(pdir, ticket_root(prof, pdir), prof, G.load_graph(HOME, prof, pdir), args.since))
+    elif act == "review":
+        prof = load_profile(ppath)
+
+        def rows() -> list[dict[str, Any]]:
+            return LS.list_learning(pdir, ticket_root(prof, pdir), args.ticket, "proposed")["proposals"]
+
+        return LS.review(args, rows, main)
+    return None
+
+
 def cmd_cost(args: argparse.Namespace) -> None:
     """Measured usage and USD from the agents' own logs (harness/cost.py). Read-only for tickets; caches under the
     user config dir. One JSON line with --json, else a short table."""
@@ -1791,6 +1844,43 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--actor", default="controller", choices=["controller", "user"])
     x.set_defaults(fn=cmd_budget)
 
+    x = sub.add_parser("learn", help="review reflect proposals (people only), lessons, learned rules, retro")
+    lsub = x.add_subparsers(dest="learn_cmd", required=True)
+    y = lsub.add_parser("list", parents=[common], help="proposals of every ticket joined with the learning log, and lessons")
+    y.add_argument("--ticket")
+    y.add_argument("--status", default="proposed", choices=["proposed", "applied", "rejected", "all"])
+    y.set_defaults(fn=cmd_learn)
+    y = lsub.add_parser("apply", parents=[ticketed], help="apply one proposal (people only: --actor user)")
+    y.add_argument("--id", required=True, help="proposal id in the ticket's proposals.json")
+    y.add_argument("--actor", required=True, help="must be `user`: a person approved it (D10)")
+    y.add_argument("--note")
+    y.add_argument("--phase", choices=list(R.PHASES), help="rule proposals: the review phase (default: from scope nodes)")
+    y.add_argument("--severity", default="medium", choices=["critical", "high", "medium", "low"],
+                   help="rule proposals: severity of the learned rule (default medium, non-blocking)")
+    y.set_defaults(fn=cmd_learn)
+    y = lsub.add_parser("reject", parents=[ticketed], help="reject one proposal (people only: --actor user)")
+    y.add_argument("--id", required=True)
+    y.add_argument("--actor", required=True)
+    y.add_argument("--reason", required=True)
+    y.set_defaults(fn=cmd_learn)
+    y = lsub.add_parser("revert", parents=[common], help="retire a lesson (and remove its learned rule); --actor user")
+    y.add_argument("--id", required=True, help="lesson id (<ticket>-<proposal id>)")
+    y.add_argument("--actor", required=True)
+    y.add_argument("--reason", required=True)
+    y.set_defaults(fn=cmd_learn)
+    y = lsub.add_parser("review", parents=[common],
+                        help="walk pending proposals at a terminal: apply / reject / skip (TTY only)")
+    y.add_argument("--ticket")
+    y.set_defaults(fn=cmd_learn)
+    y = lsub.add_parser("retro", parents=[common],
+                        help="read-only effect report of active lessons and learned rules (never retires anything)")
+    y.add_argument("--since", help="only tickets started on or after this day (YYYY-MM-DD)")
+    y.set_defaults(fn=cmd_learn)
+    y = lsub.add_parser("verify", parents=[common], help="check the learning store; --accept-current after a hand edit")
+    y.add_argument("--accept-current", action="store_true")
+    y.add_argument("--reason")
+    y.set_defaults(fn=cmd_learn)
+
     x = sub.add_parser("contract", help="the data contract version the desktop app checks (read-only, no profile)")
     x.set_defaults(fn=cmd_contract)
 
@@ -1799,7 +1889,7 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--open", action="store_true", help="open it in the browser")
     x.set_defaults(fn=cmd_web)
 
-    x = sub.add_parser("zed-setup", help="add kaneki tasks (board, tickets, status, decide) to <target>/.zed/tasks.json")
+    x = sub.add_parser("zed-setup", help="add kaneki tasks (board, tickets, status, decide, review learning) to <target>/.zed/tasks.json")
     x.add_argument("--target", required=True, help="the folder you open in Zed (the workspace with sdlc.profile.json)")
     x.add_argument("--dry-run", action="store_true")
     x.set_defaults(fn=cmd_zed_setup)
@@ -1868,6 +1958,7 @@ def build_parser() -> argparse.ArgumentParser:
 READ_ONLY = {"status", "plan", "validate", "digest", "host", "onboard-scan", "onboard-verify", "onboard-write", "install",
              "tickets", "status-of", "web", "zed-setup", "contract", "ticket-detail", "gate-request",
              "transcripts", "cost", "budget", "reflect-signals",
+             "learn",  # the workspace learning store has its own lock; apply/reject refresh STATUS.md themselves
              "decide"}  # decide takes the lock only for the gate it runs (through main), never while it waits for you
 NO_STATUS_REFRESH = READ_ONLY | {"git"}
 # Commands that take the ticket lock themselves, only around each write: a run lasts as long as its node, and the

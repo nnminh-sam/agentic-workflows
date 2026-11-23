@@ -43,4 +43,6 @@ or paths outside `scope.paths` (files in the ticket folder are allowed as eviden
 write plain prose and keep paths inside the scope you declare.
 
 Boundary **controller**: the controller closes it. Approving proposals is a separate step for the user
-(`sdlc learn`, next track).
+(`sdlc learn review`, or `sdlc learn apply|reject --actor user`): an applied `lesson` reaches the packets of its scope
+nodes, a `rule` joins the learned rulepack, a `profile` proposal becomes a suggestion file only, and a `harness`
+proposal is never applied (it goes to the harness owner).

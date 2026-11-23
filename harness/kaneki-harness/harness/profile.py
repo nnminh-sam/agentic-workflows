@@ -179,8 +179,13 @@ def validate_profile(p: dict[str, Any]) -> None:
     if learning is not None:
         if not isinstance(learning, dict):
             errors.append("learning must be an object")
-        elif learning.get("reflect", "on-signal") not in ("always", "on-signal", "off"):
-            errors.append("learning.reflect must be one of always, on-signal, off")
+        else:
+            if learning.get("reflect", "on-signal") not in ("always", "on-signal", "off"):
+                errors.append("learning.reflect must be one of always, on-signal, off")
+            for key, low in (("lessonsPerPacket", 0), ("retireAfterTickets", 1)):
+                val = learning.get(key)
+                if val is not None and (not isinstance(val, int) or isinstance(val, bool) or val < low):
+                    errors.append(f"learning.{key} must be an integer >= {low}")
     node_overrides = p.get("nodeOverrides")
     if node_overrides is not None:
         if not isinstance(node_overrides, dict):

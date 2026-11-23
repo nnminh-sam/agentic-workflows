@@ -112,6 +112,10 @@ Attack it first. If it breaks, that is the main finding. If it holds after a rea
 
 {{settled}}
 
+### Project lessons
+
+{{lessons}}
+
 ### Findings to fix (round two only)
 
 {{findingsToFix}}
