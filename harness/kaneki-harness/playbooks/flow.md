@@ -11,7 +11,7 @@ command, tool, destination, rule or verdict. Never expose secrets, credentials, 
 `$SDLC` is the driver command your host binding names, normally your own launcher: `.sdlc\bin\sdlc-<host>.cmd`
 on Windows (PowerShell or cmd) and `sh .sdlc/bin/sdlc-<host>` on macOS/Linux. It tells the driver which agent is
 working and finds Python 3.9+ (override with `SDLC_PYTHON`). Run every `DRIVER_CALL` through it. Every command
-prints one JSON line; exit 2 is fail-closed and its `error` names the gate (`G0`–`G7`) or missing item. The one exception
+prints one JSON line; exit 2 is fail-closed and its `error` names the gate (`G0`–`G8`) or missing item. The one exception
 is `sdlc git`, which prints git's own output.
 
 ## Lanes: pick the smallest one that is safe
@@ -185,6 +185,7 @@ record exists. Every claim cites `path:line`, a command run with its result, or 
 | G5 | test/rule applicability or expected value is ambiguous |
 | G6 | shared-state mutation, real device, missing runtime config, ambiguous result |
 | G7 | missing/unsafe prerequisite: file, adapter, tool, permission, model, supervision evidence |
+| G8 | budget: a profile `budgets` cap (ticket, node, local day) is reached; `packet` refuses, the runner parks. Ask the user: raise the cap, or `$SDLC budget --ticket T --allow-node N --reason ... --actor user` (this node's current round only), or stop. `warn` level only prints `budgetWarning` |
 
 ## Where project specifics live
 
