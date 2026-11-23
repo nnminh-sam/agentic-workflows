@@ -1,6 +1,7 @@
 # Kaneki desktop app: design plan
 
-Status: **draft for design** · 2026-11-17 · owner: nnminh-sam
+Status: **shelved** (2026-11-23) · superseded by [`../zed-workspace/plan.md`](../zed-workspace/plan.md): Zed as the
+working app, a local web board for status. Kept for reference. · Originally: draft for design · 2026-11-17 · owner: nnminh-sam
 Mockup: [`../mock/desktop-ui.html`](../mock/desktop-ui.html) (commit `686a5c7`, branch `feat/learning-kit`)
 
 ## 1. Goal
