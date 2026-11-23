@@ -4,6 +4,12 @@
 - `POST /api/open` opens a file in the editor (default `zed`; override with SDLC_EDITOR), optionally at a `line` and
   `column`. It needs the per-run token embedded in the page, and only opens files under the ticket root or a profile
   repository.
+- `POST /api/focus` brings the editor to the front on the workspace (the profile's folder): `zed <workspace>` focuses
+  the Zed window that has it open, or opens one. Same token; the body is ignored, so it can open nothing else. The
+  board's "Continue in Zed" copies the node prompt to the clipboard and calls it.
+- The page (`web_page.html`) is self-contained: at request time the three design-system files
+  (`app/design-system/{tokens.css,components.css,icons.js}` under the harness home, an allowlist) are inlined in place
+  of their `/*__DS:<name>__*/` markers, so the board works offline with no CDN and no static-file route.
 - Read-only JSON (additive to contract version 1): `/api/tickets`, `/api/ticket`, `/api/ticket-detail` (the
   `sdlc ticket-detail` summary), `/api/node` (board.node_view), `/api/transcripts` (sessions.transcripts, cached per
   ticket by a stat-only fingerprint of the logs it reads) and `/api/inflight` (board.inflight_report). A ticket id must
@@ -14,6 +20,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import secrets
 import shlex
 import shutil
@@ -35,6 +42,9 @@ TX_TTL_SECONDS = 300      # a cached transcripts answer is re-read at least this
 TX_CACHE_ENTRIES = 64     # (ticket, node, maxSteps) answers kept; the oldest goes first
 MAX_STEPS_LIMIT = 1000
 PAGE = Path(__file__).with_name("web_page.html")
+DESIGN_SYSTEM = Path(__file__).resolve().parent.parent / "app" / "design-system"
+DS_FILES = ("tokens.css", "components.css", "icons.js")  # the only files the page may inline
+_PLACEHOLDER = re.compile(r"__TOKEN__|__PROJECT__|__WORKSPACE__|/\*__DS:([A-Za-z0-9_.-]+)__\*/")
 
 
 def editor_command() -> list[str] | None:
@@ -60,6 +70,37 @@ def editor_flags(cmd: list[str]) -> list[str]:
     return ["-e"] if Path(cmd[0]).stem.lower() in ("zed", "zeditor") else []
 
 
+def _script_json(value: Any) -> str:
+    """JSON safe to place inside a <script> element (no `</script>` break-out)."""
+    return json.dumps(value).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
+
+
+def design_system_file(name: str) -> str:
+    """The text of one allowlisted design-system file, for inlining into the page; a comment when it is missing,
+    unknown, outside the design-system folder, or would end the element it is inlined into."""
+    if name not in DS_FILES:
+        return f"/* {name}: not a design-system file */"
+    path = (DESIGN_SYSTEM / name).resolve()
+    if path.parent != DESIGN_SYSTEM.resolve() or not path.is_file():
+        return f"/* {name}: missing from the harness home */"
+    text = path.read_text(encoding="utf-8")
+    if re.search(r"</(style|script)", text, re.I):
+        return f"/* {name}: refused (contains a closing tag) */"
+    return text
+
+
+def render_page(token: str, project: str, workspace: dict[str, Any]) -> str:
+    """web_page.html with its placeholders filled in ONE pass, so no inserted text is scanned for placeholders again:
+    `__TOKEN__` (the per-run token), `__PROJECT__` and `__WORKSPACE__` (JSON), `/*__DS:<name>__*/` (a design-system
+    file, inlined)."""
+    def fill(m: re.Match[str]) -> str:
+        if m.group(1):
+            return design_system_file(m.group(1))
+        return {"__TOKEN__": token, "__PROJECT__": _script_json(project),
+                "__WORKSPACE__": _script_json(workspace)}[m.group(0)]
+    return _PLACEHOLDER.sub(fill, PAGE.read_text(encoding="utf-8"))
+
+
 def _int(raw: Any, default: int, low: int, high: int) -> int:
     """A query / body integer within [low, high]; None or "" gives `default`; anything else raises ValueError."""
     if raw is None or raw == "":
@@ -81,6 +122,7 @@ class Board:
         self.root = ticket_root(prof, profile.parent).resolve()
         self.allowed = [self.root] + [Path(_abs(r["path"], prof)).resolve() for r in prof["repositories"]]
         self.project = prof["project"].get("name") or prof["project"]["id"]
+        self.workspace = profile.parent.resolve()  # where `.zed/` and the agents' project folders live
         self.token = secrets.token_urlsafe(16)
         self._tx_cache: dict[tuple[str, str | None, int], tuple[str, float, dict[str, Any]]] = {}
         self._tx_lock = threading.Lock()
@@ -133,6 +175,15 @@ class Board:
             raise HarnessError("only files under the ticket root or a profile repository can be opened")
         return path
 
+    def focus_argv(self) -> list[str] | None:
+        """The command `POST /api/focus` runs: the editor CLI with the workspace folder and nothing else (no `-e`, so
+        Zed focuses the window that already has the workspace open instead of adding it to the front window)."""
+        cmd = editor_command()
+        return [*cmd, str(self.workspace)] if cmd else None
+
+    def page_info(self) -> dict[str, Any]:
+        return {"path": str(self.workspace), "focus": self.focus_argv()}
+
 
 def make_handler(b: Board):
     class Handler(BaseHTTPRequestHandler):
@@ -155,8 +206,7 @@ def make_handler(b: Board):
             q = {k: v[0] for k, v in parse_qs(url.query).items()}
             try:
                 if url.path == "/":
-                    html = PAGE.read_text(encoding="utf-8")
-                    html = html.replace("__TOKEN__", b.token).replace("__PROJECT__", json.dumps(b.project))
+                    html = render_page(b.token, b.project, b.page_info())
                     self._send(200, html.encode("utf-8"), "text/html; charset=utf-8")
                 elif url.path == "/api/tickets":
                     self._json({"contractVersion": CONTRACT_VERSION, "project": b.project, "editor": bool(editor_command()),
@@ -186,11 +236,21 @@ def make_handler(b: Board):
                 self._json({"error": str(exc)}, 400)
 
         def do_POST(self) -> None:  # noqa: N802
-            if urlparse(self.path).path != "/api/open":
+            route = urlparse(self.path).path
+            if route not in ("/api/open", "/api/focus"):
                 self._json({"error": "not found"}, 404)
                 return
-            if self.headers.get("X-Kaneki-Token") != b.token:
+            if not secrets.compare_digest(self.headers.get("X-Kaneki-Token") or "", b.token):
                 self._json({"error": "bad token"}, 403)
+                return
+            if route == "/api/focus":
+                self.rfile.read(_int(self.headers.get("Content-Length"), 0, 0, 1 << 16))  # ignored: nothing to choose
+                argv = b.focus_argv()
+                if not argv:
+                    self._json({"error": "no editor CLI found: install Zed's `zed` CLI or set SDLC_EDITOR"}, 400)
+                    return
+                subprocess.Popen(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                self._json({"ok": True, "focused": str(b.workspace), "argv": argv})
                 return
             try:
                 body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
