@@ -3,7 +3,7 @@
 Status: **agreed design, not built** · 2026-11-23 · owner: nnminh-sam
 Diagram: [`../zed-acp-any-agent.html`](../zed-acp-any-agent.html) (spec `../zed-acp-any-agent.flow.json`)
 Board mock: [`../../app/design-system/board-zed-mock.html`](../../app/design-system/board-zed-mock.html)
-Supersedes: the desktop app plan in [`../desktop-app/plan.md`](../desktop-app/plan.md) (shelved, see D1)
+Supersedes: the desktop app plan (docs/desktop-app, app/doc/build-plan), removed on 2026-11-23 (see D1)
 
 ## 1. Goal
 
