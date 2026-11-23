@@ -1,0 +1,1323 @@
+<!doctype html>
+<html lang="en" data-haise="doc" data-haise-version="3.1.1">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kaneki product layer: idea to MVP</title>
+<script>
+/* haise: apply the saved theme before first paint (no flash) */
+(function(){try{var t=localStorage.getItem('haise.theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
+<style id="haise-shell-css">
+/* ===== haise-doc shell v3.1.1 — do not edit per document ===== */
+:root{
+  --bg:#f7f7f5; --panel:#ffffff; --panel-2:#f0efeb; --ink:#1d1d1b; --muted:#6b6a66; --line:#e2e0da;
+  --accent:#3b5bdb; --accent-soft:#e9edff; --ok:#2b8a3e; --ok-soft:#e7f5ea;
+  --bad:#c92a2a; --bad-soft:#ffebeb; --warn:#d9480f; --warn-soft:#fff0e6;
+  --info:#7048e8; --info-soft:#f0ebff;
+  --code:#f3f2ee; --hit:#ffe58a; --hit-cur:#ffb84d;
+  --c1:#3b5bdb; --c2:#d9480f; --c3:#2b8a3e; --c4:#7048e8; --c5:#0c8599;
+  --p1:#3b5bdb; --p1-soft:#e9edff; --p2:#0c8599; --p2-soft:#e3f6f8; --p3:#7048e8; --p3-soft:#f0ebff;
+  --p4:#d9480f; --p4-soft:#fff0e6; --p5:#2b8a3e; --p5-soft:#e7f5ea; --p6:#c2255c; --p6-soft:#fdebf1;
+  --sans:system-ui,-apple-system,"Segoe UI","Hiragino Sans","Noto Sans JP",Roboto,"Noto Sans",sans-serif;
+  --mono:ui-monospace,"Cascadia Code","JetBrains Mono",Consolas,Menlo,monospace;
+  --radius:10px; --topbar-h:52px; --nav-w:280px;
+  --fig-label:"Figure"; --tbl-label:"Table";
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#141413; --panel:#1d1d1b; --panel-2:#262624; --ink:#ecebe6; --muted:#a3a29c; --line:#34342f;
+    --accent:#91a7ff; --accent-soft:#1f2547; --ok:#69db7c; --ok-soft:#1b2e20;
+    --bad:#ff8787; --bad-soft:#3a1c1c; --warn:#ffa94d; --warn-soft:#3a2412;
+    --info:#b197fc; --info-soft:#271f45;
+    --code:#232321; --hit:#6b5a12; --hit-cur:#a8671a;
+    --c1:#91a7ff; --c2:#ffa94d; --c3:#69db7c; --c4:#b197fc; --c5:#66d9e8;
+    --p1:#91a7ff; --p1-soft:#1f2547; --p2:#66d9e8; --p2-soft:#10303a; --p3:#b197fc; --p3-soft:#271f45;
+    --p4:#ffa94d; --p4-soft:#3a2412; --p5:#69db7c; --p5-soft:#1b2e20; --p6:#f783ac; --p6-soft:#3a1825;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#141413; --panel:#1d1d1b; --panel-2:#262624; --ink:#ecebe6; --muted:#a3a29c; --line:#34342f;
+  --accent:#91a7ff; --accent-soft:#1f2547; --ok:#69db7c; --ok-soft:#1b2e20;
+  --bad:#ff8787; --bad-soft:#3a1c1c; --warn:#ffa94d; --warn-soft:#3a2412;
+  --info:#b197fc; --info-soft:#271f45;
+  --code:#232321; --hit:#6b5a12; --hit-cur:#a8671a;
+  --c1:#91a7ff; --c2:#ffa94d; --c3:#69db7c; --c4:#b197fc; --c5:#66d9e8;
+  --p1:#91a7ff; --p1-soft:#1f2547; --p2:#66d9e8; --p2-soft:#10303a; --p3:#b197fc; --p3-soft:#271f45;
+  --p4:#ffa94d; --p4-soft:#3a2412; --p5:#69db7c; --p5-soft:#1b2e20; --p6:#f783ac; --p6-soft:#3a1825;
+}
+:root:lang(vi){ --fig-label:"Hình"; --tbl-label:"Bảng"; }
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.65 var(--sans)}
+a{color:var(--accent)}
+[id]{scroll-margin-top:calc(var(--topbar-h) + 14px)}
+/* phase / series colour sets: add .p1 … .p6 to a step, chip, card or callout */
+.p1{--pc:var(--p1);--ps:var(--p1-soft)} .p2{--pc:var(--p2);--ps:var(--p2-soft)} .p3{--pc:var(--p3);--ps:var(--p3-soft)}
+.p4{--pc:var(--p4);--ps:var(--p4-soft)} .p5{--pc:var(--p5);--ps:var(--p5-soft)} .p6{--pc:var(--p6);--ps:var(--p6-soft)}
+
+/* --- progress + top bar --- */
+.progress{position:fixed;top:0;left:0;height:3px;width:0;background:var(--accent);z-index:60}
+.topbar{position:sticky;top:0;z-index:50;height:var(--topbar-h);display:flex;align-items:center;gap:8px;
+  padding:0 12px;background:var(--panel);border-bottom:1px solid var(--line)}
+.topbar .doc-title{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1 1 auto}
+.iconbtn{flex:none;display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:8px;
+  border:1px solid var(--line);background:var(--panel-2);color:var(--ink);cursor:pointer;font-size:15px;line-height:1}
+.iconbtn:hover{border-color:var(--muted)}
+.iconbtn svg{width:17px;height:17px;margin:0}
+.search{flex:0 1 400px;display:flex;align-items:center;gap:6px;min-width:0}
+.search .box{position:relative;flex:1;min-width:0}
+.search input{width:100%;height:34px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);
+  padding:0 10px 0 32px;font:inherit;font-size:.88rem}
+.search input:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.search .box svg{position:absolute;left:9px;top:9px;width:16px;height:16px;margin:0;color:var(--muted)}
+.search .count{font-size:.78rem;color:var(--muted);min-width:60px;text-align:center;white-space:nowrap}
+.search .iconbtn{width:28px;height:28px;font-size:12px}
+
+/* --- sidebar (table of contents) --- */
+.sidebar{position:fixed;top:var(--topbar-h);bottom:0;left:0;width:var(--nav-w);overflow-y:auto;z-index:40;
+  background:var(--bg);border-right:1px solid var(--line);padding:22px 12px 48px;transition:transform .2s ease}
+.sidebar h2{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 8px 10px}
+.toc ol{list-style:none;margin:0;padding:0}
+.toc ol ol{padding-left:10px;margin:2px 0 8px 14px;border-left:1px solid var(--line)}
+.toc a{display:flex;gap:6px;align-items:baseline;padding:4px 8px;border-radius:6px;color:var(--muted);
+  text-decoration:none;font-size:.87rem;line-height:1.45}
+.toc > ol > li > a{font-weight:500}
+.toc ol ol a{font-size:.82rem}
+.toc a:hover{background:var(--panel-2);color:var(--ink)}
+.toc a.active{background:var(--panel-2);color:var(--ink);font-weight:600}
+.toc .num{opacity:.75;font-variant-numeric:tabular-nums;flex:none}
+.toc .badge{margin-left:auto;flex:none;font-size:.7rem;font-weight:700;padding:0 6px;border-radius:999px;
+  background:var(--hit);color:var(--ink)}
+.toc .badge:empty{display:none}
+.backdrop{display:none}
+.page{margin-left:var(--nav-w);transition:margin .2s ease}
+body.nav-collapsed .sidebar{transform:translateX(-100%)}
+body.nav-collapsed .page{margin-left:0}
+@media (max-width:960px){
+  .page{margin-left:0}
+  .sidebar{transform:translateX(-100%);background:var(--panel);box-shadow:4px 0 24px rgba(0,0,0,.18)}
+  body.nav-open .sidebar{transform:none}
+  body.nav-open .backdrop{display:block;position:fixed;inset:var(--topbar-h) 0 0 0;background:rgba(0,0,0,.35);z-index:35}
+  .topbar .doc-title{display:none}
+  .search{flex:1 1 auto}
+}
+
+/* --- document body --- */
+.wrap{max-width:860px;margin:0 auto;padding:32px 24px 96px}
+.doc-head{margin:0 0 8px}
+.doc-head .eyebrow{margin:0 0 6px;font-size:.76rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.doc-head h1{font-size:1.9rem;line-height:1.25;margin:0 0 6px}
+.doc-head .sub{color:var(--muted);margin:0 0 14px}
+.meta{display:flex;flex-wrap:wrap;gap:6px;margin:0;padding:0;list-style:none}
+.meta li{background:var(--panel-2);border-radius:999px;padding:2px 11px;font-size:.8rem;color:var(--ink);min-width:0}
+.meta li b{color:var(--muted);font-weight:600;margin-right:5px}
+section{margin:40px 0 0}
+section > h2{font-size:1.4rem;line-height:1.3;margin:0 0 14px;padding-top:20px;border-top:1px solid var(--line)}
+h3{font-size:1.15rem;line-height:1.35;margin:32px 0 8px}
+h4{font-size:1rem;margin:20px 0 6px}
+h2 .num,h3 .num{color:var(--muted);font-weight:600;margin-right:.45em;font-variant-numeric:tabular-nums}
+p{margin:0 0 14px}
+ul,ol{margin:0 0 14px;padding-left:24px}
+li{margin:4px 0}
+li > ul,li > ol{margin-bottom:4px}
+code,.mono{font-family:var(--mono);font-size:.86em;background:var(--code);padding:1px 5px;border-radius:5px}
+pre{background:var(--code);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;overflow-x:auto;
+  font-size:.84rem;line-height:1.5;margin:0 0 14px}
+pre code{background:none;padding:0;font-size:inherit}
+p code,li code,td code,.card code{overflow-wrap:anywhere}
+blockquote{margin:0 0 16px;padding:2px 16px;border-left:3px solid var(--line);color:var(--muted)}
+.tbl{overflow-x:auto;margin:0 0 18px}
+table{width:100%;border-collapse:separate;border-spacing:0;font-size:.92rem;background:var(--panel);
+  border:1px solid var(--line);border-radius:var(--radius)}
+th,td{padding:8px 12px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}
+tr:last-child > td,tr:last-child > th{border-bottom:0}
+th{background:var(--panel-2);font-weight:600}
+tr:first-child > :first-child{border-top-left-radius:calc(var(--radius) - 1px)}
+tr:first-child > :last-child{border-top-right-radius:calc(var(--radius) - 1px)}
+tr:last-child > :first-child{border-bottom-left-radius:calc(var(--radius) - 1px)}
+tr:last-child > :last-child{border-bottom-right-radius:calc(var(--radius) - 1px)}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+tr.hl td{background:var(--warn-soft)}
+.small{font-size:.86rem;color:var(--muted)}
+.good{color:var(--ok);font-weight:600} .badv{color:var(--bad);font-weight:600}
+hr{border:none;border-top:1px solid var(--line);margin:28px 0}
+
+/* translated keyword + original */
+strong.kw{font-weight:700}
+.orig{color:var(--muted);font-size:.94em;white-space:normal;overflow-wrap:anywhere}
+
+/* lead answer / callouts / tags / chips */
+.verdict{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;margin:0 0 18px;
+  box-shadow:0 1px 2px rgb(0 0 0 / .04)}
+.verdict .label{display:block;font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);margin-bottom:6px}
+.verdict p{margin:0 0 8px;font-size:1.05rem} .verdict > :last-child{margin-bottom:0}
+.callout{--cc:var(--pc,var(--accent));margin:0 0 18px;padding:12px 16px;border-radius:var(--radius);background:var(--panel);
+  border:1px solid var(--line);border-left:4px solid var(--cc)}
+.callout.ok,.callout.tip{--cc:var(--ok)} .callout.bad,.callout.myth{--cc:var(--bad)} .callout.warn{--cc:var(--warn)}
+.callout.info,.callout.interview{--cc:var(--info)} .callout.example{--cc:var(--p2)} .callout.tldr{--cc:var(--muted)}
+.callout > :first-child{margin-top:0} .callout > :last-child{margin-bottom:0}
+.kind{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--cc,var(--pc,var(--accent)));margin-right:6px}
+.callout .ct{font-weight:600;margin:0 0 6px}
+.tag{display:inline-block;font-size:.7rem;font-weight:700;padding:0 7px;border-radius:999px;border:1px solid currentColor;
+  margin-left:4px;vertical-align:1px;white-space:nowrap;line-height:1.6}
+.tag.sure{color:var(--ok)} .tag.infer{color:var(--warn)} .tag.open{color:var(--bad)}
+.sev{display:inline-block;font-size:.72rem;font-weight:700;padding:0 7px;border-radius:4px;white-space:nowrap}
+.sev.high{background:var(--bad-soft);color:var(--bad)} .sev.med{background:var(--warn-soft);color:var(--warn)} .sev.low{background:var(--panel-2);color:var(--muted)}
+.chip{display:inline-block;font-size:.75rem;font-weight:600;line-height:1.5;padding:1px 9px;border-radius:999px;margin-left:6px;
+  vertical-align:1px;white-space:nowrap;background:var(--ps,var(--panel-2));color:var(--pc,var(--muted))}
+.ex{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;margin:6px 0 8px;font-size:.88rem}
+.ex > .k{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.ex code{white-space:pre-wrap;word-break:break-word}
+
+/* findings list */
+ol.findings{counter-reset:f;list-style:none;padding:0;margin:0 0 18px}
+ol.findings > li{counter-increment:f;position:relative;padding:10px 4px 10px 48px;margin:0;border-bottom:1px solid var(--line)}
+ol.findings > li:last-child{border-bottom:none}
+ol.findings > li::before{content:counter(f);position:absolute;left:4px;top:9px;width:30px;height:30px;border-radius:50%;
+  background:var(--accent-soft);color:var(--accent);border:2px solid var(--accent);font-weight:700;font-size:.85rem;
+  display:flex;align-items:center;justify-content:center}
+
+/* cards, grids, stat tiles, step cards */
+.grid2,.grid3{display:grid;gap:14px;margin:0 0 18px}
+.grid2{grid-template-columns:1fr 1fr} .grid3{grid-template-columns:repeat(3,1fr)}
+.grid2>*,.grid3>*{min-width:0}
+.card{border:1px solid var(--line);border-top:3px solid var(--pc,var(--line));border-radius:var(--radius);padding:12px 14px;background:var(--panel)}
+.card h4{margin:0 0 6px}
+.card > :last-child{margin-bottom:0}
+.card.ok{--pc:var(--ok)} .card.bad{--pc:var(--bad)} .card.warn{--pc:var(--warn)} .card.info{--pc:var(--info)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:0 0 18px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px}
+.stat .v{display:block;font-size:1.6rem;font-weight:700;line-height:1.2;font-variant-numeric:tabular-nums}
+.stat .k{display:block;font-size:.82rem;color:var(--muted)}
+.stat.ok .v{color:var(--ok)} .stat.bad .v{color:var(--bad)} .stat.warn .v{color:var(--warn)}
+ol.steps{list-style:none;padding:0;margin:0 0 18px;counter-reset:s;position:relative}
+ol.steps::before{content:"";position:absolute;left:17px;top:10px;bottom:10px;width:2px;background:var(--line)}
+ol.steps > li{counter-increment:s;position:relative;margin:0 0 12px 52px;padding:10px 14px;background:var(--panel);
+  border:1px solid var(--line);border-top:3px solid var(--pc,var(--accent));border-radius:var(--radius);font-size:.96rem}
+ol.steps > li::before{content:counter(s);position:absolute;left:-52px;top:-3px;width:36px;height:36px;border-radius:50%;
+  background:var(--ps,var(--accent-soft));color:var(--pc,var(--accent));border:2px solid var(--pc,var(--accent));
+  font-weight:700;font-size:.92rem;display:flex;align-items:center;justify-content:center;z-index:1}
+ol.steps > li.ok{--pc:var(--ok);--ps:var(--ok-soft)} ol.steps > li.bad{--pc:var(--bad);--ps:var(--bad-soft)}
+ol.steps > li.warn{--pc:var(--warn);--ps:var(--warn-soft)}
+ol.steps > li > :last-child{margin-bottom:0}
+
+/* phase focus: hover (or tap to pin) anything with data-phase="…" to light up that phase in every step card and diagram */
+[data-phase]{transition:opacity .15s,box-shadow .15s}
+body.focus-on main [data-phase]:not(.on){opacity:.22}
+main :not(svg *)[data-phase]{cursor:pointer}
+ol.steps > li.on,.card.on{box-shadow:0 0 0 2px var(--pc,var(--accent))}
+.phase-key{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 16px;font-size:.82rem;color:var(--muted)}
+.phase-key .chip{margin-left:0}
+
+/* collapsible deep dives */
+details.more{border:1px solid var(--line);border-radius:var(--radius);margin:0 0 18px;background:var(--panel)}
+details.more > summary{cursor:pointer;padding:10px 14px;font-weight:600;list-style:none}
+details.more > summary::-webkit-details-marker{display:none}
+details.more > summary::before{content:"▸";display:inline-block;width:1.1em;color:var(--muted);transition:transform .15s}
+details.more[open] > summary::before{transform:rotate(90deg)}
+details.more > .body{padding:2px 16px 14px}
+details.more > .body > :last-child{margin-bottom:0}
+
+/* figures (diagrams, charts) */
+figure.fig{margin:4px 0 24px;padding:14px 14px 10px;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel)}
+figure.fig svg{max-width:100%;height:auto;display:block;margin:4px auto}
+figure.fig svg text{font-family:var(--sans)}
+figure.fig .grid2,figure.fig .grid3{margin-bottom:8px}
+main{counter-reset:fig tbl}
+figure.fig > figcaption{font-size:.86rem;color:var(--muted);margin-top:8px}
+figure.fig > figcaption::before{counter-increment:fig;content:var(--fig-label) " " counter(fig) " — ";font-weight:700;color:var(--ink)}
+.tbl > .cap{font-size:.86rem;color:var(--muted);margin:0 0 6px}
+.tbl > .cap::before{counter-increment:tbl;content:var(--tbl-label) " " counter(tbl) " — ";font-weight:700;color:var(--ink)}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:.82rem;color:var(--muted);margin:4px 0 0}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+figure.fig img{max-width:100%;height:auto;display:block}
+
+/* zoom viewer: click a figure image or diagram to open it full screen */
+.zoomable{cursor:zoom-in;transition:outline-color .15s}
+.zoomable:hover,.zoomable:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:6px}
+.zoom-ov{position:fixed;inset:0;z-index:100;display:none;overflow:hidden;touch-action:none;cursor:grab;
+  background:color-mix(in srgb,var(--bg) 94%,transparent);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.zoom-ov.on{display:block}
+.zoom-ov.drag{cursor:grabbing}
+.zoom-ov .zoom-item{position:absolute;left:0;top:0;max-width:none!important;max-height:none!important;margin:0!important;
+  border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);box-shadow:0 10px 40px rgb(0 0 0 / .3);
+  user-select:none;-webkit-user-drag:none;cursor:inherit}
+.zoom-bar{position:absolute;top:12px;right:12px;z-index:1;display:flex;align-items:center;gap:6px;padding:4px;
+  border:1px solid var(--line);border-radius:var(--radius);background:var(--panel)}
+.zoom-bar .iconbtn{min-width:34px;height:34px;font-size:.95rem}
+.zoom-pct{min-width:52px;text-align:center;font-size:.82rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.zoom-cap{position:absolute;left:50%;bottom:12px;z-index:1;transform:translateX(-50%);width:max-content;max-width:min(920px,calc(100vw - 32px));
+  padding:8px 14px;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);color:var(--muted);font-size:.85rem;
+  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.zoom-cap:empty{display:none}
+.zoom-cap b{color:var(--ink)}
+
+/* citations */
+a.cite{display:inline-block;font:600 .66rem/1 var(--mono);vertical-align:2px;padding:3px 5px;margin-left:3px;border-radius:5px;
+  background:var(--panel-2);color:var(--muted);text-decoration:none;white-space:nowrap}
+a.cite + a.cite{margin-left:2px}
+a.cite:hover{color:var(--accent)}
+a.cite.broken{background:var(--bad-soft);color:var(--bad)}
+a.cite:target{outline:2px solid var(--accent)}
+ol.sources{list-style:none;padding:0;margin:0 0 14px}
+ol.sources > li{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px 16px;margin:0 0 10px}
+ol.sources > li:target{outline:2px solid var(--accent)}
+.src-head{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline}
+.src-id{font:700 .8rem var(--mono);color:var(--accent);font-variant-numeric:tabular-nums}
+.src-title{font-weight:600}
+.src-type{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:1px 7px;border-radius:999px;
+  background:var(--panel-2);color:var(--muted)}
+.src-loc{font-size:.84rem;margin:6px 0;color:var(--muted);overflow-wrap:anywhere}
+blockquote.src-quote{margin:8px 0;padding:6px 12px;border-left:3px solid var(--line);background:var(--bg);color:var(--ink);font-size:.88rem;border-radius:0 6px 6px 0}
+blockquote.src-quote .tr{display:block;color:var(--muted);margin-top:4px}
+.src-note{font-size:.84rem;color:var(--muted)}
+.backrefs{font-size:.8rem;color:var(--muted);margin-top:4px}
+.backrefs a{margin-right:6px}
+
+/* search hits */
+mark.hit{background:var(--hit);color:inherit;border-radius:2px;padding:0 1px}
+mark.hit.cur{background:var(--hit-cur);outline:2px solid var(--warn)}
+
+footer.doc-foot{color:var(--muted);font-size:.8rem;margin-top:56px;padding-top:14px;border-top:1px solid var(--line)}
+@media (max-width:700px){
+  body{font-size:16px}
+  .wrap{padding:24px 16px 80px}
+  .grid2,.grid3{grid-template-columns:1fr}
+  .doc-head h1{font-size:1.55rem}
+  ol.steps > li{margin-left:46px} ol.steps > li::before{left:-46px}
+}
+@media print{
+  .topbar,.sidebar,.backdrop,.progress,.zoom-ov{display:none!important}
+  .page{margin:0!important}
+  figure.fig,ol.steps > li,.callout{break-inside:avoid-page}
+  details.more{border:none} details.more > .body{display:block}
+  mark.hit{background:none}
+}
+</style>
+</head>
+<body>
+<div class="progress" id="haise-progress"></div>
+
+<header class="topbar no-search">
+  <button class="iconbtn" id="haise-nav-btn" type="button" aria-controls="haise-sidebar">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+  </button>
+  <div class="doc-title">Kaneki product layer: idea to MVP</div>
+  <div class="search" role="search">
+    <div class="box">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <input id="haise-q" type="search" autocomplete="off" spellcheck="false">
+    </div>
+    <span class="count" id="haise-count" aria-live="polite"></span>
+    <button class="iconbtn" id="haise-prev" type="button">▲</button>
+    <button class="iconbtn" id="haise-next" type="button">▼</button>
+  </div>
+  <button class="iconbtn" id="haise-reload" type="button">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg>
+  </button>
+  <button class="iconbtn" id="haise-theme" type="button"></button>
+</header>
+
+<aside class="sidebar no-search" id="haise-sidebar">
+  <h2 id="haise-toc-label"></h2>
+  <nav class="toc" id="haise-toc"></nav>
+</aside>
+<div class="backdrop" id="haise-backdrop"></div>
+
+<div class="page">
+<main id="content" class="wrap">
+<!-- ===================== DOCUMENT CONTENT START ===================== -->
+<header class="doc-head">
+  <p class="eyebrow">Proposal · kaneki harness</p>
+  <h1>Kaneki product layer: idea to MVP</h1>
+  <p class="sub">A gated layer that sits above <code>/kaneki-flow</code>. It takes a raw idea to an MVP through one six-stage spine, either spec-first (decide, then build) or prototype-first (build to learn, then promote), and ends with ticket files kaneki already knows how to build. It reuses Matt Pocock's MIT-licensed planning skills where they fit.</p>
+  <ul class="meta">
+    <li><b>Updated</b>2026-11-23</li>
+    <li><b>Scope</b><code>agentic-workflows</code> @ <code>main</code> <code>ff10094</code></li>
+    <li><b>Status</b>Draft for your decision</li>
+  </ul>
+</header>
+
+<!-- The outline is chosen per document (references/writing-guide.md §1).
+     One top-level <section id="..."><h2>…</h2>…</section> per part, in reading order.
+     If the doc cites anything, the last section is <section id="sources"> with <ol class="sources">. -->
+<section id="answer">
+  <h2>Recommendation</h2>
+  <div class="verdict">
+    <span class="label">In short</span>
+    <p>Add a <strong>product layer</strong> to kaneki. It runs once per product, not once per ticket, and ends by writing <code>tickets/&lt;id&gt;.md</code> files that <code>/kaneki-flow</code> already builds. It is one six-stage spine (Frame → Discover → MVP cut → Spec → Slice → Build) with two main ways through stage 2:</p>
+    <ul>
+      <li><strong>spec-first</strong>: decide, then build, using Pocock's <code>wayfinder</code> map;</li>
+      <li><strong>prototype-first</strong>: build to learn, then decide at a promote gate.</li>
+    </ul>
+    <p>A <code>lite</code> lane skips discovery for small ideas.</p>
+  </div>
+  <ol class="findings">
+    <li><strong>Kaneki starts at a ticket that already exists.</strong> Its first node, <code>prepare</code>, copies a ticket file that a user wrote. Nothing in the harness produces that file. <a class="cite" href="#src-2">S2</a><a class="cite" href="#src-3">S3</a> <span class="tag sure">VERIFIED</span></li>
+    <li><strong>Pocock's skills cover the engineering half of "idea → tickets".</strong> Grilling, wayfinder, spec, tracer-bullet tickets and throwaway prototypes. <a class="cite" href="#src-6">S6</a> <span class="tag sure">VERIFIED</span></li>
+    <li><strong>They do not cover the product half.</strong> None of the 16 skills I read mentions an MVP, SaaS, pricing, billing, a target user or a success metric. <span class="tag sure">VERIFIED</span> for those 16 of the 26 skills.</li>
+    <li><strong>The two flows differ only in how they remove uncertainty.</strong> Spec-first <em>decides</em> each open question on a map. Prototype-first <em>builds</em> until you would use the thing. From the MVP cut onwards they share the same gates, the same spec and slice steps, and the same output, so a product can switch lanes without losing work (see <a href="#relation">How the two flows relate</a>).</li>
+    <li><strong>Product type is a set of dimensions, not one label.</strong> Who uses it, who pays, single or multi-tenant, deployment and money are picked separately. That lets "internal software sold as SaaS to local businesses" be described exactly, instead of forced into either "internal tool" or "SaaS".</li>
+    <li><strong>The prototype lane goes beyond Pocock on purpose.</strong> His <code>prototype</code> is "throwaway code that answers a question". <a class="cite" href="#src-16">S16</a> The prototype lane can also <em>evolve</em> the prototype into the product, so it is guarded by a promote gate that you approve.</li>
+    <li><strong>Build it in three steps:</strong> skills and files only, then the driver and its gates, then the board. Each step is usable on its own.</li>
+  </ol>
+</section>
+
+<section id="gap">
+  <h2>Where kaneki starts today, and what is missing upstream</h2>
+  <p>The kaneki graph is built for one change at a time. Its trace begins at <code>prepare</code> and moves through analysis, plan, code, review, evidence and delivery. <a class="cite" href="#src-2">S2</a> With the <code>local-file</code> tracker, the ticket is "a markdown file the user writes". <a class="cite" href="#src-3">S3</a></p>
+  <p>The tickets in this workspace show where that file comes from today. <code>P1-T01</code> cites a build plan, its part plans and a decision list, all written outside the harness. <a class="cite" href="#src-4">S4</a> So the hardest thinking happens with no gates, no decision log and no receipts: what the product is for, who it serves, what counts as done, and how it splits into tickets.</p>
+  <div class="callout warn"><span class="kind">The gap in one sentence</span>Kaneki makes sure each ticket is built right, but nothing makes sure the tickets add up to the right product.</div>
+  <div class="tbl">
+    <p class="cap">Questions a new product raises, and whether anything answers them today</p>
+    <table>
+      <tr><th>Question</th><th>kaneki today</th><th>Pocock skills</th></tr>
+      <tr><td>Why build it, and for whom?</td><td class="badv">✗</td><td class="badv">✗ only indirectly, through grilling</td></tr>
+      <tr><td>Personal tool, SaaS, library…? What does that imply?</td><td class="badv">✗</td><td class="badv">✗</td></tr>
+      <tr><td>Which unknowns block the plan?</td><td class="badv">✗</td><td class="good">✓ <code>wayfinder</code></td></tr>
+      <tr><td>What is the smallest version worth shipping (the MVP)?</td><td class="badv">✗</td><td class="badv">✗</td></tr>
+      <tr><td>What exactly will be built, and where is it tested?</td><td>per ticket (<code>requirement-analysis</code>)</td><td class="good">✓ <code>to-spec</code></td></tr>
+      <tr><td>How does it split into ordered tickets?</td><td class="badv">✗</td><td class="good">✓ <code>to-tickets</code></td></tr>
+      <tr><td>Build one ticket safely</td><td class="good">✓ the whole graph</td><td>✓ <code>implement</code> (lighter, no gates)</td></tr>
+      <tr><td>Is the MVP done, and did it meet its goal?</td><td class="badv">✗</td><td class="badv">✗</td></tr>
+    </table>
+  </div>
+</section>
+
+<section id="pocock">
+  <h2>What Matt Pocock's skills give us</h2>
+  <p>The repo <code>mattpocock/skills</code> holds 26 small skills under the MIT license, so we can adapt them as long as we keep the copyright notice. <a class="cite" href="#src-10">S10</a> His router skill sets the main flow as interview, then spec, then tickets, then build. For "a huge, foggy effort: a greenfield project", it sends you to <code>/wayfinder</code> first. <a class="cite" href="#src-6">S6</a></p>
+
+  <h3 id="wayfinder">Wayfinder: decisions before deliverables</h3>
+  <p>Wayfinder plans work that is too big for one session as a <strong>map</strong> of <strong>decision tickets</strong>. Each ticket is a question, and closing it records a decision. It does not deliver code. <a class="cite" href="#src-5">S5</a></p>
+  <ul>
+    <li><strong>The map</strong> is one index with five parts: Destination, Notes, Decisions so far, Not yet specified (the "fog") and Out of scope.</li>
+    <li><strong>Ticket types:</strong>
+      <ul>
+        <li><em>Research</em>: the agent works alone.</li>
+        <li><em>Prototype</em> and <em>Grilling</em>: the human is in the loop.</li>
+        <li><em>Task</em>: manual work, such as provisioning access, that has to happen before a decision can be made.</li>
+      </ul></li>
+    <li><strong>Fog vs ticket:</strong> an unknown becomes a ticket once you "can state the question precisely now", even if you cannot answer it yet. <a class="cite" href="#src-5">S5</a></li>
+    <li><strong>One ticket per session,</strong> except research tickets. This keeps each decision inside a fresh context.</li>
+  </ul>
+
+  <h3 id="chain">The rest of the chain</h3>
+  <div class="tbl">
+    <p class="cap">Pocock skills relevant to idea → tickets, and what to do with each</p>
+    <table>
+      <tr><th>Skill</th><th>What it does</th><th>Verdict for kaneki</th></tr>
+      <tr><td><code>grilling</code></td><td>Interviews you in rounds over a "design tree". Each question carries a recommended answer. Facts are the agent's job; decisions are yours. <a class="cite" href="#src-7">S7</a></td><td class="good">✓ port as the interview engine for every HITL step</td></tr>
+      <tr><td><code>domain-modeling</code></td><td>Keeps <code>GLOSSARY.md</code> and ADRs up to date.</td><td class="good">✓ port; the glossary feeds kaneki's <code>requirement-analysis</code></td></tr>
+      <tr><td><code>wayfinder</code></td><td>The decision map described above. <a class="cite" href="#src-5">S5</a></td><td class="good">✓ port, with the map stored in local files instead of GitHub issues</td></tr>
+      <tr><td><code>prototype</code> / <code>research</code></td><td>Throwaway code that answers one question, and cited research notes. <a class="cite" href="#src-16">S16</a></td><td class="good">✓ port; they resolve map tickets and drive the prototype lane</td></tr>
+      <tr><td><code>to-questionnaire</code></td><td>Turns a decision you can't answer alone into a questionnaire for someone else. <a class="cite" href="#src-15">S15</a></td><td class="good">✓ port as the customer-evidence ticket</td></tr>
+      <tr><td><code>to-spec</code></td><td>Turns the conversation into a spec with "no interview, just synthesis". Picks the highest test seam: "the ideal number is one". <a class="cite" href="#src-8">S8</a></td><td class="good">✓ port, plus MVP and product-type sections</td></tr>
+      <tr><td><code>to-tickets</code></td><td>Cuts tracer-bullet slices, each "a narrow but COMPLETE path through every layer", with blocking edges. Runs expand–contract for wide refactors. Has a local-files mode. <a class="cite" href="#src-9">S9</a></td><td class="good">✓ port; output uses the kaneki ticket format</td></tr>
+      <tr><td><code>implement</code> / <code>implement-spec</code> / <code>tdd</code></td><td>Builds tickets, in parallel worktrees for a whole spec.</td><td class="badv">✗ kaneki-flow already does this, with gates; take TDD as a rulepack idea only</td></tr>
+    </table>
+  </div>
+  <div class="callout info"><span class="kind">Design note</span>Pocock keeps the source of truth on the issue tracker and, by name, criticises frameworks that "try to help by owning the process". <a class="cite" href="#src-11">S11</a> Kaneki is a process-owning framework on purpose: gates, receipts, a decision log. The port therefore keeps his <em>techniques</em> (grilling, fog, tracer bullets) and puts them under kaneki's <em>gates</em>.</div>
+</section>
+
+<section id="dimensions">
+  <h2>Product type is a set of dimensions</h2>
+  <p>A personal script, a team tool and a paid SaaS need very different MVPs. Today that difference lives only in your head. The proposal writes it down as <strong>dimensions</strong>, each chosen on its own in the brief:</p>
+  <ul>
+    <li>each choice adds questions to ask, defaults to propose and launch checks for the final gate;</li>
+    <li>common combinations are saved as <strong>presets</strong>.</li>
+  </ul>
+  <p>This follows the existing rule "the graph is generic; the project is data". <a class="cite" href="#src-1">S1</a> Dimensions add questions and checks, never graph nodes.</p>
+  <div class="tbl">
+    <p class="cap">Dimensions and what each choice adds</p>
+    <table>
+      <tr><th>Dimension</th><th>Options</th><th>What it adds</th></tr>
+      <tr><td>Who uses it</td><td>you · known staff · the public · developers</td><td>Roles, devices (shared tablet, phone), skill level, language</td></tr>
+      <tr><td>Who pays</td><td>nobody · your employer · a client (contract) · each customer (subscription)</td><td>Pricing, billing, trial and contract questions. If the payer is not the user, a separate <strong>buyer</strong> goal.</td></tr>
+      <tr><td>Customers of the customer</td><td>none · yes (bookings, orders)</td><td>A third group with its own goal and privacy needs</td></tr>
+      <tr><td>Tenancy</td><td>single · one copy per client · multi-tenant</td><td>Data isolation, sign-up, migrating data in and out</td></tr>
+      <tr><td>Deployment</td><td>your machine · one server · cloud · app stores · registry</td><td>Ops, backups, monitoring and release launch checks</td></tr>
+      <tr><td>Where it is sold</td><td>country / region</td><td>Research tickets for local payment methods, invoices, tax and personal-data law</td></tr>
+    </table>
+  </div>
+  <div class="tbl">
+    <p class="cap">Starter presets (any value can be overridden)</p>
+    <table>
+      <tr><th>Preset</th><th>Users · payer · tenancy · deploy</th><th>Example success metric</th><th>Example launch check</th></tr>
+      <tr><td>Personal tool</td><td>you · nobody · single · your machine</td><td>"I use it weekly instead of X"</td><td>installs in one command</td></tr>
+      <tr><td>Internal tool</td><td>staff · employer · single · one server</td><td>"team saves N h/week"</td><td>runbook + owner</td></tr>
+      <tr><td>SaaS (public)</td><td>public · each customer · multi · cloud</td><td>N paying users, activation rate</td><td>landing page, payments live, analytics</td></tr>
+      <tr><td>Local-business SaaS</td><td>staff · owner (subscription) · multi · cloud</td><td>pilot shops renew; staff use it every shift</td><td>data import, backups, export, support contact</td></tr>
+      <tr><td>Custom client app</td><td>client's staff · client (contract) · single · cloud</td><td>client signs acceptance</td><td>handover doc, backups, access transfer</td></tr>
+      <tr><td>Library / CLI</td><td>developers · nobody · none · registry</td><td>N installs, docs complete</td><td>README, semver, published</td></tr>
+    </table>
+  </div>
+  <div class="callout interview"><span class="kind">When you are not the source of truth</span>
+    <p>If the users or the payer are other people, many answers must come from them, not from you. Wayfinder already insists that "the agent never stands in for the human's side" of a ticket. <a class="cite" href="#src-5">S5</a> The proposal adds a fifth decision-ticket type, <strong>customer evidence</strong>:</p>
+    <ul>
+      <li>the agent writes an interview script with Pocock's <code>to-questionnaire</code>, which targets "the gap between what the recipient knows and what the user needs" <a class="cite" href="#src-15">S15</a>;</li>
+      <li>you run the interview;</li>
+      <li>the ticket records what was said, in <code>product/evidence/</code>.</li>
+    </ul>
+    <p>The MVP gate then requires every <em>must</em> item to cite either evidence or your brief.</p>
+  </div>
+  <p>The presets themselves are untested proposals. <span class="tag infer">INFERRED</span>: whether one schema can hold them all cleanly needs a prototype.</p>
+</section>
+
+<section id="spine">
+  <h2>Two flows on one spine</h2>
+  <p>Every product goes through the same six stages and ends in the same place: approved tickets that <code>/kaneki-flow</code> builds. What differs is <strong>stage 2, Discover</strong>, where the uncertainty gets removed:</p>
+  <ul>
+    <li><strong>full</strong>: decide first, on a map (spec-first);</li>
+    <li><strong>prototype</strong>: build first and learn from using it (prototype-first);</li>
+    <li><strong>lite</strong>: skip discovery, because nothing is uncertain.</li>
+  </ul>
+  <div class="phase-key">Hover or tap a stage:
+    <span class="chip p1" data-phase="frame">1 Frame</span><span class="chip p2" data-phase="discover">2 Discover</span><span class="chip p3" data-phase="mvp">3 MVP cut</span><span class="chip p4" data-phase="spec">4 Spec</span><span class="chip p5" data-phase="slice">5 Slice</span><span class="chip p6" data-phase="build">6 Build</span></div>
+  <figure class="fig">
+  <svg viewBox="0 0 900 330" role="img" aria-label="Three lanes across the six stages of the product spine, converging on kaneki-flow">
+    <defs><marker id="arr-spine" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker>
+      <marker id="arr-spine-loop" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--p6)"/></marker></defs>
+    <g font-size="13">
+      <g font-size="12" font-weight="600" fill="var(--muted)" text-anchor="middle">
+        <text x="82" y="20">1 Frame</text><text x="227" y="20">2 Discover</text><text x="372" y="20">3 MVP cut</text><text x="517" y="20">4 Spec</text><text x="662" y="20">5 Slice</text><text x="815" y="20">6 Build</text>
+      </g>
+      <g font-size="12" fill="var(--ink)" font-weight="600">
+        <text x="20" y="44">full · spec-first (decide, then build)</text>
+        <text x="20" y="134">prototype · prototype-first (build to learn, then decide)</text>
+        <text x="20" y="224">lite · small, clear idea</text>
+      </g>
+      <!-- full row -->
+      <g data-phase="frame"><rect x="20" y="50" width="125" height="56" rx="9" fill="var(--p1-soft)" stroke="var(--p1)"/><text x="82" y="74" text-anchor="middle" font-weight="600" fill="var(--ink)">◆ Brief</text><text x="82" y="93" text-anchor="middle" font-size="12" fill="var(--muted)">full grilling</text></g>
+      <g data-phase="discover"><rect x="165" y="50" width="125" height="56" rx="9" fill="var(--p2-soft)" stroke="var(--p2)"/><text x="227" y="74" text-anchor="middle" font-weight="600" fill="var(--ink)">Map</text><text x="227" y="93" text-anchor="middle" font-size="12" fill="var(--muted)">decision tickets</text></g>
+      <g data-phase="mvp"><rect x="310" y="50" width="125" height="56" rx="9" fill="var(--p3-soft)" stroke="var(--p3)"/><text x="372" y="74" text-anchor="middle" font-weight="600" fill="var(--ink)">◆ MVP cut</text><text x="372" y="93" text-anchor="middle" font-size="12" fill="var(--muted)">must · later · never</text></g>
+      <g data-phase="spec"><rect x="455" y="50" width="125" height="56" rx="9" fill="var(--p4-soft)" stroke="var(--p4)"/><text x="517" y="74" text-anchor="middle" font-weight="600" fill="var(--ink)">◆ Spec</text><text x="517" y="93" text-anchor="middle" font-size="12" fill="var(--muted)">+ repo bootstrap</text></g>
+      <g data-phase="slice"><rect x="600" y="50" width="125" height="56" rx="9" fill="var(--p5-soft)" stroke="var(--p5)"/><text x="662" y="74" text-anchor="middle" font-weight="600" fill="var(--ink)">◆ Slice</text><text x="662" y="93" text-anchor="middle" font-size="12" fill="var(--muted)">milestone tickets</text></g>
+      <!-- prototype row -->
+      <g data-phase="frame"><rect x="20" y="140" width="125" height="56" rx="9" fill="var(--p1-soft)" stroke="var(--p1)"/><text x="82" y="164" text-anchor="middle" font-weight="600" fill="var(--ink)">Spark</text><text x="82" y="183" text-anchor="middle" font-size="12" fill="var(--muted)">half-page brief</text></g>
+      <g data-phase="discover"><rect x="165" y="140" width="125" height="56" rx="9" fill="var(--p2-soft)" stroke="var(--p2)"/><text x="227" y="164" text-anchor="middle" font-weight="600" fill="var(--ink)">Prototype loop</text><text x="227" y="183" text-anchor="middle" font-size="12" fill="var(--muted)">build · use · learn</text></g>
+      <g data-phase="mvp"><rect x="310" y="140" width="125" height="56" rx="9" fill="var(--p3-soft)" stroke="var(--p3)"/><text x="372" y="164" text-anchor="middle" font-weight="600" fill="var(--ink)">◆ Promote</text><text x="372" y="183" text-anchor="middle" font-size="12" fill="var(--muted)">+ MVP cut</text></g>
+      <g data-phase="spec"><rect x="455" y="140" width="125" height="56" rx="9" fill="var(--p4-soft)" stroke="var(--p4)"/><text x="517" y="164" text-anchor="middle" font-weight="600" fill="var(--ink)">◆ Spec</text><text x="517" y="183" text-anchor="middle" font-size="12" fill="var(--muted)">rebuild or evolve</text></g>
+      <g data-phase="slice"><rect x="600" y="140" width="125" height="56" rx="9" fill="var(--p5-soft)" stroke="var(--p5)"/><text x="662" y="164" text-anchor="middle" font-weight="600" fill="var(--ink)">◆ Slice</text><text x="662" y="183" text-anchor="middle" font-size="12" fill="var(--muted)">hardening first?</text></g>
+      <!-- lite row -->
+      <g data-phase="frame"><rect x="20" y="230" width="125" height="56" rx="9" fill="var(--p1-soft)" stroke="var(--p1)"/><text x="82" y="254" text-anchor="middle" font-weight="600" fill="var(--ink)">Short brief</text><text x="82" y="273" text-anchor="middle" font-size="12" fill="var(--muted)">one page</text></g>
+      <g data-phase="discover"><rect x="165" y="230" width="125" height="56" rx="9" fill="none" stroke="var(--line)" stroke-dasharray="5 4"/><text x="227" y="263" text-anchor="middle" font-size="12" fill="var(--muted)">skipped</text></g>
+      <g data-phase="mvp"><rect x="310" y="230" width="270" height="56" rx="9" fill="var(--p3-soft)" stroke="var(--p3)"/><text x="445" y="254" text-anchor="middle" font-weight="600" fill="var(--ink)">◆ MVP + spec on one page</text><text x="445" y="273" text-anchor="middle" font-size="12" fill="var(--muted)">one gate</text></g>
+      <g data-phase="slice"><rect x="600" y="230" width="125" height="56" rx="9" fill="var(--p5-soft)" stroke="var(--p5)"/><text x="662" y="254" text-anchor="middle" font-weight="600" fill="var(--ink)">Slice</text><text x="662" y="273" text-anchor="middle" font-size="12" fill="var(--muted)">1–5 tickets</text></g>
+      <!-- build (shared) -->
+      <g data-phase="build"><rect x="748" y="50" width="134" height="236" rx="10" fill="var(--p6-soft)" stroke="var(--p6)"/>
+        <text x="815" y="140" text-anchor="middle" font-weight="600" fill="var(--ink)">/kaneki-flow</text>
+        <text x="815" y="160" text-anchor="middle" font-size="12" fill="var(--muted)">per ticket</text>
+        <text x="815" y="180" text-anchor="middle" font-size="12" fill="var(--muted)">(unchanged)</text>
+        <text x="815" y="206" text-anchor="middle" font-size="12" fill="var(--p6)">◆ launch gate</text>
+        <path d="M815,290 L815,316 L227,316 L227,292" fill="none" stroke="var(--p6)" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#arr-spine-loop)"/>
+        <text x="520" y="310" text-anchor="middle" font-size="12" fill="var(--p6)">retro: next milestone re-enters Discover, in whichever lane fits</text></g>
+      <!-- arrows -->
+      <g stroke="var(--muted)" stroke-width="1.8">
+        <line x1="145" y1="78" x2="163" y2="78" marker-end="url(#arr-spine)"/><line x1="290" y1="78" x2="308" y2="78" marker-end="url(#arr-spine)"/><line x1="435" y1="78" x2="453" y2="78" marker-end="url(#arr-spine)"/><line x1="580" y1="78" x2="598" y2="78" marker-end="url(#arr-spine)"/><line x1="725" y1="78" x2="746" y2="78" marker-end="url(#arr-spine)"/>
+        <line x1="145" y1="168" x2="163" y2="168" marker-end="url(#arr-spine)"/><line x1="290" y1="168" x2="308" y2="168" marker-end="url(#arr-spine)"/><line x1="435" y1="168" x2="453" y2="168" marker-end="url(#arr-spine)"/><line x1="580" y1="168" x2="598" y2="168" marker-end="url(#arr-spine)"/><line x1="725" y1="168" x2="746" y2="168" marker-end="url(#arr-spine)"/>
+        <line x1="145" y1="258" x2="308" y2="258" marker-end="url(#arr-spine)"/><line x1="580" y1="258" x2="598" y2="258" marker-end="url(#arr-spine)"/><line x1="725" y1="258" x2="746" y2="258" marker-end="url(#arr-spine)"/>
+      </g>
+    </g>
+  </svg>
+  <figcaption>The columns are the shared stages, and each stage keeps one colour throughout the doc. ◆ marks a gate that you approve. All three lanes produce tickets in the same format and hand them to the unchanged ticket layer. After launch, the next milestone starts again at stage 2 and may use a different lane.</figcaption>
+  </figure>
+  <div class="tbl">
+    <p class="cap">Which lane to start in</p>
+    <table>
+      <tr><th>Your situation</th><th>Lane</th><th>Why</th></tr>
+      <tr><td>Small and clear: you could write the tickets today</td><td><code>lite</code></td><td>Nothing to discover. One gate, then build.</td></tr>
+      <tr><td>Unclear, but "I'll know it when I see it", and you are the main user or judge</td><td><code>prototype</code></td><td>Building is the fastest way to find out. Your reaction is the evidence.</td></tr>
+      <tr><td>Big or foggy, or the answers belong to other people (customers, law, partners, a client)</td><td><code>full</code></td><td>A prototype cannot answer "will shops pay?" or "is this legal?". Decision tickets with evidence can.</td></tr>
+    </table>
+  </div>
+</section>
+
+<section id="spec-first">
+  <h2>Spec-first flow: decide, then build</h2>
+  <p>This is the <code>full</code> lane. It is built for efforts too big or too dependent on other people to hold in one session. Every stage ends at a gate you approve, and each gate's artifact cites the ones before it.</p>
+  <ol class="steps">
+    <li class="p1" data-phase="frame"><strong>Frame: what and why</strong><span class="chip p1">/kaneki-idea</span>
+      <p>Grill the raw idea using Pocock's <code>grilling</code> rounds, which put a recommended answer on every question. <a class="cite" href="#src-7">S7</a> The output is <code>brief.md</code>:</p>
+      <ul>
+        <li>problem and purpose;</li>
+        <li>buyer, users and customers-of-the-customer;</li>
+        <li>the dimensions;</li>
+        <li>one goal per group;</li>
+        <li>constraints and non-goals.</li>
+      </ul>
+      <p>The dimensions add their questions here. A paid product cannot pass the gate until pricing intent and data handling have an answer, even if that answer is "decide later".</p>
+      <div class="ex"><span class="k">Gate G-brief</span>You approve the brief.</div></li>
+    <li class="p2" data-phase="discover"><strong>Discover by map: clear the fog</strong><span class="chip p2">/kaneki-map</span>
+      <p>Wayfinder, ported to local files. <code>product/map/MAP.md</code> holds:</p>
+      <ul>
+        <li>Destination, taken from the brief;</li>
+        <li>Decisions so far;</li>
+        <li>Not yet specified;</li>
+        <li>Out of scope.</li>
+      </ul>
+      <p>Each precisely stated unknown becomes <code>D-NNN-*.md</code>, with one of five types: research, prototype, grilling, task or customer evidence. Tickets carry blocking edges. You resolve one ticket per session, except research tickets, which run in parallel. <a class="cite" href="#src-5">S5</a></p>
+      <div class="ex"><span class="k">Example</span><code>D-004 evidence: do salon owners take bookings by phone or Zalo?</code> · <code>D-007 prototype: is the booking grid usable on a phone?</code></div></li>
+    <li class="p3" data-phase="mvp"><strong>MVP cut: the smallest thing that proves the goal</strong><span class="chip p3">new, not in Pocock</span>
+      <p>The agent lists every capability that came up and proposes three groups:</p>
+      <ul>
+        <li><em>must</em>: each item cites a goal in the brief, or evidence;</li>
+        <li><em>later</em>: each item names its milestone;</li>
+        <li><em>never</em>.</li>
+      </ul>
+      <p><code>mvp.md</code> also names the <strong>riskiest assumption</strong> (built first), the <strong>walking skeleton</strong> and the launch checks that come from the dimensions.</p>
+      <div class="ex"><span class="k">Gate G-mvp</span>Items in <em>later</em> or <em>never</em> cannot become tickets without reopening this gate.</div></li>
+    <li class="p4" data-phase="spec"><strong>Spec: a buildable plan and a repo</strong><span class="chip p4">/kaneki-spec</span>
+      <p><code>to-spec</code>, ported: synthesis, with no new interview. <a class="cite" href="#src-8">S8</a> <code>spec.md</code> covers:</p>
+      <ul>
+        <li>numbered user stories;</li>
+        <li>implementation decisions;</li>
+        <li>as few test seams as possible;</li>
+        <li>out of scope.</li>
+      </ul>
+      <p>Stack choices are recorded as ADRs. For a new product this stage also <strong>bootstraps the repo</strong>: scaffold, CI, the my-git branch model and one passing test. It then runs <code>/kaneki-onboarding</code>, which needs a repository to scan.</p>
+      <div class="ex"><span class="k">Gate G-spec</span>You approve the spec and the stack ADRs.</div></li>
+    <li class="p5" data-phase="slice"><strong>Slice: milestones and tickets</strong><span class="chip p5">/kaneki-slice</span>
+      <p><code>to-tickets</code>, ported: tracer-bullet slices, each "a narrow but COMPLETE path through every layer". <a class="cite" href="#src-9">S9</a> The default milestones are:</p>
+      <ul>
+        <li><strong>M0</strong>: the walking skeleton;</li>
+        <li><strong>M1</strong>: the MVP <em>must</em> list;</li>
+        <li><strong>M2</strong>: the launch checks.</li>
+      </ul>
+      <p>Paid products add M3 (scale). You review the list before any file is written.</p>
+      <div class="ex"><span class="k">Gate G-tickets</span>You approve the roadmap and the ticket set.</div></li>
+    <li class="p6" data-phase="build"><strong>Build &amp; launch</strong><span class="chip p6">/kaneki-flow · /kaneki-ship</span>
+      <p>Each ticket runs through the unchanged ticket graph. The product layer adds a <strong>next-ticket</strong> view (open tickets whose blockers are done) and the <strong>launch gate</strong>: every M1 ticket is deliverable-ready, and every launch check has evidence. A retro then turns usage and surprises into new decision tickets.</p>
+      <div class="ex"><span class="k">Gate G-launch</span>You approve the launch and record the first value of the goal metric.</div></li>
+  </ol>
+</section>
+
+<section id="prototype-first">
+  <h2>Prototype-first flow: build to learn, then decide</h2>
+  <p>This is the <code>prototype</code> lane, for an idea you can't specify yet but will recognise when you use it. The gates are moved to <em>after</em> discovery: nothing slows the prototype down, and nothing from it reaches a real ticket until you have decided what it becomes.</p>
+  <ol class="steps">
+    <li class="p1" data-phase="frame"><strong>Spark: half a page, about 10 minutes, no gate</strong><span class="chip p1">/kaneki-idea --prototype</span>
+      <p>A short grilling session produces a half-page <code>brief.md</code>:</p>
+      <ul>
+        <li>who it is for;</li>
+        <li>the one job it does;</li>
+        <li>what "it works" means, as something you can check;</li>
+        <li>the dimensions, as a first guess.</li>
+      </ul>
+      <div class="ex"><span class="k">Example</span>"I can log an expense from my phone in 5 seconds and see the month's total."</div></li>
+    <li class="p2" data-phase="discover"><strong>Discover by prototype loop: build, use, write down what you learned</strong><span class="chip p2">/kaneki-proto</span>
+      <ul>
+        <li>The agent builds fast on a <code>prototype/&lt;name&gt;</code> branch or in a throwaway repo. It uses real-ish data, and adds tests and auth only if the idea depends on them.</li>
+        <li>After each round you use it. The agent adds a few lines to <code>product/learnings.md</code>: what worked, what felt wrong, what to change next, and which screens or flows you actually used.</li>
+        <li>It reuses Pocock's <code>prototype</code> techniques, such as several UI variants switchable on one route, or a clickable state machine. <a class="cite" href="#src-16">S16</a></li>
+      </ul>
+      <p>You stop when you would really use it, or when the idea is not worth it. Killing an idea here is a success, and it gets one line in <code>decisions.jsonl</code>.</p></li>
+    <li class="p3" data-phase="mvp"><strong>Promote gate, then MVP cut</strong><span class="chip p3">the one decision that matters</span>
+      <p>You choose what the prototype becomes: <strong>rebuild</strong>, <strong>evolve</strong> or <strong>kill</strong>. The agent recommends one using the checklist below. Then the normal MVP cut runs. In this lane it is usually "the prototype, minus what you never used", and <code>learnings.md</code> is its evidence.</p>
+      <div class="ex"><span class="k">Gate G-promote + G-mvp</span>Both are recorded with your approval, the same way a ticket gate is.</div></li>
+    <li class="p4" data-phase="spec"><strong>Spec: written from the prototype</strong>
+      <ul>
+        <li><strong>Rebuild</strong>: the agent reverse-engineers <code>spec.md</code> from the flows you actually used plus <code>learnings.md</code>. Screenshots become the acceptance criteria. Then it bootstraps a clean repo, as in spec-first.</li>
+        <li><strong>Evolve</strong>: the spec describes the prototype as it is, plus the gaps. <code>/kaneki-onboarding</code> runs on the prototype repo, and the prototype branch is merged into <code>develop/base</code> through a normal PR.</li>
+      </ul></li>
+    <li class="p5" data-phase="slice"><strong>Slice: hardening first when evolving</strong>
+      <ul>
+        <li>For <strong>evolve</strong>, M0 is a hardening milestone: tests at the main seams, error handling, and whatever auth, data safety and backups the dimensions require. Feature tickets come after it.</li>
+        <li>For <strong>rebuild</strong>, slicing is the same as in spec-first, with the prototype as the reference.</li>
+      </ul></li>
+    <li class="p6" data-phase="build"><strong>Build &amp; launch: identical to spec-first</strong></li>
+  </ol>
+  <figure class="fig">
+  <svg viewBox="0 0 900 235" role="img" aria-label="Promote gate: rebuild, evolve or kill">
+    <defs><marker id="arr-promote" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker></defs>
+    <g font-size="13">
+      <g data-phase="discover"><rect x="20" y="85" width="175" height="62" rx="9" fill="var(--p2-soft)" stroke="var(--p2)"/>
+        <text x="107" y="110" text-anchor="middle" font-weight="600" fill="var(--ink)">Prototype</text>
+        <text x="107" y="130" text-anchor="middle" font-size="12" fill="var(--muted)">+ learnings.md</text></g>
+      <g data-phase="mvp"><polygon points="285,70 335,116 285,162 235,116" fill="var(--p3-soft)" stroke="var(--p3)"/>
+        <text x="285" y="113" text-anchor="middle" font-weight="600" font-size="12" fill="var(--ink)">◆ Promote</text>
+        <text x="285" y="129" text-anchor="middle" font-size="12" fill="var(--muted)">you decide</text></g>
+      <g data-phase="spec"><rect x="385" y="18" width="300" height="72" rx="9" fill="var(--panel)" stroke="var(--p4)"/>
+        <text x="535" y="42" text-anchor="middle" font-weight="600" fill="var(--ink)">Rebuild</text>
+        <text x="535" y="61" text-anchor="middle" font-size="12" fill="var(--muted)">prototype = living reference, never shipped</text>
+        <text x="535" y="78" text-anchor="middle" font-size="12" fill="var(--muted)">reverse-spec → clean repo → M0 skeleton</text>
+        <rect x="385" y="142" width="300" height="72" rx="9" fill="var(--panel)" stroke="var(--p4)"/>
+        <text x="535" y="166" text-anchor="middle" font-weight="600" fill="var(--ink)">Evolve</text>
+        <text x="535" y="185" text-anchor="middle" font-size="12" fill="var(--muted)">onboard prototype repo → PR into develop/base</text>
+        <text x="535" y="202" text-anchor="middle" font-size="12" fill="var(--muted)">M0 = hardening tickets, then features</text></g>
+      <g data-phase="slice"><rect x="725" y="85" width="155" height="62" rx="9" fill="var(--p5-soft)" stroke="var(--p5)"/>
+        <text x="802" y="110" text-anchor="middle" font-weight="600" fill="var(--ink)">Slice</text>
+        <text x="802" y="130" text-anchor="middle" font-size="12" fill="var(--muted)">tickets/*.md</text></g>
+      <g stroke="var(--muted)" stroke-width="1.8" fill="none">
+        <line x1="195" y1="116" x2="233" y2="116" marker-end="url(#arr-promote)"/>
+        <line x1="330" y1="105" x2="383" y2="60" marker-end="url(#arr-promote)"/>
+        <line x1="330" y1="127" x2="383" y2="172" marker-end="url(#arr-promote)"/>
+        <line x1="685" y1="60" x2="723" y2="104" marker-end="url(#arr-promote)"/>
+        <line x1="685" y1="172" x2="723" y2="128" marker-end="url(#arr-promote)"/>
+        <line x1="285" y1="162" x2="285" y2="196" stroke="var(--bad)" marker-end="url(#arr-promote)"/>
+      </g>
+      <text x="285" y="216" text-anchor="middle" font-size="12" fill="var(--bad)">kill: archive the branch, record why</text>
+    </g>
+  </svg>
+  <figcaption>The promote gate is the only way prototype code reaches a <code>kaneki-flow</code> ticket. Evolve is the departure from Pocock, whose prototypes are always thrown away. <a class="cite" href="#src-16">S16</a></figcaption>
+  </figure>
+  <div class="tbl">
+    <p class="cap">Checklist the agent uses to recommend rebuild or evolve</p>
+    <table>
+      <tr><th>Question about the prototype</th><th>Points to evolve</th><th>Points to rebuild</th></tr>
+      <tr><td>Is it on the stack you would ship?</td><td class="good">yes</td><td class="badv">no, or a demo-only tool</td></tr>
+      <tr><td>Does the data model fit the dimensions (e.g. multi-tenant)?</td><td class="good">yes</td><td class="badv">single-user model for a multi-tenant product</td></tr>
+      <tr><td>Can the main flows be tested without rewriting them?</td><td class="good">clear seams</td><td class="badv">logic tangled into the UI</td></tr>
+      <tr><td>How many times did direction change during the loop?</td><td class="good">0–1</td><td class="badv">several, with leftovers in the code</td></tr>
+      <tr><td>Who will rely on it?</td><td class="good">you</td><td class="badv">paying customers, their data</td></tr>
+    </table>
+  </div>
+  <div class="callout warn"><span class="kind">Main risk</span>A prototype that quietly becomes production without anyone deciding it should. To block that, <code>/kaneki-flow</code> refuses a ticket whose repository is a <code>prototype/*</code> branch with no recorded promote decision.</div>
+</section>
+
+<section id="relation">
+  <h2>How the two flows relate</h2>
+  <p>They are two lanes of one graph, not two products. The same driver, the same files and the same gates apply from the MVP cut onwards. They differ in one stage and in what counts as evidence.</p>
+  <div class="tbl">
+    <p class="cap">Spec-first vs prototype-first, stage by stage</p>
+    <table>
+      <tr><th>Stage</th><th>Spec-first (<code>full</code>)</th><th>Prototype-first (<code>prototype</code>)</th><th>Shared?</th></tr>
+      <tr><td>1 Frame</td><td>full brief, gated</td><td>half-page spark, no gate</td><td>same <code>brief.md</code> format</td></tr>
+      <tr><td>2 Discover</td><td>decision tickets on a map</td><td>build, use, learn loop</td><td class="badv">different</td></tr>
+      <tr><td>Evidence for <em>must</em> items</td><td>resolved tickets, customer evidence</td><td><code>learnings.md</code>, flows you used</td><td>same rule: every item cites something</td></tr>
+      <tr><td>3 MVP cut</td><td>gate</td><td>promote gate, then the same gate</td><td class="good">✓</td></tr>
+      <tr><td>4 Spec</td><td>written forward from decisions</td><td>written backward from the prototype</td><td class="good">✓ same <code>spec.md</code> template</td></tr>
+      <tr><td>5 Slice</td><td>M0 = walking skeleton</td><td>M0 = skeleton (rebuild) or hardening (evolve)</td><td class="good">✓ same ticket format</td></tr>
+      <tr><td>6 Build</td><td colspan="2">unchanged <code>/kaneki-flow</code> and <code>/kaneki-ship</code></td><td class="good">✓</td></tr>
+      <tr><td>Time to first working thing</td><td>slow (after G-spec)</td><td>fast (day one)</td><td></td></tr>
+      <tr><td>Can answer questions owned by others?</td><td class="good">yes, via evidence tickets</td><td class="badv">only what you can judge yourself</td><td></td></tr>
+    </table>
+  </div>
+  <h3 id="nesting">They nest inside each other</h3>
+  <div class="grid2">
+    <div class="card p2"><h4>A prototype inside the map</h4>A map ticket of type <em>prototype</em> is a small prototype loop scoped to one question, and always thrown away (Pocock's original meaning). Example: <code>D-007</code>, "is the booking grid usable on a phone?"</div>
+    <div class="card p2"><h4>A map inside a prototype</h4>When the loop hits a question you can't judge yourself ("will owners pay 200k/month?"), the agent writes it as a decision ticket. A small map then grows next to the prototype instead of guessing.</div>
+  </div>
+  <h3 id="switching">Switching lanes</h3>
+  <p>Switching lanes is recorded like the ticket graph's <code>sdlc lane --set … --reason</code>, and nothing done so far is lost. <a class="cite" href="#src-1">S1</a></p>
+  <div class="tbl">
+    <table>
+      <tr><th>From → to</th><th>When</th><th>What carries over</th></tr>
+      <tr><td><code>lite</code> → <code>prototype</code> / <code>full</code></td><td>The "clear" idea turns out unclear, or bigger than about 5 tickets</td><td>Brief; the MVP/spec page becomes a draft</td></tr>
+      <tr><td><code>prototype</code> → <code>full</code></td><td>Key answers belong to other people, or several foggy unknowns appear</td><td>Brief (now gated), <code>learnings.md</code> as map notes, the prototype as an asset on map tickets</td></tr>
+      <tr><td><code>full</code> → <code>prototype</code></td><td>The map keeps stalling on "how should it feel" questions</td><td>Resolved decisions become constraints for the loop</td></tr>
+      <tr><td>After launch</td><td>Each new milestone re-enters stage 2</td><td>Everything. Pick the lane per milestone, e.g. a <code>full</code> product can explore one new feature with <code>prototype</code>.</td></tr>
+    </table>
+  </div>
+</section>
+
+<section id="example">
+  <h2>Worked example: internal software sold as SaaS to local businesses</h2>
+  <p>A booking and staff-schedule app for small salons, sold as a monthly subscription. This is the case that breaks a one-label product type, so it shows how the pieces combine.</p>
+  <ol class="steps">
+    <li class="p1" data-phase="frame"><strong>Frame</strong>
+      <p>Preset <em>local-business SaaS</em>: staff use it, the owner pays, customers book, multi-tenant, cloud, sold in one country. The brief sets three goals:</p>
+      <ul>
+        <li><strong>owner</strong>: renews after the pilot;</li>
+        <li><strong>staff</strong>: use it every shift;</li>
+        <li><strong>customers</strong>: book without calling.</li>
+      </ul></li>
+    <li class="p2" data-phase="discover"><strong>Discover: <code>full</code> lane with prototype tickets inside</strong>
+      <p>The answers belong to shop owners, so this is spec-first. The map has three kinds of ticket:</p>
+      <ul>
+        <li><strong>Customer evidence</strong>: interview 5 owners about how they book today and what they would pay.</li>
+        <li><strong>Prototype</strong>: a clickable booking grid shown to those owners.</li>
+        <li><strong>Research</strong>: local payment methods, e-invoice and tax rules, personal-data law, and multi-tenant from day one vs one copy per shop.</li>
+      </ul>
+      <p><span class="tag open">OPEN</span> I have not checked any legal rule. Each one is a research ticket.</p></li>
+    <li class="p3" data-phase="mvp"><strong>MVP cut</strong>
+      <ul>
+        <li><em>Must</em>: bookings, the staff schedule, importing the existing client list from Excel or paper, owner/staff roles, and daily backups. Each item cites an interview.</li>
+        <li><em>Later</em>: online payment, SMS reminders.</li>
+        <li><em>Never</em> (for now): inventory.</li>
+      </ul></li>
+    <li class="p5" data-phase="slice"><strong>Milestones</strong>
+      <ul>
+        <li><strong>M0</strong>: skeleton. Login, one shop, one booking end to end.</li>
+        <li><strong>M1</strong>: pilot MVP with 1–3 partner shops.</li>
+        <li><strong>M2</strong>: sellable. Self sign-up, billing, data export.</li>
+        <li><strong>M3</strong>: support and monitoring.</li>
+      </ul></li>
+    <li class="p6" data-phase="build"><strong>Launch gate</strong>
+      <p>The gate is the pilot, not a public launch: the pilot shops used it for N weeks, and the owners' renewal decision is recorded.</p></li>
+  </ol>
+  <p>If you instead mean <em>custom software for a single business, hosted for them</em>, use the <em>custom client app</em> preset. That means single tenant, a contract instead of billing, and that one client as the only source of evidence. The same flow applies, with fewer launch checks.</p>
+</section>
+
+<section id="files">
+  <h2>What ends up on disk</h2>
+  <p>Everything is plain markdown in the workspace, next to <code>sdlc.profile.json</code>, and none of it depends on a GitHub tracker. That suits this workspace, where the agent does not run <code>gh</code>.</p>
+<pre><code>&lt;workspace&gt;/
+├─ product/
+│  ├─ brief.md               purpose · buyer/users/customers · dimensions · goals   (G-brief)
+│  ├─ GLOSSARY.md  adr/      domain words and decisions (domain-modeling)
+│  ├─ map/MAP.md             full lane: destination · decisions · fog · out of scope
+│  ├─ map/D-001-*.md …       decision tickets: type, question, blocked-by, resolution
+│  ├─ evidence/              customer-evidence scripts and answers
+│  ├─ learnings.md           prototype lane: one entry per round
+│  ├─ mvp.md                 must / later / never · riskiest bet · launch checks   (G-mvp)
+│  ├─ spec.md                user stories · decisions · test seams                 (G-spec)
+│  ├─ roadmap.md             milestones with ticket ids                             (G-tickets)
+│  └─ state.json  decisions.jsonl   lane, gates, promote decision (driver format)
+├─ tickets/M1-T03.md …       handed to /kaneki-flow unchanged
+└─ sdlc.profile.json         written by /kaneki-onboarding after bootstrap</code></pre>
+  <h3 id="handoff">The handoff contract: a ticket kaneki can build</h3>
+  <p>Tickets use the sections the workspace already uses: Kind · Part · Size · Depends on, then Problem, Expected, Done when, Out of scope. <a class="cite" href="#src-4">S4</a> They add back-references, so <code>requirement-analysis</code> can treat the spec as a primary source:</p>
+<pre><code># M1-T03: Owner imports the client list from Excel
+
+Kind: feature · Part: M1 pilot MVP · Size: M · Depends on: M0-T01 · Lane: full
+Source: product/spec.md US-4 · product/mvp.md must-3 · evidence/E-002 · ADR-0002
+
+## Problem / Expected / Done when / Out of scope
+…</code></pre>
+</section>
+
+<section id="options">
+  <h2>Options compared</h2>
+  <div class="tbl">
+    <p class="cap">Three ways to get from idea to tickets</p>
+    <table>
+      <tr><th>Criterion</th><th>A. Install Pocock skills next to kaneki</th><th>B. Product layer in kaneki (recommended)</th><th>C. Adopt Spec Kit / BMAD / Kiro</th></tr>
+      <tr><td>Effort to start</td><td class="good">✓ one install</td><td>medium: skills, presets, templates</td><td>medium: a new tool to learn</td></tr>
+      <tr><td>Purpose, product type, MVP, launch</td><td class="badv">✗ not covered</td><td class="good">✓ designed in</td><td>partial: BMAD has briefs; Kiro and Spec Kit start at requirements <a class="cite" href="#src-12">S12</a><a class="cite" href="#src-13">S13</a><a class="cite" href="#src-14">S14</a></td></tr>
+      <tr><td>Prototype to working app</td><td>throwaway prototypes only <a class="cite" href="#src-16">S16</a></td><td class="good">✓ prototype lane with a promote gate</td><td class="badv">✗ spec-first</td></tr>
+      <tr><td>Gates, decision log, receipts</td><td class="badv">✗ by design</td><td class="good">✓ same driver</td><td class="badv">✗ their own process</td></tr>
+      <tr><td>Output kaneki can build</td><td class="badv">✗ <code>.scratch/…/issues</code> or GitHub issues <a class="cite" href="#src-9">S9</a></td><td class="good">✓ <code>tickets/*.md</code></td><td class="badv">✗ their own <code>tasks.md</code></td></tr>
+      <tr><td>One build path</td><td class="badv">✗ <code>implement</code> vs <code>kaneki-flow</code></td><td class="good">✓</td><td class="badv">✗</td></tr>
+    </table>
+  </div>
+  <p>A is useful right away, as an experiment before building B: run Pocock's <code>/prototype</code> and <code>/grill-me</code> by hand on one real idea, and see where you miss gates and product questions.</p>
+</section>
+
+<section id="rollout">
+  <h2>How to build it</h2>
+  <ol class="steps">
+    <li class="p1"><strong>Step 1: skills, presets and files, no driver change</strong><span class="chip">~1 worktree</span>
+      <ul>
+        <li><code>skills/kaneki-product/</code> with entry points <code>idea</code>, <code>proto</code>, <code>map</code>, <code>spec</code> and <code>slice</code>. They port <code>grilling</code>, <code>domain-modeling</code>, <code>prototype</code>, <code>to-questionnaire</code>, <code>wayfinder</code>, <code>to-spec</code> and <code>to-tickets</code>, with the MIT notice and a <code>NOTICE</code> listing each source and the upstream version.</li>
+        <li><code>presets/*.json</code> plus a dimensions schema in <code>contracts/</code>.</li>
+        <li>Templates for the brief, learnings, map, MVP and roadmap.</li>
+        <li>Build the <strong>prototype and lite lanes first</strong>: they are the cheapest and the most likely to be used on a new idea.</li>
+      </ul>
+      <p>Done when: one real idea goes through the prototype lane to <code>tickets/*.md</code>, and <code>/kaneki-flow</code> runs the first ticket unedited.</p></li>
+    <li class="p2"><strong>Step 2: the product graph in the driver</strong>
+      <ul>
+        <li><code>graph/product.json</code> with the three lanes.</li>
+        <li><code>sdlc product init|status|gate|lane</code>.</li>
+        <li>The gates (including promote), and the <code>kaneki-flow</code> refusal for unpromoted prototype branches.</li>
+        <li>Then the <code>full</code> lane's map and customer-evidence tickets.</li>
+      </ul>
+      <p>Done when: the gates refuse to close without your approval, the same way <code>gate</code> does for tickets. <a class="cite" href="#src-1">S1</a></p></li>
+    <li class="p3"><strong>Step 3: board and loop</strong>
+      <ul>
+        <li><code>sdlc web</code> product view: lane, map frontier or prototype rounds, milestone progress, the next unblocked ticket.</li>
+        <li>Launch-check evidence.</li>
+        <li>The retro writes the next milestone's stage-2 work.</li>
+      </ul></li>
+  </ol>
+  <div class="callout warn"><span class="kind">Risks</span>
+    <ul>
+      <li><strong>Ceremony.</strong> Too many gates for small ideas. The <code>lite</code> and <code>prototype</code> lanes exist for that.</li>
+      <li><strong>Prototype debt.</strong> Evolve can carry shortcuts into production. The hardening milestone and the checklist are the guard.</li>
+      <li><strong>Context.</strong> Pocock wants grilling, spec and tickets in "one unbroken context window". <a class="cite" href="#src-6">S6</a> Kaneki's stages hand off through files, so every stage must work from the brief, map, learnings and ADRs alone.</li>
+      <li><strong>Upstream drift.</strong> Pocock renames skills often. Port the techniques, record the upstream version, and don't vendor the files.</li>
+    </ul></div>
+</section>
+
+<section id="open">
+  <h2>Decisions I need from you</h2>
+  <ol>
+    <li><strong>Placement.</strong> Should this live inside the kaneki harness, or in a sibling <code>harness/product-kit</code> that only writes kaneki tickets? I recommend inside kaneki. <span class="tag open">OPEN</span></li>
+    <li><strong>Lane order.</strong> Should step 1 build prototype + lite first, as proposed, or full first? <span class="tag open">OPEN</span></li>
+    <li><strong>Evolve allowed for paid products?</strong> One option is to require <em>rebuild</em> whenever someone other than you pays. I recommend allowing evolve, but only with the hardening milestone. <span class="tag open">OPEN</span></li>
+    <li><strong>Presets for v1.</strong> Are the six above the right set? <span class="tag open">OPEN</span></li>
+    <li><strong>First trial idea.</strong> Which real idea do we run through the prototype lane first? <span class="tag open">OPEN</span></li>
+  </ol>
+</section>
+
+<section id="sources">
+  <h2>Sources</h2>
+  <ol class="sources">
+    <li id="src-1">
+      <div class="src-head"><span class="src-id">S1</span><span class="src-type">Doc</span><span class="src-title">Kaneki harness design</span></div>
+      <div class="src-loc"><code>agentic-workflows/harness/kaneki-harness/docs/design.md:5, 110-112</code> · branch <code>main</code> @ <code>ff10094</code></div>
+      <blockquote class="src-quote">**The graph is generic; the project is data.** …
+- **New core node:** only if every project needs it. Otherwise it is a family.</blockquote>
+    </li>
+    <li id="src-2">
+      <div class="src-head"><span class="src-id">S2</span><span class="src-type">Code</span><span class="src-title">Kaneki lifecycle graph, main order</span></div>
+      <div class="src-loc"><code>agentic-workflows/harness/kaneki-harness/graph/lifecycle.json:23</code> (<code>order</code>) · @ <code>ff10094</code></div>
+      <blockquote class="src-quote">["prepare", "investigate", "fix-plan", "requirement-analysis", "impact-analysis", "feature-plan", "coding", "code-review", … "deliverable-ready", "read-review", "triage-review", "respond-review"]</blockquote>
+    </li>
+    <li id="src-3">
+      <div class="src-head"><span class="src-id">S3</span><span class="src-type">Code</span><span class="src-title">local-file tracker adapter</span></div>
+      <div class="src-loc"><code>agentic-workflows/harness/kaneki-harness/adapters/tracker/local-file.json:4</code> · @ <code>ff10094</code></div>
+      <blockquote class="src-quote">"No tracker: the ticket is a markdown file the user writes (tickets/&lt;id&gt;.md next to the profile)."</blockquote>
+    </li>
+    <li id="src-4">
+      <div class="src-head"><span class="src-id">S4</span><span class="src-type">Ticket</span><span class="src-title">P1-T01, an existing workspace ticket</span></div>
+      <div class="src-loc"><code>wp-agentic-workflows/tickets/P1-T01.md:3-6</code> (read 2026-11-23)</div>
+      <blockquote class="src-quote">Kind: bug · Part: P1 data contract (H1) · Size: S · Depends on: none
+Source: `agentic-workflows/kaneki-harness-app/doc/build-plan/parts/P1-data-contract.plan.md` §4.5 row H1, …</blockquote>
+    </li>
+    <li id="src-5">
+      <div class="src-head"><span class="src-id">S5</span><span class="src-type">Web</span><span class="src-title">mattpocock/skills: wayfinder SKILL.md</span></div>
+      <div class="src-loc"><code>https://raw.githubusercontent.com/mattpocock/skills/main/skills/engineering/wayfinder/SKILL.md</code> · lines 3, 13, 75, 88, 105 · accessed 2026-11-23</div>
+      <blockquote class="src-quote">Plan a huge chunk of work (more than one agent session can hold) as a shared map of decision tickets …
+… produce decisions, not deliverables.
+**Fog or ticket?** The test is whether you can state the question precisely now, _not_ whether you can answer it now.
+… **never resolve more than one ticket per session**, with the exception of research tickets.</blockquote>
+    </li>
+    <li id="src-6">
+      <div class="src-head"><span class="src-id">S6</span><span class="src-type">Web</span><span class="src-title">mattpocock/skills: ask-matt router SKILL.md</span></div>
+      <div class="src-loc"><code>…/skills/engineering/ask-matt/SKILL.md</code> · lines 38, 52 · accessed 2026-11-23</div>
+      <blockquote class="src-quote">Keep steps 1–3 in **one unbroken context window** (don't compact or clear until after `/to-tickets`) …
+- **A huge, foggy effort: a greenfield project or a huge feature build, too big for one session** → **`/wayfinder`** …</blockquote>
+    </li>
+    <li id="src-7">
+      <div class="src-head"><span class="src-id">S7</span><span class="src-type">Web</span><span class="src-title">mattpocock/skills: grilling SKILL.md</span></div>
+      <div class="src-loc"><code>…/skills/productivity/grilling/SKILL.md</code> · lines 6, 30 · accessed 2026-11-23</div>
+      <blockquote class="src-quote">Interview the user relentlessly until you reach a shared understanding. Map this as a **design tree** …</blockquote>
+    </li>
+    <li id="src-8">
+      <div class="src-head"><span class="src-id">S8</span><span class="src-type">Web</span><span class="src-title">mattpocock/skills: to-spec SKILL.md</span></div>
+      <div class="src-loc"><code>…/skills/engineering/to-spec/SKILL.md</code> · lines 3, 15 · accessed 2026-11-23</div>
+      <blockquote class="src-quote">Turn the current conversation into a spec … no interview, just synthesis …
+Use the highest seam possible. … the ideal number is one.</blockquote>
+    </li>
+    <li id="src-9">
+      <div class="src-head"><span class="src-id">S9</span><span class="src-type">Web</span><span class="src-title">mattpocock/skills: to-tickets SKILL.md</span></div>
+      <div class="src-loc"><code>…/skills/engineering/to-tickets/SKILL.md</code> · lines 31, 62 · accessed 2026-11-23</div>
+      <blockquote class="src-quote">- Each slice cuts a narrow but COMPLETE path through every layer (schema, API, UI, tests) …
+- **Local files** → write one file per ticket under `.scratch/&lt;feature-slug&gt;/issues/&lt;NN&gt;-&lt;slug&gt;.md` …</blockquote>
+    </li>
+    <li id="src-10">
+      <div class="src-head"><span class="src-id">S10</span><span class="src-type">Web</span><span class="src-title">mattpocock/skills LICENSE</span></div>
+      <div class="src-loc"><code>https://github.com/mattpocock/skills/blob/main/LICENSE</code> · accessed 2026-11-23</div>
+      <blockquote class="src-quote">MIT License
+Copyright (c) 2026 Matt Pocock</blockquote>
+    </li>
+    <li id="src-11">
+      <div class="src-head"><span class="src-id">S11</span><span class="src-type">Web</span><span class="src-title">mattpocock/skills README</span></div>
+      <div class="src-loc"><code>https://github.com/mattpocock/skills</code> README line 17 · accessed 2026-11-23</div>
+      <blockquote class="src-quote">Approaches like GSD, BMAD, and Spec-Kit try to help by owning the process. But while doing so, they take away your control …</blockquote>
+    </li>
+    <li id="src-12">
+      <div class="src-head"><span class="src-id">S12</span><span class="src-type">Web</span><span class="src-title">GitHub Spec Kit</span></div>
+      <div class="src-loc"><code>https://github.com/github/spec-kit</code> · accessed 2026-11-23</div>
+      <blockquote class="src-quote">constitution → specify → plan → tasks → implement → converge</blockquote>
+      <div class="src-note">This is a phase list summarised by the research agent, not a verbatim quote.</div>
+    </li>
+    <li id="src-13">
+      <div class="src-head"><span class="src-id">S13</span><span class="src-type">Web</span><span class="src-title">BMAD Method</span></div>
+      <div class="src-loc"><code>https://github.com/bmad-code-org/BMAD-METHOD</code> · v6.12 README · accessed 2026-11-23</div>
+      <blockquote class="src-quote">Clarify / Plan / Build-and-verify; artifacts: briefs, specifications, and architecture.</blockquote>
+      <div class="src-note">This is a summary by the research agent. The classic Analyst → PM → Architect pipeline is older and may no longer be current.</div>
+    </li>
+    <li id="src-14">
+      <div class="src-head"><span class="src-id">S14</span><span class="src-type">Web</span><span class="src-title">Kiro specs</span></div>
+      <div class="src-loc"><code>https://kiro.dev/docs/specs/</code> · accessed 2026-11-23</div>
+      <blockquote class="src-quote">requirements.md → design.md → tasks.md (gated), or Quick Spec without gates.</blockquote>
+      <div class="src-note">This is a summary by the research agent, not a verbatim quote.</div>
+    </li>
+    <li id="src-15">
+      <div class="src-head"><span class="src-id">S15</span><span class="src-type">Web</span><span class="src-title">mattpocock/skills: to-questionnaire SKILL.md</span></div>
+      <div class="src-loc"><code>mattpocock/skills</code> · <code>to-questionnaire/SKILL.md</code> · lines 3, 9 · accessed 2026-11-23</div>
+      <blockquote class="src-quote">Turn a decision you can't fully answer into a questionnaire for someone else to fill in.
+… The questions in the document then target the **gap** between what the recipient knows and what the user needs.</blockquote>
+    </li>
+    <li id="src-16">
+      <div class="src-head"><span class="src-id">S16</span><span class="src-type">Web</span><span class="src-title">mattpocock/skills: prototype SKILL.md</span></div>
+      <div class="src-loc"><code>mattpocock/skills</code> · <code>prototype/SKILL.md</code> · lines 3, 8 · accessed 2026-11-23</div>
+      <blockquote class="src-quote">A prototype is **throwaway code that answers a question**. The question decides the shape.</blockquote>
+    </li>
+  </ol>
+</section>
+
+<footer class="doc-foot">Legend: <span class="tag sure">VERIFIED</span> seen directly in the cited source · <span class="tag infer">INFERRED</span> reasoned from evidence, not confirmed end-to-end · <span class="tag open">OPEN</span> unresolved, needs an answer. Translated keywords are <strong>bold</strong> with the original term in (parentheses). Press <code>/</code> to search; the ⟳ button reloads the latest version of this file.</footer>
+<!-- ===================== DOCUMENT CONTENT END ===================== -->
+</main>
+</div>
+
+<script id="haise-shell-js">
+/* ===== haise-doc shell v3.1.1 — do not edit per document ===== */
+(function(){
+  var root=document.documentElement, body=document.body;
+  var LANG=(root.lang||'en').slice(0,2).toLowerCase();
+  var I18N={
+    en:{toc:'Contents',search:'Search this document…  ( / )',none:'No matches',nav:'Show / hide contents',
+        prev:'Previous match (Shift+Enter)',next:'Next match (Enter)',citedIn:'Cited in',
+        reload:'Reload latest version (keeps your place)',
+        zoom:{hint:'Click to enlarge',zin:'Zoom in (+)',zout:'Zoom out (−)',fit:'Fit to screen (0)',one:'Actual size (1)',close:'Close (Esc)'},
+        theme:{auto:'Theme: auto',light:'Theme: light',dark:'Theme: dark'}},
+    vi:{toc:'Mục lục',search:'Tìm trong tài liệu…  ( / )',none:'Không có kết quả',nav:'Ẩn / hiện mục lục',
+        prev:'Kết quả trước (Shift+Enter)',next:'Kết quả sau (Enter)',citedIn:'Được dẫn ở',
+        reload:'Tải lại bản mới nhất (giữ vị trí đang đọc)',
+        zoom:{hint:'Nhấn để phóng to',zin:'Phóng to (+)',zout:'Thu nhỏ (−)',fit:'Vừa màn hình (0)',one:'Kích thước thật (1)',close:'Đóng (Esc)'},
+        theme:{auto:'Giao diện: tự động',light:'Giao diện: sáng',dark:'Giao diện: tối'}}
+  };
+  var T=I18N[LANG]||I18N.en;
+  var store={get:function(k){try{return localStorage.getItem(k);}catch(e){return null;}},
+             set:function(k,v){try{localStorage.setItem(k,v);}catch(e){}}};
+  var $=function(id){return document.getElementById(id);};
+  var main=$('content');
+
+  /* ---------- theme ---------- */
+  var themeBtn=$('haise-theme'), ICON={auto:'◐',light:'☀',dark:'☾'};
+  function applyTheme(t){
+    if(t==='light'||t==='dark') root.setAttribute('data-theme',t); else root.removeAttribute('data-theme');
+    themeBtn.textContent=ICON[t]; themeBtn.title=T.theme[t]; themeBtn.setAttribute('aria-label',T.theme[t]);
+  }
+  var theme=store.get('haise.theme'); if(theme!=='light'&&theme!=='dark') theme='auto';
+  applyTheme(theme);
+  themeBtn.addEventListener('click',function(){
+    theme=theme==='auto'?'light':theme==='light'?'dark':'auto';
+    store.set('haise.theme',theme); applyTheme(theme);
+  });
+
+  /* ---------- numbering + table of contents ---------- */
+  $('haise-toc-label').textContent=T.toc;
+  var toc=$('haise-toc'), ol=document.createElement('ol'), tocLinks=[], sections=[];
+  [].forEach.call(main.querySelectorAll('section'),function(sec,i){
+    var h2=sec.querySelector(':scope > h2'); if(!h2) return;
+    if(!sec.id) sec.id='s'+(i+1);
+    var n=String(sections.length+1);
+    sections.push(sec);
+    var num=document.createElement('span'); num.className='num'; num.textContent=n+'.'; h2.insertBefore(num,h2.firstChild);
+    var li=document.createElement('li'), a=mkLink('#'+sec.id,n+'.',h2);
+    a.dataset.sec=sec.id; li.appendChild(a); tocLinks.push({el:sec,a:a});
+    var subs=sec.querySelectorAll('h3');
+    if(subs.length){
+      var sub=document.createElement('ol');
+      [].forEach.call(subs,function(h3,j){
+        if(!h3.id) h3.id=sec.id+'-'+(j+1);
+        var m=n+'.'+(j+1);
+        var s=document.createElement('span'); s.className='num'; s.textContent=m; h3.insertBefore(s,h3.firstChild);
+        var sli=document.createElement('li'), sa=mkLink('#'+h3.id,m,h3);
+        sli.appendChild(sa); sub.appendChild(sli); tocLinks.push({el:h3,a:sa});
+      });
+      li.appendChild(sub);
+    }
+    ol.appendChild(li);
+  });
+  toc.appendChild(ol);
+  function mkLink(href,n,h){
+    var a=document.createElement('a'); a.href=href;
+    var s=document.createElement('span'); s.className='num'; s.textContent=n;
+    var t=document.createElement('span'); t.className='t';
+    var clone=h.cloneNode(true); var c=clone.querySelector('.num'); if(c) c.remove();
+    [].forEach.call(clone.querySelectorAll('a.cite,.tag'),function(x){x.remove();});
+    t.textContent=clone.textContent.trim();
+    var b=document.createElement('span'); b.className='badge';
+    a.appendChild(s); a.appendChild(t); a.appendChild(b);
+    a.addEventListener('click',function(){ if(isMobile()) body.classList.remove('nav-open'); });
+    return a;
+  }
+
+  /* ---------- sidebar toggle ---------- */
+  var navBtn=$('haise-nav-btn'); navBtn.title=T.nav; navBtn.setAttribute('aria-label',T.nav);
+  var mq=window.matchMedia('(max-width:960px)');
+  function isMobile(){return mq.matches;}
+  if(store.get('haise.nav')==='collapsed') body.classList.add('nav-collapsed');
+  navBtn.addEventListener('click',function(){
+    if(isMobile()){ body.classList.toggle('nav-open'); }
+    else{ body.classList.toggle('nav-collapsed'); store.set('haise.nav',body.classList.contains('nav-collapsed')?'collapsed':'open'); }
+  });
+  $('haise-backdrop').addEventListener('click',function(){body.classList.remove('nav-open');});
+
+  /* ---------- scroll spy + progress ---------- */
+  var ticking=false, prog=$('haise-progress');
+  function onScroll(){
+    ticking=false;
+    var y=window.scrollY, H=document.documentElement.scrollHeight-window.innerHeight;
+    prog.style.width=(H>0?Math.min(100,y/H*100):0)+'%';
+    var off=parseInt(getComputedStyle(root).getPropertyValue('--topbar-h'))+30, cur=null;
+    for(var i=0;i<tocLinks.length;i++){ if(tocLinks[i].el.getBoundingClientRect().top-off<=0) cur=tocLinks[i]; }
+    if(!cur&&tocLinks.length) cur=tocLinks[0];
+    tocLinks.forEach(function(t){t.a.classList.toggle('active',t===cur);});
+    if(cur&&!isMobile()){
+      var r=cur.a.getBoundingClientRect(), sb=$('haise-sidebar').getBoundingClientRect();
+      if(r.top<sb.top+20||r.bottom>sb.bottom-20) cur.a.scrollIntoView({block:'nearest'});
+    }
+  }
+  window.addEventListener('scroll',function(){ if(!ticking){ticking=true;requestAnimationFrame(onScroll);} },{passive:true});
+  onScroll();
+
+  /* ---------- citations: tooltips + back-references ---------- */
+  var back={};
+  [].forEach.call(main.querySelectorAll('a.cite'),function(a,i){
+    var id=(a.getAttribute('href')||'').replace(/^#/,''), src=document.getElementById(id);
+    if(!a.id) a.id='cite-'+(i+1);
+    if(!src){a.classList.add('broken');return;}
+    var t=src.querySelector('.src-title'); if(t) a.title=t.textContent.trim();
+    (back[id]=back[id]||[]).push(a);
+  });
+  Object.keys(back).forEach(function(id){
+    var src=document.getElementById(id), box=src.querySelector('.backrefs');
+    if(!box){box=document.createElement('div');box.className='backrefs';src.appendChild(box);}
+    box.textContent=T.citedIn+': ';
+    back[id].forEach(function(a){
+      var sec=a.closest('section'), n=sec?sec.querySelector(':scope > h2 .num'):null;
+      var l=document.createElement('a'); l.href='#'+a.id; l.textContent='↩ §'+(n?n.textContent.replace('.',''):'?');
+      var h=sec?sec.querySelector(':scope > h2'):null; if(h) l.title=h.textContent.trim();
+      box.appendChild(l);
+    });
+  });
+
+  /* ---------- search (case- and accent-insensitive) ---------- */
+  var q=$('haise-q'), countEl=$('haise-count'), hits=[], cur=-1, opened=[], timer=null;
+  q.placeholder=T.search; q.setAttribute('aria-label',T.search);
+  $('haise-prev').title=T.prev; $('haise-prev').setAttribute('aria-label',T.prev);
+  $('haise-next').title=T.next; $('haise-next').setAttribute('aria-label',T.next);
+  function foldChar(c){
+    if(c==='đ'||c==='Đ') return 'd';
+    return c.normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
+  }
+  function fold(s){
+    var out='', map=[];
+    for(var i=0;i<s.length;i++){ var f=foldChar(s[i]); for(var j=0;j<f.length;j++){out+=f[j];map.push(i);} }
+    return {s:out,map:map};
+  }
+  function clear(){
+    var parents=[];
+    hits.forEach(function(m){ var p=m.parentNode; if(!p) return; p.replaceChild(document.createTextNode(m.textContent),m); if(parents.indexOf(p)<0) parents.push(p); });
+    parents.forEach(function(p){p.normalize();});
+    opened.forEach(function(d){d.open=false;}); opened=[];
+    hits=[]; cur=-1;
+    tocLinks.forEach(function(t){t.a.querySelector('.badge').textContent='';});
+  }
+  function run(noJump){
+    clear();
+    var raw=q.value.trim(); if(raw.length<2){countEl.textContent='';return;}
+    var needle=fold(raw).s, nodes=[];
+    var w=document.createTreeWalker(main,NodeFilter.SHOW_TEXT,{acceptNode:function(n){
+      if(!n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+      var p=n.parentNode;
+      if(p.closest('script,style,svg,.no-search,textarea')) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;}});
+    while(w.nextNode()) nodes.push(w.currentNode);
+    for(var k=0;k<nodes.length&&hits.length<3000;k++){
+      var node=nodes[k], text=node.nodeValue, f=fold(text), idx=f.s.indexOf(needle);
+      if(idx<0) continue;
+      var frag=document.createDocumentFragment(), last=0;
+      while(idx>=0){
+        var a=f.map[idx], b=f.map[idx+needle.length-1]+1;
+        if(a>=last){
+          frag.appendChild(document.createTextNode(text.slice(last,a)));
+          var m=document.createElement('mark'); m.className='hit'; m.textContent=text.slice(a,b);
+          frag.appendChild(m); hits.push(m); last=b;
+        }
+        idx=f.s.indexOf(needle,idx+needle.length);
+      }
+      frag.appendChild(document.createTextNode(text.slice(last)));
+      node.parentNode.replaceChild(frag,node);
+    }
+    hits.forEach(function(m){
+      var d=m.parentNode.closest('details');
+      while(d){ if(!d.open){d.open=true;opened.push(d);} d=d.parentNode.closest('details'); }
+    });
+    tocLinks.forEach(function(t){
+      var scope=t.el.tagName==='SECTION'?t.el:null; if(!scope) return;
+      var n=scope.querySelectorAll('mark.hit').length;
+      t.a.querySelector('.badge').textContent=n?String(n):'';
+    });
+    if(!hits.length) countEl.textContent=T.none;
+    else if(noJump===true) countEl.textContent='– / '+hits.length;
+    else go(0);
+  }
+  function go(i){
+    if(!hits.length) return;
+    if(cur>=0&&hits[cur]) hits[cur].classList.remove('cur');
+    cur=(i+hits.length)%hits.length;
+    hits[cur].classList.add('cur');
+    hits[cur].scrollIntoView({block:'center',behavior:'smooth'});
+    countEl.textContent=(cur+1)+' / '+hits.length;
+  }
+  q.addEventListener('input',function(){clearTimeout(timer);timer=setTimeout(run,180);});
+  q.addEventListener('keydown',function(e){
+    if(e.key==='Enter'){e.preventDefault(); if(timer){clearTimeout(timer);timer=null;} if(!hits.length) run(); else go(cur+(e.shiftKey?-1:1));}
+    else if(e.key==='Escape'){q.value='';clear();countEl.textContent='';q.blur();}
+  });
+  $('haise-prev').addEventListener('click',function(){go(cur-1);});
+  $('haise-next').addEventListener('click',function(){go(cur+1);});
+
+  /* ---------- reload: re-read the file from disk, keep the reader's place ---------- */
+  var RK='haise.reload:'+location.pathname, reloadBtn=$('haise-reload');
+  reloadBtn.title=T.reload; reloadBtn.setAttribute('aria-label',T.reload);
+  function ss(k,v){try{if(v===undefined){var r=sessionStorage.getItem(k);sessionStorage.removeItem(k);return r;}sessionStorage.setItem(k,v);}catch(e){return null;}}
+  function reload(){
+    var anchor=null, top=0;
+    for(var i=tocLinks.length-1;i>=0;i--){ var r=tocLinks[i].el.getBoundingClientRect(); if(r.top<=window.innerHeight/3){anchor=tocLinks[i].el.id;top=r.top;break;} }
+    var open=[].map.call(main.querySelectorAll('details'),function(d){return d.open&&opened.indexOf(d)<0;});
+    ss(RK,JSON.stringify({y:window.scrollY,anchor:anchor,top:top,q:q.value,open:open}));
+    location.reload();
+  }
+  reloadBtn.addEventListener('click',reload);
+  (function restore(){
+    var s=ss(RK); if(!s) return;
+    try{s=JSON.parse(s);}catch(e){return;}
+    if('scrollRestoration' in history) history.scrollRestoration='manual';
+    var ds=main.querySelectorAll('details');
+    (s.open||[]).forEach(function(o,i){ if(o&&ds[i]) ds[i].open=true; });
+    if(s.q){q.value=s.q; run(true);}
+    var el=s.anchor&&document.getElementById(s.anchor);
+    var y=el?el.getBoundingClientRect().top+window.scrollY-s.top:s.y;
+    root.style.scrollBehavior='auto'; window.scrollTo(0,y); root.style.scrollBehavior='';
+    onScroll();
+  })();
+  /* ---------- zoom: click a figure image or diagram to view it large (vector stays sharp) ---------- */
+  (function zoom(){
+    var items=[].slice.call(main.querySelectorAll('figure.fig img, figure.fig svg')).filter(function(el){
+      return !el.closest('[data-nozoom]') && !(el.tagName.toLowerCase()==='svg' && el.parentElement.closest('svg'));
+    });
+    if(!items.length) return;
+    var Z=T.zoom, ov=document.createElement('div');
+    ov.className='zoom-ov'; ov.setAttribute('role','dialog'); ov.setAttribute('aria-modal','true');
+    ov.innerHTML='<div class="zoom-bar"><span class="zoom-pct"></span>'+
+      '<button class="iconbtn" type="button" data-z="out">−</button><button class="iconbtn" type="button" data-z="fit">⤢</button>'+
+      '<button class="iconbtn" type="button" data-z="one">1:1</button><button class="iconbtn" type="button" data-z="in">+</button>'+
+      '<button class="iconbtn" type="button" data-z="close">✕</button></div><div class="zoom-cap"></div>';
+    body.appendChild(ov);
+    var bar=ov.querySelector('.zoom-bar'), cap=ov.querySelector('.zoom-cap'), pct=ov.querySelector('.zoom-pct');
+    var TT={out:Z.zout,fit:Z.fit,one:Z.one,'in':Z.zin,close:Z.close};
+    [].forEach.call(bar.querySelectorAll('button'),function(b){b.title=TT[b.dataset.z];b.setAttribute('aria-label',TT[b.dataset.z]);});
+    var node=null,isSvg=false,w=1,h=1,s=1,fit=1,x=0,y=0,idx=-1,lastFocus=null,pts={},moved=false;
+    function dims(el){
+      if(el.tagName.toLowerCase()==='svg'){var vb=el.viewBox&&el.viewBox.baseVal; if(vb&&vb.width) return [vb.width,vb.height];}
+      else if(el.naturalWidth) return [el.naturalWidth,el.naturalHeight];
+      var r=el.getBoundingClientRect(); return [r.width||1,r.height||1];
+    }
+    function vw(){return ov.clientWidth;} function vh(){return ov.clientHeight;}
+    function lim(){var b=Math.max(fit,1); return [fit*0.5, b*(isSvg?10:4)];}
+    function render(){
+      node.style.width=(w*s)+'px'; node.style.height=(h*s)+'px';
+      node.style.transform='translate('+Math.round(x)+'px,'+Math.round(y)+'px)';
+      pct.textContent=Math.round(s*100)+'%';
+    }
+    function setScale(ns,cx,cy){
+      var l=lim(); ns=Math.min(l[1],Math.max(l[0],ns));
+      if(cx===undefined){cx=vw()/2;cy=vh()/2;}
+      x=cx-(cx-x)*ns/s; y=cy-(cy-y)*ns/s; s=ns; render();
+    }
+    function toFit(){
+      var top=60, bottom=(cap.textContent?cap.offsetHeight+24:16), room=vh()-top-bottom;
+      fit=Math.min((vw()-32)/w,room/h);
+      s=fit; x=(vw()-w*s)/2; y=top+(room-h*s)/2; render();
+    }
+    function open(i){
+      idx=(i+items.length)%items.length;
+      var src=items[idx]; isSvg=src.tagName.toLowerCase()==='svg';
+      if(node) node.remove();
+      node=src.cloneNode(true); node.removeAttribute('id'); node.removeAttribute('tabindex');
+      node.classList.remove('zoomable'); node.removeAttribute('style'); node.classList.add('zoom-item');
+      if(isSvg){node.removeAttribute('width');node.removeAttribute('height');node.setAttribute('preserveAspectRatio','xMidYMid meet');}
+      var d=dims(src); w=d[0]; h=d[1];
+      ov.insertBefore(node,bar);
+      var fig=src.closest('figure'), fc=fig&&fig.querySelector(':scope > figcaption');
+      var label=src.getAttribute('alt')||src.getAttribute('aria-label')||'';
+      cap.innerHTML='';
+      if(items.length>1){var n=document.createElement('b');n.textContent=(idx+1)+' / '+items.length+'  ';cap.appendChild(n);}
+      cap.appendChild(document.createTextNode([label,fc?fc.textContent.trim():''].filter(Boolean).join(' — ')));
+      if(!ov.classList.contains('on')){lastFocus=document.activeElement; ov.classList.add('on'); body.style.overflow='hidden';}
+      toFit(); bar.querySelector('[data-z="close"]').focus();
+    }
+    function close(){
+      ov.classList.remove('on'); body.style.overflow=''; pts={};
+      if(node){node.remove();node=null;} if(lastFocus&&lastFocus.focus) lastFocus.focus();
+    }
+    function act(z){
+      if(z==='close') close(); else if(z==='fit') toFit(); else if(z==='one') setScale(1);
+      else if(z==='in') setScale(s*1.4); else if(z==='out') setScale(s/1.4);
+    }
+    items.forEach(function(el,i){
+      el.classList.add('zoomable'); el.setAttribute('tabindex','0');
+      if(el.tagName.toLowerCase()==='img') el.title=Z.hint;
+      el.addEventListener('click',function(e){ if(e.target.closest&&e.target.closest('a')) return; open(i); });
+      el.addEventListener('keydown',function(e){ if(e.key==='Enter'||e.key===' '){e.preventDefault();open(i);} });
+    });
+    bar.addEventListener('click',function(e){var b=e.target.closest('button'); if(b) act(b.dataset.z);});
+    ov.addEventListener('wheel',function(e){
+      e.preventDefault(); setScale(s*Math.exp(-e.deltaY*(e.ctrlKey?0.01:0.0015)),e.clientX,e.clientY);
+    },{passive:false});
+    ov.addEventListener('pointerdown',function(e){
+      if(e.target.closest('.zoom-bar')) return;
+      try{ov.setPointerCapture(e.pointerId);}catch(_){}
+      pts[e.pointerId]={x:e.clientX,y:e.clientY,t:e.target}; if(Object.keys(pts).length===1) moved=false;
+      ov.classList.add('drag');
+    });
+    ov.addEventListener('pointermove',function(e){
+      var p=pts[e.pointerId]; if(!p) return;
+      var ids=Object.keys(pts);
+      if(ids.length===1){
+        var dx=e.clientX-p.x, dy=e.clientY-p.y; if(Math.abs(dx)+Math.abs(dy)>2) moved=true;
+        x+=dx; y+=dy; p.x=e.clientX; p.y=e.clientY; render();
+      }else if(ids.length===2){
+        var o=pts[ids[0]===String(e.pointerId)?ids[1]:ids[0]];
+        var d0=Math.hypot(p.x-o.x,p.y-o.y); p.x=e.clientX; p.y=e.clientY;
+        var d1=Math.hypot(p.x-o.x,p.y-o.y); moved=true;
+        if(d0>0) setScale(s*d1/d0,(p.x+o.x)/2,(p.y+o.y)/2);
+      }
+    });
+    function up(e){
+      var p=pts[e.pointerId]; delete pts[e.pointerId];
+      if(!Object.keys(pts).length){ ov.classList.remove('drag'); if(e.type==='pointerup'&&!moved&&p&&p.t===ov) close(); }
+    }
+    ov.addEventListener('pointerup',up); ov.addEventListener('pointercancel',up);
+    ov.addEventListener('dblclick',function(e){
+      if(!node||!node.contains(e.target)) return;
+      if(s>fit*1.05) toFit(); else setScale(isSvg?fit*2.5:Math.max(1,fit*2),e.clientX,e.clientY);
+    });
+    document.addEventListener('keydown',function(e){
+      if(!ov.classList.contains('on')) return;
+      var k=e.key, map={'Escape':'close','+':'in','=':'in','-':'out','_':'out','0':'fit','1':'one'};
+      if(map[k]) act(map[k]);
+      else if(k==='ArrowRight') open(idx+1);
+      else if(k==='ArrowLeft') open(idx-1);
+      else if(k==='Tab'){ /* keep focus inside the viewer */
+        var bs=bar.querySelectorAll('button'), f=bs[0], l=bs[bs.length-1];
+        if(e.shiftKey&&document.activeElement===f){l.focus();} else if(!e.shiftKey&&document.activeElement===l){f.focus();} else return;
+      } else return;
+      e.preventDefault(); e.stopImmediatePropagation();
+    },true);
+    window.addEventListener('resize',function(){ if(ov.classList.contains('on')) toFit(); });
+  })();
+
+  /* ---------- phase focus: hover anything with data-phase to light up the same phase everywhere; tap/click pins it ---------- */
+  (function phases(){
+    var els=[].slice.call(main.querySelectorAll('[data-phase]'));
+    if(!els.length) return;
+    var pinned=null;
+    function focus(p){
+      body.classList.toggle('focus-on',!!p);
+      els.forEach(function(el){el.classList.toggle('on',!!p&&el.getAttribute('data-phase')===p);});
+    }
+    els.forEach(function(el){
+      var p=el.getAttribute('data-phase');
+      el.addEventListener('mouseenter',function(){focus(p);});
+      el.addEventListener('mouseleave',function(){focus(pinned);});
+      if(!el.closest('svg')){ /* clicks inside diagrams stay with the zoom viewer */
+        el.addEventListener('click',function(e){
+          if(e.target.closest('a,button,summary,input,code')) return;
+          e.stopPropagation(); pinned=pinned===p?null:p; focus(pinned);
+        });
+      }
+    });
+    document.addEventListener('keydown',function(e){
+      if(e.key==='Escape'&&pinned&&!document.querySelector('.zoom-ov.on')){pinned=null;focus(null);}
+    });
+  })();
+
+  document.addEventListener('keydown',function(e){
+    var tag=(e.target.tagName||'').toLowerCase(), typing=tag==='input'||tag==='textarea'||e.target.isContentEditable;
+    if((e.key==='/'&&!typing)||((e.ctrlKey||e.metaKey)&&(e.key==='k'||e.key==='K'))){e.preventDefault();q.focus();q.select();}
+  });
+})();
+</script>
+</body>
+</html>
