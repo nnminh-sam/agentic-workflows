@@ -30,7 +30,8 @@
         "ship",
         "ship-record",
         "review-fetch",
-        "lane"
+        "lane",
+        "host-switch"
       ]
     },
     "prev": {
@@ -39,6 +40,23 @@
     }
   },
   "allOf": [
+    {
+      "if": {
+        "properties": {
+          "event": {
+            "const": "host-switch"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "node",
+          "unit",
+          "from",
+          "to"
+        ]
+      }
+    },
     {
       "if": {
         "properties": {

@@ -11,7 +11,8 @@ backends are supported:
   stages the files and prints `/my-git:commit`, `/my-git:push`, and `/my-git:pr` next steps, followed by
   `sdlc ship-record`.
 
-`SDLC="sh .sdlc/bin/sdlc"` (run every driver command via `DRIVER_CALL`). Speak to the user in the profile's
+`$SDLC` = the driver command your host binding names (`.sdlc\bin\sdlc-<host>.cmd` on Windows,
+`sh .sdlc/bin/sdlc-<host>` on macOS/Linux); run every driver command via `DRIVER_CALL`. Speak to the user in the profile's
 `locale.chat` (English unless set).
 
 <HARD-GATE>

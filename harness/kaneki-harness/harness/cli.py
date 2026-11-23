@@ -6,7 +6,7 @@ import argparse
 import json
 import os
 import sys
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any, Iterator
 
 from . import checks as C
@@ -266,8 +266,15 @@ def cmd_init(args: argparse.Namespace) -> None:
     ticket.save(state)
     ticket.log({"event": "init", "kind": args.kind, "lane": args.lane, "families": ctx["families"], "surfaces": ctx["surfaces"],
                 **({"locale": override} if override else {})})
+    hooks = {}
+    if not G.graph_uses_worktree(graph, ctx):  # in-place lanes: guard the checkout while this ticket holds it
+        from . import worktree_hooks
+        for repo in ctx["repositories"]:
+            hooks[repo["id"]] = worktree_hooks.install(Path(repo["path"]), path.parent, in_place=True,
+                                                       ticket=args.ticket, ticket_dir=ticket.dir, repo_id=repo["id"],
+                                                       base_branch=repo.get("baseBranch"))
     out({"ok": True, "ticketDir": str(ticket.dir), "lane": args.lane, "trace": order, "nextPending": order[0],
-         **({"warnings": warnings} if warnings else {})})
+         **({"hooks": hooks} if hooks else {}), **({"warnings": warnings} if warnings else {})})
 
 
 def cmd_lane(args: argparse.Namespace) -> None:
@@ -303,6 +310,7 @@ def cmd_status(args: argparse.Namespace) -> None:
         prof = load_profile(profile_path(args))
         t = Ticket(ticket_root(prof, profile_path(args).parent), args.ticket)
         t.accept_current(args.reason)
+    from . import board
     s = Session(args)
     rows = []
     tokens_total = 0
@@ -312,11 +320,14 @@ def cmd_status(args: argparse.Namespace) -> None:
         tokens_total += toks
         rows.append({"node": node, "layer": s.spec(node)["layer"], "status": rec["status"],
                      "generation": rec["generation"], "verdict": rec["verdict"], "tokens": toks,
-                     "models": sorted({u["model"] for u in rec["units"] if u["generation"] == rec["generation"]})})
+                     "models": sorted({u["model"] for u in rec["units"] if u["generation"] == rec["generation"]}),
+                     "hosts": sorted({board.unit_host(u) for u in rec["units"]
+                                      if u["generation"] == rec["generation"]})})
     nxt = next_pending(s.state, s.order)
     res = {"ticket": s.ctx["ticket"], "kind": s.ctx["kind"], "lane": G.lane_of(s.ctx), "reviewRound": s.ctx["reviewRound"],
            "settled": sum(1 for n in s.order if settled(s.state, n)), "traceLength": len(s.order),
            "nextPending": nxt, "tokensTotal": tokens_total}
+    res["host"], res["hosts"] = board.ticket_hosts(s.state)
     if nxt:
         res["nextMissing"] = missing_prerequisites(s.graph, s.order, s.state, nxt)
     if not args.compact:
@@ -471,7 +482,7 @@ def build_packet(s: Session, node: str, unit_id: str, facts_arg: str | None = No
         "settled": _bullets(facts.get("settled")), "authorizedPaths": _bullets(facts.get("authorizedPaths")),
         "findingsToFix": _bullets(facts.get("findingsToFix")),
         "languages": _languages_block(s, node),
-        "git": _git_block(s),
+        "git": _git_block(s, exe["host"]),
     }
     text = template
     for key, val in values.items():
@@ -484,7 +495,7 @@ def build_packet(s: Session, node: str, unit_id: str, facts_arg: str | None = No
     estimate = sum(f.stat().st_size for f in handed if f.is_file()) // 4
     res = {"path": str(path), "packetDigest": sha256_file(path), "agentType": agent_type(tier), "tier": tier,
            "model": exe["model"], "resultPath": str(result_path), "dispatchId": dispatch,
-           "roleCard": str(role_path), "execution": _public_execution(exe),
+           "roleCard": portable(role_path, HOME), "execution": _public_execution(exe),
            "handedTokens": estimate, "contextWindow": window}
     if escalated:
         res["escalated"] = {"from": unit["tier"], "why": escalated}
@@ -531,11 +542,25 @@ def _checks_block(spec: dict[str, Any]) -> str:
     return NL.join(lines) or "- no structural checks for this node (existence and citations only)"
 
 
-def launcher_cmd(profile_file: Path) -> str:
-    """How a unit calls the driver: project `.sdlc/bin/sdlc` shim when installed, else bundled `sdlc`."""
-    shim = profile_file.parent / ".sdlc" / "bin" / "sdlc"
-    launcher = shim.as_posix() if shim.is_file() else (HOME / "skills" / "kaneki-flow" / "scripts" / "sdlc").as_posix()
-    return f'sh "{launcher}" --profile "{profile_file.as_posix()}"'
+def launcher_cmd(profile_file: Path, host: str | None = None, windows: bool | None = None) -> str:
+    """The command a unit runs to call the driver, as display text for packets (never stored in state).
+
+    Windows (PowerShell, where `sh` is not on PATH): `& "<project>\\.sdlc\\bin\\sdlc-<host>.cmd"` when that per-host
+    launcher exists, else `sdlc.cmd`, else Python on the bundled `sdlc.py` (user-scope `~/.claude` install).
+    POSIX: `sh "<project>/.sdlc/bin/sdlc-<host>"`, else `sh .../sdlc`, else the bundled `sdlc` shim.
+    """
+    windows = (os.name == "nt") if windows is None else windows
+    bin_dir = profile_file.parent / ".sdlc" / "bin"
+    bundled = HOME / "skills" / "kaneki-flow" / "scripts"
+    names = ([f"sdlc-{host}"] if host and host != "profile" else []) + ["sdlc"]
+    if windows:
+        def win(p: Path) -> str:
+            return str(PureWindowsPath(p.as_posix()))
+        shim = next((bin_dir / f"{n}.cmd" for n in names if (bin_dir / f"{n}.cmd").is_file()), None)
+        head = f'& "{win(shim)}"' if shim else f'python "{win(bundled / "sdlc.py")}"'
+        return f'{head} --profile "{win(profile_file)}"'
+    shim = next((bin_dir / n for n in names if (bin_dir / n).is_file()), None)
+    return f'sh "{(shim or bundled / "sdlc").as_posix()}" --profile "{profile_file.as_posix()}"'
 
 
 def _languages_block(s: Session, node: str) -> str:
@@ -547,9 +572,9 @@ def _languages_block(s: Session, node: str) -> str:
     return "\n".join(lines)
 
 
-def _git_block(s: Session) -> str:
+def _git_block(s: Session, host: str | None = None) -> str:
     ident = gitid.identity(s.profile)
-    cmd = launcher_cmd(s.ppath)
+    cmd = launcher_cmd(s.ppath, host)
     per_repo = [f"- `{r['id']}`: {gitid.identity(s.profile, r['id'])['name']} <{gitid.identity(s.profile, r['id'])['email']}>"
                 for r in s.ctx["repositories"] if gitid.identity(s.profile, r["id"]) != ident]
     lines = [f"- Project identity: **{ident['name']} <{ident['email']}>**" + (" (custom SSH command configured)" if ident.get("sshCommand") else ""),
@@ -599,15 +624,27 @@ def record_unit(s: Session, node: str, unit_id: str, result_path: Path, model: s
         entry["plannedModel"] = exe["model"]
     if mismatch:
         entry["modelMismatch"] = True
+    previous = _last_recorded_unit(s)
     rec["units"].append(entry)
     rec["status"] = "in_progress" if rec["status"] in ("pending", "stale") else rec["status"]
     s.save()
     s.ticket.log({"event": "record", "node": node, **entry})
+    host = entry.get("host", "profile")
+    if previous is not None and previous.get("host", "profile") != host:
+        s.ticket.log({"event": "host-switch", "node": node, "unit": unit_id, "from": previous.get("host", "profile"),
+                      "to": host, "previousNode": previous.get("node"), "previousUnit": previous.get("unit")})
     U.write_ticket_file(s.ticket.dir, s.ctx["ticket"], s.order, s.state["nodes"])
     payload: dict[str, Any] = {"ok": True, "recorded": entry, "nodeTokens": U.node_usage(rec)["total"]}
     if warn:
         payload["warning"] = warn
     return payload
+
+
+def _last_recorded_unit(s: Session) -> dict[str, Any] | None:
+    """The ticket's most recent `record` event (any node, any generation), from the hash-chained log. A unit
+    recorded on the `profile` binding has no `host` key; callers read it as `profile`."""
+    events, _ = s.ticket.verify_log()
+    return next((e for e in reversed(events) if e.get("event") == "record"), None)
 
 
 def cmd_record(args: argparse.Namespace) -> None:
@@ -956,6 +993,19 @@ def cmd_worktree(args: argparse.Namespace) -> None:
     repo = next((r for r in s.ctx["repositories"] if r["id"] == args.repo), None)
     if repo is None:
         raise HarnessError(f"unknown repo {args.repo}")
+    from . import worktree_hooks
+    if args.release:
+        # end the in-place git protection of this ticket (the user's call: it lifts the branch/history guard)
+        if args.actor != "user":
+            raise HarnessError("G0: releasing the in-place git protection is the user's decision: repeat with --actor user")
+        checkout = Path(repo.get("worktree") or repo["path"])
+        res = worktree_hooks.release(checkout, s.ctx["ticket"])
+        s.ticket.log({"event": "worktree", "action": "release", "actor": "user", "repo": args.repo, "path": str(checkout),
+                      **res})
+        out({"ok": True, "repo": args.repo, "checkout": str(checkout), **res})
+        return
+    if not args.path:
+        raise HarnessError("--path is required (or --release --actor user to end in-place protection)")
     if not Path(args.path).is_dir():
         raise HarnessError(f"G7: worktree path does not exist: {args.path}")
     given = Path(args.path).resolve()
@@ -965,6 +1015,8 @@ def cmd_worktree(args: argparse.Namespace) -> None:
     if given != Path(repo["path"]).resolve() and given != expected:
         raise HarnessError(f"G7: worktree must be {expected.as_posix()} (paths.worktreeRoot/<repoId>-<ticket>), "
                            f"not {given.as_posix()}")
+    in_place = given == Path(repo["path"]).resolve()
+    previous = Path(repo["worktree"]).resolve() if repo.get("worktree") else None
     repo["worktree"] = str(given)
     repo["worktreeRel"] = portable(Path(repo["worktree"]), s.pdir)
     head = gitid.run(repo["worktree"], ["rev-parse", "HEAD"], gitid.identity(s.profile, repo["id"]))
@@ -973,8 +1025,13 @@ def cmd_worktree(args: argparse.Namespace) -> None:
     repo["startHead"] = head.stdout.strip()
     s.save()
     s.ticket.log({"event": "worktree", "repo": args.repo, "path": repo["worktree"]})
-    from . import worktree_hooks
-    hooks = worktree_hooks.install(given, s.pdir)
+    if in_place:  # the repository's own checkout: guarded only while this ticket holds it
+        hooks = worktree_hooks.install(given, s.pdir, in_place=True, ticket=s.ctx["ticket"], ticket_dir=s.ticket.dir,
+                                       repo_id=repo["id"], base_branch=repo.get("baseBranch"))
+    else:
+        hooks = worktree_hooks.install(given, s.pdir, base_branch=repo.get("baseBranch"))
+        if previous is not None and previous == Path(repo["path"]).resolve():
+            hooks["releasedInPlace"] = worktree_hooks.release(previous, s.ctx["ticket"])  # moved off the checkout
     out({"ok": True, "repo": args.repo, "worktree": repo["worktree"], "hooks": hooks})
 
 
@@ -1190,13 +1247,11 @@ def cmd_tickets(args: argparse.Namespace) -> None:
     out({"contractVersion": CONTRACT_VERSION, "tickets": board.list_tickets(profile_path(args))})
 
 
-def cmd_status_of(args: argparse.Namespace) -> None:
-    """The ticket a file belongs to (its ticket folder, or a ticket worktree `<repoId>-<ticket>`), as a board summary."""
-    from . import board
-    ppath = profile_path(args)
+def ticket_of_path(ppath: Path, path: Path) -> str | None:
+    """The ticket a file belongs to (its ticket folder, or a ticket worktree `<repoId>-<ticket>`), or None."""
     prof = load_profile(ppath)
     root = ticket_root(prof, ppath.parent)
-    target = Path(args.path).resolve()
+    target = path.resolve()
     ticket = None
     try:
         ticket = target.relative_to(root.resolve()).parts[0]
@@ -1207,7 +1262,16 @@ def cmd_status_of(args: argparse.Namespace) -> None:
             ticket = next((d.name for d in root.iterdir() if d.is_dir() and folder.endswith("-" + d.name)), None) if root.is_dir() else None
         except (ValueError, IndexError):
             pass
-    if not ticket or not (root / ticket / "state.json").is_file():
+    return ticket if ticket and (root / ticket / "state.json").is_file() else None
+
+
+def cmd_status_of(args: argparse.Namespace) -> None:
+    """The ticket a file belongs to (its ticket folder, or a ticket worktree `<repoId>-<ticket>`), as a board summary."""
+    from . import board
+    ppath = profile_path(args)
+    target = Path(args.path).resolve()
+    ticket = ticket_of_path(ppath, target)
+    if not ticket:
         out({"ticket": None, "path": str(target), "hint": "not inside a ticket folder or ticket worktree; see `sdlc tickets`"})
         return
     summary = board.summarize_ticket(ppath, ticket)
@@ -1226,6 +1290,23 @@ def cmd_gate_request(args: argparse.Namespace) -> None:
     """What the gate on a node would accept, as the desktop app's `GateRequest`. Read-only; never closes anything."""
     from . import board
     out(board.gate_request(Session(args), args.node))
+
+
+def cmd_decide(args: argparse.Namespace) -> int:
+    """A person closes a user gate at a terminal: gate-request shown as text, a choice, y/N, then `sdlc gate --actor
+    user` run in-process through `main`. Refuses without an interactive terminal (harness/decide.py)."""
+    from . import board, decide
+
+    def request(ticket: str, node: str | None) -> dict[str, Any]:
+        return board.gate_request(Session(argparse.Namespace(profile=args.profile, ticket=ticket, host=args.host)), node)
+
+    return decide.run(args, request, main)
+
+
+def cmd_transcripts(args: argparse.Namespace) -> None:
+    """Agent sessions per node of one ticket, from the agents' own logs; steps only with --node. Read-only."""
+    from . import sessions
+    out(sessions.transcripts(profile_path(args), args.ticket, args.node, max_steps=args.max_steps))
 
 
 def cmd_contract(args: argparse.Namespace) -> None:
@@ -1309,13 +1390,15 @@ def build_parser() -> argparse.ArgumentParser:
     x.set_defaults(fn=cmd_packet)
 
     x = sub.add_parser("dispatch", parents=[ticketed],
-                       help="build packet, spawn an external CLI runner, verify output, and record the unit")
+                       help="build packet, spawn an external CLI runner, verify output, and record the unit "
+                            "(refused for host antigravity: its units run on its own subagents)")
     x.add_argument("--node", required=True)
     x.add_argument("--unit", required=True)
     x.add_argument("--facts", help="facts JSON passed to packet")
     x.add_argument("--runner", choices=["codex", "claude", "gemini", "opencode"],
                    help="override runner CLI template from .sdlc/host.local.json")
-    x.add_argument("--command", help="custom command template string (tokenized with shlex.split; placeholders {prompt},{packet},{result},{model},{effort},{tier})")
+    x.add_argument("--command", help="custom command template: a JSON array of strings, or a string split shell-style (backslashes kept on "
+                        "Windows); placeholders {prompt},{packet},{result},{model},{effort},{tier}")
     x.add_argument("--timeout", type=int, default=900, help="subprocess timeout in seconds (default: 900)")
     x.add_argument("--dry-run", action="store_true", help="render packet and print resolved argv without executing")
     x.add_argument("--no-record", action="store_true", help="execute subprocess without calling sdlc record")
@@ -1346,9 +1429,12 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--reason", required=True)
     x.set_defaults(fn=cmd_invalidate)
 
-    x = sub.add_parser("worktree", parents=[ticketed], help="bind a repository to the ticket worktree")
+    x = sub.add_parser("worktree", parents=[ticketed], help="bind a repository to the ticket worktree (installs the git-safety hooks)")
     x.add_argument("--repo", required=True)
-    x.add_argument("--path", required=True)
+    x.add_argument("--path", help="the ticket's worktree slot, or the repository itself to work in place")
+    x.add_argument("--release", action="store_true",
+                   help="end this ticket's in-place git protection of the checkout (needs --actor user)")
+    x.add_argument("--actor", default="controller", choices=["controller", "user"])
     x.set_defaults(fn=cmd_worktree)
 
     x = sub.add_parser("handback", parents=[ticketed], help="start an after-PR review round from an exported review")
@@ -1414,10 +1500,10 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--reason", help="the user's words that asked for the change")
     x.set_defaults(fn=cmd_lang)
 
-    x = sub.add_parser("install", help="install kaneki playbooks/skills and `.sdlc/bin/sdlc` shim for a host")
+    x = sub.add_parser("install", help="install kaneki playbooks/skills and the `.sdlc/bin` driver launchers for a host")
     x.add_argument("--target", required=True, help="project folder (or ~/.claude when --host claude)")
-    x.add_argument("--host", choices=list(H.KNOWN_HOSTS), default="antigravity",
-                   help="target AI host (default: antigravity)")
+    x.add_argument("--host", choices=list(H.KNOWN_HOSTS), required=True,
+                   help="target AI host; run install once per host to set up several agents in one workspace")
     x.add_argument("--with-my-git", action="store_true",
                    help="also register the bundled my-git plugin (only valid with --host claude)")
     x.add_argument("--force", action="store_true", help="also overwrite installed files and host binding you edited")
@@ -1441,6 +1527,19 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--node")
     x.set_defaults(fn=cmd_gate_request)
 
+    x = sub.add_parser("decide", parents=[common],
+                       help="close a user gate yourself at a terminal: pick, read, choose, confirm (people only, needs a TTY)")
+    x.add_argument("--ticket", help="the ticket (default: pick from the tickets waiting on you)")
+    x.add_argument("--node", help="the node (default: the one the ticket waits on)")
+    x.add_argument("--path", help="infer the ticket from a file inside it (editor tasks); falls back to the picker")
+    x.set_defaults(fn=cmd_decide)
+
+    x = sub.add_parser("transcripts", parents=[ticketed],
+                       help="agent sessions per node from Claude/Codex/Antigravity logs and dispatch logs (read-only)")
+    x.add_argument("--node", help="one node, with the steps of each session")
+    x.add_argument("--max-steps", type=_non_negative, default=200, help="steps kept per session (first + most recent)")
+    x.set_defaults(fn=cmd_transcripts)
+
     x = sub.add_parser("contract", help="the data contract version the desktop app checks (read-only, no profile)")
     x.set_defaults(fn=cmd_contract)
 
@@ -1449,7 +1548,7 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--open", action="store_true", help="open it in the browser")
     x.set_defaults(fn=cmd_web)
 
-    x = sub.add_parser("zed-setup", help="add kaneki tasks (board, tickets, status) to <target>/.zed/tasks.json")
+    x = sub.add_parser("zed-setup", help="add kaneki tasks (board, tickets, status, decide) to <target>/.zed/tasks.json")
     x.add_argument("--target", required=True, help="the folder you open in Zed (the workspace with sdlc.profile.json)")
     x.add_argument("--dry-run", action="store_true")
     x.set_defaults(fn=cmd_zed_setup)
@@ -1468,7 +1567,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 READ_ONLY = {"status", "plan", "validate", "digest", "host", "onboard-scan", "onboard-verify", "onboard-write", "install",
-             "tickets", "status-of", "web", "zed-setup", "contract", "ticket-detail", "gate-request"}
+             "tickets", "status-of", "web", "zed-setup", "contract", "ticket-detail", "gate-request",
+             "transcripts",
+             "decide"}  # decide takes the lock only for the gate it runs (through main), never while it waits for you
 NO_STATUS_REFRESH = READ_ONLY | {"git"}
 
 

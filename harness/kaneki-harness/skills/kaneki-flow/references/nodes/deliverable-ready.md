@@ -8,3 +8,5 @@ Controller only:
    Edit → `sdlc invalidate --node delivery-drafts --reason "<user wording>"`.
 3. On approval, close with `--actor user`, then hand over to `/kaneki-ship`: it is the only path that commits,
    pushes and opens the PR/MR, as the project git identity, after the user approves the exact request.
+
+The user can also decide here without you: `sdlc decide --ticket <id>` in their own terminal.
