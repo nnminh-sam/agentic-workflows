@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -77,6 +78,7 @@ def summarize(s: Any, events_limit: int = 40, detail: bool = False) -> dict[str,
     strip = [{"node": n["node"], "status": n["status"], "verdict": n["verdict"], "generation": n["generation"],
               "boundary": n["boundary"], "waiting": waits[n["node"]]} for n in nodes]
     host, hosts = ticket_hosts(s.state)
+    flying = in_flight(s)
     summary = {
         "ticket": s.ctx["ticket"], "host": host, "hosts": hosts, "title": _title(s), "kind": s.ctx["kind"], "lane": G.lane_of(s.ctx),
         "reviewRound": s.ctx["reviewRound"], "contractVersion": CONTRACT_VERSION,
@@ -86,7 +88,7 @@ def summarize(s: Any, events_limit: int = 40, detail: bool = False) -> dict[str,
         "nextPending": nxt, "next": next_hint(s, nxt), "tokensTotal": tokens_total,
         "waitingOn": wait["on"], "waitingNode": wait["node"], "waitingReason": wait["reason"],
         "lastEventAt": shown[-1]["at"] if shown else None, "lastEventKind": shown[-1]["event"] if shown else None,
-        "nodes": nodes, "strip": strip,
+        "nodes": nodes, "strip": strip, "inFlight": flying,
         "repositories": [{"id": r["id"], "path": r["path"], "worktree": r.get("worktree"), "base": r.get("baseBranch")}
                          for r in extra],
         "questions": {"path": str(questions), "exists": questions.is_file()},
@@ -419,6 +421,199 @@ def _gate_choices(s: Any, node: str, spec: dict[str, Any], bare: dict[str, Any],
     return choices
 
 
+# --- in flight -----------------------------------------------------------------------------------------------
+
+# The unit-contract line of the packet template (playbooks/packet-template.md): what the packet was rendered with.
+PACKET_HEAD_RE = re.compile(r"tier \*\*(?P<tier>[^*\n]+)\*\*, host \*\*(?P<host>[^*\n]+)\*\*, model \*\*(?P<model>[^*\n]+)\*\*")
+PACKET_HEAD_BYTES = 4096
+
+
+def _iso(epoch: float) -> str:
+    return datetime.fromtimestamp(epoch, timezone.utc).replace(microsecond=0).isoformat()
+
+
+def in_flight(s: Any, now: float | None = None) -> list[dict[str, Any]]:
+    """Units dispatched but not recorded yet, in trace order: a packet `packets/<node>.g<gen>.<unit>.r<round>.md`
+    (cli.build_packet) rendered at the node's current generation whose round has no record. Read-only.
+
+    `build_packet` numbers a round as 1 + the unit's records at that generation, so round R is recorded once the unit
+    has R records there. A packet of an earlier generation (superseded by invalidate / needs-changes), of a node that
+    is done, or of a node no longer in the trace is not in flight. Per unit only the highest open round is listed.
+
+    tier / host / model are the ones the packet was rendered with (its unit-contract line); a packet without that line
+    falls back to the current plan. `now` (epoch seconds) adds `ageSeconds`; without it the result is deterministic,
+    as STATUS.md and the ticket summary need."""
+    from .sessions import split_dispatch
+
+    folder = s.ticket.dir / "packets"
+    try:
+        entries = list(folder.iterdir()) if folder.is_dir() else []
+    except OSError:
+        return []
+    latest: dict[tuple[str, str], tuple[dict[str, Any], Path]] = {}
+    for path in entries:
+        if path.suffix != ".md" or not path.is_file():
+            continue
+        ident = split_dispatch(path.stem, s.order)
+        if not ident or ident["node"] not in s.order:
+            continue
+        rec = s.state["nodes"][ident["node"]]
+        if rec["status"] == "done" or ident["generation"] != rec["generation"]:
+            continue
+        recorded = sum(1 for u in rec["units"] if u["unit"] == ident["unit"] and u["generation"] == rec["generation"])
+        if recorded >= ident["round"]:
+            continue
+        key = (ident["node"], ident["unit"])
+        if key not in latest or ident["round"] > latest[key][0]["round"]:
+            latest[key] = (ident, path)
+
+    out = []
+    for (node, unit), (ident, path) in latest.items():
+        try:
+            mtime = path.stat().st_mtime
+            with path.open("r", encoding="utf-8", errors="replace") as fh:
+                head = fh.read(PACKET_HEAD_BYTES)
+        except OSError:
+            continue
+        try:
+            role = s.unit(node, unit).get("role")
+        except HarnessError:
+            role = None  # the graph no longer plans this unit; still a packet nobody recorded
+        m = PACKET_HEAD_RE.search(head)
+        if m:
+            tier, host, model = m.group("tier"), m.group("host"), m.group("model")
+        elif role is not None:
+            tier = s.tier(node, unit)[0]
+            exe = s.execution(node, unit, tier)
+            host, model = exe["host"], exe["model"]
+        else:
+            tier = host = model = None
+        dispatch = path.stem
+        result = s.ticket.dir / "results" / f"{dispatch}.md"
+        row: dict[str, Any] = {
+            "ticket": s.ctx["ticket"], "node": node, "unit": unit, "role": role, "generation": ident["generation"],
+            "round": ident["round"], "dispatchId": dispatch, "tier": tier, "model": model, "host": host,
+            "packetPath": str(path), "packetAt": _iso(mtime), "resultPath": str(result),
+            "resultExists": result.is_file(),
+        }
+        if now is not None:
+            row["ageSeconds"] = max(0, int(now - mtime))
+        out.append(row)
+    out.sort(key=lambda r: (s.order.index(r["node"]), r["unit"]))
+    return out
+
+
+def ticket_lock(ticket_dir: Path, now: float | None = None) -> dict[str, Any] | None:
+    """The writer holding the ticket lock (state.Ticket.lock: `.lock/owner.json`), or None. Read-only; a lock without
+    a readable owner file (being taken, or a crash) still counts, aged by the folder's mtime."""
+    lock = ticket_dir / ".lock"
+    if not lock.is_dir():
+        return None
+    try:
+        info = json.loads((lock / "owner.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        info = {}
+    if not isinstance(info, dict):
+        info = {}
+    try:
+        since = float(info.get("since") or lock.stat().st_mtime)
+    except (OSError, TypeError, ValueError):
+        return None
+    out: dict[str, Any] = {"command": info.get("command"), "pid": info.get("pid"), "since": _iso(since)}
+    if now is not None:
+        out["ageSeconds"] = max(0, int(now - since))
+    return out
+
+
+def inflight_report(profile: Path, now: float | None = None) -> dict[str, Any]:
+    """Across every ticket under the profile: the units in flight, the tickets waiting on the user and the ticket locks
+    held, for the board's in-flight dock (`GET /api/inflight`). Read-only.
+
+    `tickets` lists each ticket that has a unit in flight, waits on the user, or is locked, with its last event time;
+    `needsYou` counts the ones waiting on the user. A ticket that fails to load is listed with its `error`."""
+    import time as _time
+    from .cli import Session, ticket_root
+    from .profile import load_profile
+
+    now = _time.time() if now is None else now
+    root = ticket_root(load_profile(profile), profile.parent)
+    units: list[dict[str, Any]] = []
+    tickets: list[dict[str, Any]] = []
+    for d in sorted(root.iterdir()) if root.is_dir() else []:
+        if not (d / "state.json").is_file():
+            continue
+        lock = ticket_lock(d, now)
+        try:
+            s = Session(argparse.Namespace(profile=str(profile), ticket=d.name))
+        except HarnessError as exc:
+            tickets.append({"ticket": d.name, "error": str(exc), "lock": lock, "inFlight": 0, "waitingOn": None,
+                            "waitingNode": None, "waitingReason": None, "lastEventAt": None, "lastEventKind": None})
+            continue
+        flying = in_flight(s, now)
+        units += flying
+        wait = waiting(s)
+        if not (flying or lock or wait["on"] == "user"):
+            continue
+        events, _ = s.ticket.verify_log()
+        shown = [e for e in events if e.get("event") not in HIDDEN_EVENTS]
+        tickets.append({
+            "ticket": d.name, "title": _title(s), "waitingOn": wait["on"], "waitingNode": wait["node"],
+            "waitingReason": wait["reason"], "inFlight": len(flying), "lock": lock,
+            "lastEventAt": shown[-1]["at"] if shown else None, "lastEventKind": shown[-1]["event"] if shown else None,
+        })
+    units.sort(key=lambda u: u["packetAt"])
+    tickets.sort(key=lambda t: t.get("lastEventAt") or "", reverse=True)
+    return {"contractVersion": CONTRACT_VERSION, "generatedAt": _iso(now), "units": units, "tickets": tickets,
+            "needsYou": sum(1 for t in tickets if t["waitingOn"] == "user")}
+
+
+# --- one node ------------------------------------------------------------------------------------------------
+
+def node_view(s: Any, node: str) -> dict[str, Any]:
+    """One node of one ticket for the board's node inspector (`GET /api/node`). Read-only.
+
+    `units`: one row per planned unit at the current generation (planned tier/model/host, the last record's verdict,
+    status, model, host and result, tokens and rounds recorded at this generation, and whether a round is in flight);
+    `records`: every unit record of every generation; `events`: the decision events about this node (record, gate,
+    invalidate, host-switch, ...; an invalidate elsewhere that made it stale included); `gateRequest`: the
+    `gate_request` view when the node waits on the user, else None. The `NodeCard` keys of `sdlc ticket-detail` are
+    included as well."""
+    spec = s.spec(node)  # HarnessError when the node is not in this ticket's trace
+    rec = s.state["nodes"][node]
+    events, problems = s.ticket.verify_log()
+    wait = waiting(s, node, problems=problems)
+    detail = _node_detail(s, node, wait)
+    flying = {r["unit"]: r for r in in_flight(s) if r["node"] == node}
+    current = [u for u in rec["units"] if u["generation"] == rec["generation"]]
+    units = []
+    for planned in detail["plannedUnits"]:
+        mine = [u for u in current if u["unit"] == planned["id"]]
+        last = mine[-1] if mine else None
+        units.append({
+            "unit": planned["id"], "role": planned["role"], "tier": planned["tier"], "model": planned["model"],
+            "host": planned["host"], "escalated": planned.get("escalated"), "generation": rec["generation"],
+            "rounds": len(mine), "tokens": sum(u.get("tokens") or 0 for u in mine),
+            "status": last["status"] if last else None, "verdict": last.get("verdict") if last else None,
+            "recordedModel": last["model"] if last else None, "recordedHost": unit_host(last) if last else None,
+            "result": last.get("result") if last else None,
+            "resultExists": bool(last and last.get("result") and Path(last["result"]).is_file()),
+            "at": last.get("at") if last else None, "inFlight": flying.get(planned["id"]),
+        })
+    arts = [{"name": a, "path": str(s.ticket.dir / a), "exists": (s.ticket.dir / a).is_file()}
+            for a in s.artifacts(node) + spec.get("optionalArtifacts", [])]
+    about = [e for e in events if e.get("event") not in HIDDEN_EVENTS
+             and (e.get("node") == node or node in (e.get("stale") or []) or e.get("previousNode") == node)]
+    return {
+        "contractVersion": CONTRACT_VERSION, "ticket": s.ctx["ticket"], "node": node, "layer": spec["layer"],
+        "purpose": spec["purpose"], "status": rec["status"], "generation": rec["generation"], "verdict": rec["verdict"],
+        "attempts": rec["attempts"], "boundary": spec["boundary"], "closedAt": rec.get("closedAt"),
+        "units": units, "records": [{**u, "host": unit_host(u)} for u in rec["units"]],
+        "artifacts": arts, "events": about, "inFlight": list(flying.values()),
+        "gateRequest": gate_request(s, node) if wait["on"] == "user" else None,
+        **detail,
+    }
+
+
 def summarize_ticket(profile: Path, ticket: str) -> dict[str, Any]:
     from .cli import Session
     try:
@@ -483,6 +678,10 @@ def render_status_md(summary: dict[str, Any], mismatched_nodes: set[str] | None 
                      f"{agent_col} | {model_col} | {n['tokens'] or ''} | {arts} |")
     if mismatched:
         lines += ["", "> ⚠️ **Model verification:** one or more current-round units ran on an inherited or unverified host model."]
+    if t.get("inFlight"):
+        lines += ["", "**In flight** (packet rendered, no result recorded): " + "; ".join(
+            f"{r['node']}/{r['unit']} r{r['round']} on {r['host'] or '?'} ({r['model'] or '?'}) since "
+            f"`{r['packetAt'][:19].replace('T', ' ')}`" for r in t["inFlight"])]
     if (tdir / "token-usage.md").is_file():
         lines += ["", "**Token usage per node and agent:** [token-usage.md](token-usage.md)"]
     if t["questions"]["exists"]:
