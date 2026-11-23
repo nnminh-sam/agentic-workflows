@@ -209,7 +209,10 @@ def validate_profile(p: dict[str, Any]) -> None:
                                 errors.append(f"nodeOverrides.{node_id}.units.{uid}.tier must be one of {', '.join(ALL_TIERS)}")
     known = {"schemaVersion", "meta", "project", "locale", "paths", "models", "tracker", "repositories", "rulepacks",
              "testcase", "evidence", "delivery", "families", "gates", "environment", "git", "contextWindow",
-             "nodeOverrides", "learning"}
+             "nodeOverrides", "budgets", "learning"}
+    if "budgets" in p:
+        from .budget import config_errors
+        errors += config_errors(p["budgets"])
     extra = sorted(k for k in p if k not in known and not k.startswith("_"))
     if extra:
         errors.append(f"unknown top-level keys {extra}")

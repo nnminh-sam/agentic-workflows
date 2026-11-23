@@ -97,6 +97,7 @@ def summarize(s: Any, events_limit: int = 40, detail: bool = False) -> dict[str,
         "receipts": s.state.get("receipts") or {}, "shipped": s.state.get("shipped") or {},
         "events": shown[max(0, len(shown) - events_limit):], "integrity": problems or None,
         "runner": runner_view(s.ticket.dir, events),  # autonomy / parked / run lease (harness/runner.py), additive
+        "budget": budget_view(s, nxt, events),  # G8 level / usage / caps (harness/budget.py), additive; None = no block
         "pendingProposals": _pending_proposals(s),  # reflect proposals nobody applied or rejected yet, additive
     }
     if detail:
@@ -117,6 +118,23 @@ def _pending_proposals(s: Any) -> int:
         return learn.pending_count(s.pdir, s.ticket.dir)
     except (OSError, ValueError, HarnessError):
         return 0
+
+
+def budget_view(s: Any, node: str | None, events: list[dict[str, Any]] | None = None) -> dict[str, Any] | None:
+    """The `budget` field of a summary: the G8 check of the next pending node (None without a budgets block).
+    Read-only; usage comes from cost.py's cache."""
+    if s.profile.get("budgets") is None:
+        return None
+    from . import budget as B
+    try:
+        if events is None:
+            events, _ = s.ticket.verify_log()
+        res = B.check(s.ppath, s.ctx["ticket"], node, prof=s.profile, events=events,
+                      generation=s.state["nodes"][node]["generation"] if node else None)
+    except (HarnessError, OSError, ValueError) as exc:
+        return {"level": "unknown", "error": str(exc)}
+    return {k: res.get(k) for k in ("level", "allowed", "action", "node", "day", "over", "reasons", "usage", "caps",
+                                    "warnAt", "override")}
 
 
 def _node_detail(s: Any, node: str, wait: dict[str, Any]) -> dict[str, Any]:
@@ -722,6 +740,12 @@ def render_status_md(summary: dict[str, Any], mismatched_nodes: set[str] | None 
         lines += ["", f"**Measured** (agents' own logs, each API message once): {m['tokens']:,} tokens · {usd}"
                   + f" · reported {m['reportedTokens']:,}" + (f" (x{m['ratio']})" if m.get("ratio") is not None else "")
                   + " · `sdlc cost --ticket " + t["ticket"] + "`"]
+    b = t.get("budget")
+    if b and b.get("level") in ("ok", "warn", "over"):
+        from .budget import line
+        text = line({**b, "configured": True})
+        if text:
+            lines += ["", text + " · `sdlc budget --ticket " + t["ticket"] + "`"]
     if (tdir / "token-usage.md").is_file():
         lines += ["", "**Token usage per node and agent:** [token-usage.md](token-usage.md)"]
     if t.get("pendingProposals"):
