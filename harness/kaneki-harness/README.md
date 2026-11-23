@@ -75,6 +75,14 @@ It also works when the profile sits inside the repository (one repo open in the 
   node table, artifact preview, the decision log, and **Open in Zed** (uses the `zed` CLI, or `SDLC_EDITOR`).
   Read-only: approvals still happen in the agent thread, so the log records who approved.
 - **`sdlc tickets`** / **`sdlc status-of --path <file>`** give the same view as JSON.
+- **`sdlc cost --ticket T [--node N] [--json]`** measures usage from the agents' own session logs (Claude Code,
+  Codex, Antigravity, dispatch logs), counting each API message once, and puts it next to the tokens the agents
+  reported with `sdlc record --tokens`, which are a lower bound. `sdlc cost --since today` (or `--since D --until D`)
+  totals every ticket for a day or range. USD is the agent's own reported cost where it has one (Claude Code), else
+  tokens × your price table, else unknown. The price table is user config, never the repo: `$KANEKI_PRICES`, else
+  `$KANEKI_HOME/prices.json`, else `~/.kaneki/prices.json`. `sdlc cost --init-prices` writes a template with null
+  prices, and an entry counts as unverified until you set `"verified": true`. STATUS.md, `sdlc tickets` and the
+  board's Cost tab show the same measured total (cached under `~/.kaneki/cache/cost`).
 - **`sdlc zed-setup --target .`** adds Zed tasks (`task: spawn` → `kaneki: board (web)`, `kaneki: tickets`,
   `kaneki: ticket status (from open file)`, `kaneki: validate profile`). Your own tasks are kept.
 
