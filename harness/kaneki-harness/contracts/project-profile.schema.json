@@ -478,6 +478,109 @@
         },
         "additionalProperties": false
       }
+    },
+    "budgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Optional spend caps checked by gate G8 (`sdlc packet`, the runner) and shown by `sdlc budget`. No block = no budget checks. Usage is measured from the agents' own logs (harness/cost.py).",
+      "properties": {
+        "ticket": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "usd": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Cap in USD (measured: reported + priced; unpriced usage falls back to the token cap)."
+            },
+            "tokens": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Cap in measured tokens (input + output + cache read + cache write)."
+            }
+          },
+          "description": "Everything measured for one ticket."
+        },
+        "node": {
+          "type": "object",
+          "description": "Per node of a ticket: the node's unit sessions plus the controller work attributed to it. `default` applies to every node; a node name overrides it key by key.",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "usd": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Cap in USD (measured: reported + priced; unpriced usage falls back to the token cap)."
+              },
+              "tokens": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Cap in measured tokens (input + output + cache read + cache write)."
+              }
+            }
+          }
+        },
+        "daily": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "usd": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Cap in USD (measured: reported + priced; unpriced usage falls back to the token cap)."
+            },
+            "tokens": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Cap in measured tokens (input + output + cache read + cache write)."
+            }
+          },
+          "description": "Everything measured on this machine's local calendar day, all tickets."
+        },
+        "warnAt": {
+          "type": "number",
+          "minimum": 0,
+          "default": 0.8,
+          "description": "Fraction of a cap (0-1) from which the level is `warn`."
+        },
+        "action": {
+          "enum": [
+            "park",
+            "warn"
+          ],
+          "default": "park",
+          "description": "`park`: over a cap refuses packets and parks/stops runner nodes; `warn`: only warns."
+        }
+      }
+    },
+    "learning": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Self-improvement (M4). Learning output never changes anything without the user's approval (D10).",
+      "properties": {
+        "reflect": {
+          "enum": [
+            "always",
+            "on-signal",
+            "off"
+          ],
+          "default": "on-signal",
+          "description": "When the reflect node runs: on-signal (default) dispatches its unit only when something went wrong (sdlc reflect-signals has new signals) and otherwise closes it without a unit; always dispatches it on every ticket and review round; off removes it from the trace."
+        },
+        "lessonsPerPacket": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 8,
+          "description": "Most approved lessons (sdlc learn apply) one packet carries in its `Project lessons` section, most specific first; 0 turns lessons in packets off."
+        },
+        "retireAfterTickets": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 10,
+          "description": "`sdlc learn retro` flags a lesson or learned rule as 'consider retiring' when no dispatch used it in this many tickets since its approval. Nothing is retired automatically."
+        }
+      }
     }
   },
   "additionalProperties": false

@@ -75,6 +75,23 @@ It also works when the profile sits inside the repository (one repo open in the 
   node table, artifact preview, the decision log, and **Open in Zed** (uses the `zed` CLI, or `SDLC_EDITOR`).
   Read-only: approvals still happen in the agent thread, so the log records who approved.
 - **`sdlc tickets`** / **`sdlc status-of --path <file>`** give the same view as JSON.
+- **`sdlc cost --ticket T [--node N] [--json]`** measures usage from the agents' own session logs (Claude Code,
+  Codex, Antigravity, dispatch logs), counting each API message once, and puts it next to the tokens the agents
+  reported with `sdlc record --tokens`, which are a lower bound. `sdlc cost --since today` (or `--since D --until D`)
+  totals every ticket for a day or range. USD is the agent's own reported cost where it has one (Claude Code), else
+  tokens × your price table, else unknown. The price table is user config, never the repo: `$KANEKI_PRICES`, else
+  `$KANEKI_HOME/prices.json`, else `~/.kaneki/prices.json`. `sdlc cost --init-prices` writes a template with null
+  prices, and an entry counts as unverified until you set `"verified": true`. STATUS.md, `sdlc tickets` and the
+  board's Cost tab show the same measured total (cached under `~/.kaneki/cache/cost`).
+- **Budgets (gate G8)**: an optional profile block, every key optional, no block = no checks:
+  `"budgets": {"ticket": {"usd": 40, "tokens": 60000000}, "node": {"default": {"usd": 6, "tokens": 15000000},
+  "code-review": {"usd": 8}}, "daily": {"usd": 60, "tokens": 120000000}, "warnAt": 0.8, "action": "park"}`.
+  Ticket and daily (this machine's local day, every ticket) count everything measured; a node counts its unit
+  sessions plus the controller work attributed to it. When part of the usage has no USD, the token cap governs that
+  part and the level is at least `warn`. Over a cap, `sdlc packet` refuses with `G8` and the runner parks the node
+  (or stops a running one); `"action": "warn"` only warns. **`sdlc budget --ticket T`** shows caps, usage and level;
+  the user lets one node through for its current round with `sdlc budget --ticket T --allow-node N --reason ...
+  --actor user`. STATUS.md, `sdlc tickets`, the board and its Cost tab show the level.
 - **`sdlc zed-setup --target .`** adds Zed tasks (`task: spawn` → `kaneki: board (web)`, `kaneki: tickets`,
   `kaneki: ticket status (from open file)`, `kaneki: validate profile`). Your own tasks are kept.
 
@@ -103,6 +120,74 @@ Background and decisions: [docs/zed-workspace/plan.md](docs/zed-workspace/plan.m
    yourself. Its units run on its own subagents. Never start it from `sdlc dispatch` (the driver refuses), a script,
    `agy -p` or a community bridge: Antigravity's terms do not allow third-party software to drive it.
    Codex units run through `sdlc dispatch` (`codex exec -m <model> -c model_reasoning_effort=<effort> <prompt>`).
+
+## Unattended runs (Claude Code and Codex)
+
+The runner works a ticket's nodes while you are away, one node per fresh agent session, in the workspace folder:
+Claude Code as a background session (`claude --bg -n kaneki:<ticket>:<node>:<runId>`), Codex with `codex exec`.
+It never starts Antigravity, never crosses a user gate, and never commits, pushes or ships.
+
+```bash
+sdlc autonomy --ticket ISSUE-123 --set on        # opt in; nothing runs unattended without it
+sdlc run --ticket ISSUE-123 --max-nodes 3        # run now (--host claude|codex; default: the active binding)
+sdlc tick                                        # one scheduler pass: recover, then start one node per opted-in ticket
+sdlc recover                                     # after a shutdown: release dead runs, restart orphaned nodes once
+sdlc run --stop --ticket ISSUE-123               # stop the running session and release the run lease
+sdlc unpark --ticket ISSUE-123                   # let the runner continue a ticket it parked
+```
+
+- A node is done when its `gate` event is in `decisions.jsonl`, not when the session says so.
+- The runner **parks** a ticket (event `park`, an entry in `.sdlc/inbox.jsonl`, a desktop toast through the
+  notify-hook when it is installed) when the next node closes on you (`sdlc decide`), or when a session stops without
+  its gate: answer it with `claude attach <id>`. A parked ticket continues by itself once the gate is closed.
+- A usage-limit error writes `.sdlc/run/backoff-<host>.json`; nothing starts on that host until its retry time.
+- Settings live in `.sdlc/runner.local.json`: `maxConcurrent` (1), `pollSeconds` (15), `nodeTimeoutMinutes` (180),
+  `retries` (1), `backoffMinutes` (60), `claudeArgs`, `codexTier`, `notifyCommand` (argv with `{title}`
+  `{message}` `{ticket}` `{kind}`; `[]` turns it off), `notifyHook`.
+- Claude sessions start with `--permission-mode auto` unless `.sdlc/runner.local.json` sets `claudeArgs`. In auto
+  mode Claude decides on its own which tool calls need no confirmation, so a background session nobody watches does
+  not stop at a permission prompt (that would only park the ticket). The kaneki guard hook and the worktree git hooks
+  still block history changes (commit, push, rebase, `reset --hard`, `branch -D`, ...) in this mode; only
+  `kaneki-ship` commits, after your approval. To change it, set `claudeArgs`, for example
+  `["--permission-mode", "acceptEdits"]`; `[]` passes nothing extra, so your own Claude settings decide.
+- Run state per ticket: `run/lease.json` (separate from the 10-minute command lock) and `run/<runId>.jsonl`.
+
+### Scheduled runs (`sdlc schedule`)
+
+`tick` and `recover` run on a timer, so tickets move on while you are away and runs are picked up again after a
+shutdown or reboot. Nothing runs until a ticket opts in: `sdlc autonomy --ticket ISSUE-123 --set on`.
+
+```bash
+sdlc schedule --install --dry-run          # print the exact commands / crontab lines; change nothing
+sdlc schedule --install [--every 15]       # Windows: create the two tasks; macOS/Linux: print the crontab lines
+sdlc schedule --install --show-console     # Windows: without conhost --headless (a console window flashes)
+sdlc schedule --install --write            # macOS/Linux: also add the lines to your crontab
+sdlc schedule --status                     # tasks present?, next / last run, last result, last log lines
+sdlc schedule --uninstall                  # remove only what --install created
+```
+
+- **Windows** (needs no admin): two per-user Task Scheduler tasks, `kaneki tick <workspace>-<hash>` every N
+  minutes and `kaneki recover <workspace>-<hash>` at your logon (2 minutes after). The name is the workspace folder
+  plus a hash of its path, so each workspace has its own pair; `--uninstall` deletes exactly these two names and
+  never another task. The tasks are created from XML (`.sdlc/run/schedule-<pass>.xml`): a pass never starts while
+  the previous one runs, and a tick missed while the machine slept runs when it wakes. They run only while you are
+  logged on.
+- **No console window on Windows**: the tasks start the wrapper through `conhost.exe --headless "<wrapper>" tick`,
+  so nothing flashes at each pass. `--headless` is an undocumented Windows switch and a Windows update may change
+  it. If passes stop running or a window appears, reinstall with `sdlc schedule --install --show-console`, which
+  runs the wrapper directly (a console window then flashes briefly at each pass). On a Windows without
+  `conhost.exe` the install does the same by itself and says so in its `console` field.
+- **macOS / Linux**: `*/N * * * *` runs tick and `@reboot` runs recover. Each line ends with the marker
+  `# kaneki tick|recover <workspace>-<hash>`, and `--install --write` / `--uninstall` change only lines with those
+  markers. `--every` must be below 60 or whole hours. The wrapper keeps the `PATH` of the shell that installed it
+  (cron starts with a bare one); install again after `claude` or Python moves.
+- Both run the wrapper `.sdlc/bin/sdlc-schedule.cmd` / `.sdlc/bin/sdlc-schedule` (`tick` or `recover`), which goes
+  through the project launcher (it finds Python 3.9+), so `sdlc install` must have run in the workspace first.
+- A pass takes a workspace lock (`.sdlc/run/schedule.lock`), so passes never overlap; with no ticket opted in and no
+  run lease it returns at once without loading the runner. Each pass writes one line to `.sdlc/run/schedule.log`
+  (the full result of the last one is in `.sdlc/run/schedule.last`); install and uninstall are logged there too,
+  not in any ticket's decision log. Which host runs nodes comes from `host` in `.sdlc/runner.local.json` or the
+  active binding, as for `sdlc tick`.
 
 ## Workspace layout
 

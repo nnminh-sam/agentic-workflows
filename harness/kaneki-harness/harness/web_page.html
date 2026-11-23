@@ -27,6 +27,16 @@ html,body{height:100%;overflow:hidden}
 .b-host i{width:8px;height:8px;border-radius:50%;display:inline-block;background:var(--ink-4,var(--ink-3))}
 .b-host--claude i{background:var(--tier-deep)}.b-host--codex i{background:var(--ink)}.b-host--antigravity i{background:var(--accent)}.b-host--gemini i{background:var(--tier-light)}
 .b-switch{font-size:12px;color:var(--ink-3);display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
+.b-today{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-3);white-space:nowrap;font-variant-numeric:tabular-nums}
+.b-today b{color:var(--ink);font-weight:600}
+.b-cost{min-width:0}
+.b-cost .k-stats,.b-cost .k-callout{margin-bottom:var(--space-3)}
+.b-cost .k-table td,.b-cost .k-table th{white-space:nowrap}
+.b-cost .k-table td.b-srccell{white-space:normal;min-width:120px;line-height:1.9}
+.b-cost .b-usd{font-weight:600;font-variant-numeric:tabular-nums;margin-right:4px}
+.b-cost .k-card + .k-card{margin-top:var(--space-3)}
+.b-budget__scope{display:inline-block;margin-right:12px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.b-budget__scope.is-warn b{color:var(--warn,inherit)}.b-budget__scope.is-over b{color:var(--bad,inherit)}
 .b-node-host{display:block;margin-top:2px;font-size:10.5px;color:var(--ink-3);text-align:center}
 .k-node{cursor:pointer}
 .b-ins-tabs{padding:0 var(--space-4);border-bottom:1px solid var(--border)}
@@ -97,6 +107,7 @@ html,body{height:100%;overflow:hidden}
     <div class="k-breadcrumb"><svg class="k-icon k-icon--sm" aria-hidden="true"><use href="#i-chevron-right"/></svg><b id="project"></b></div>
     <span class="b-url" id="host"></span>
     <span class="k-spacer"></span>
+    <span class="b-today" id="today" hidden><svg class="k-icon k-icon--sm" aria-hidden="true"><use href="#i-coins"/></svg>today <span id="todayText"></span></span>
     <span class="b-live" id="live" role="status"><span class="k-dot k-dot--run" style="width:6px;height:6px"></span><span id="liveText">connecting…</span></span>
     <button class="k-pill k-pill--attention" id="pill" hidden title="Jump to the first ticket that waits on you"><span class="k-pill__count" id="pillCount">0</span>need you</button>
     <div class="k-segmented" id="theme" role="group" aria-label="Theme"><button data-t="light" aria-label="Light theme"><svg class="k-icon k-icon--sm" aria-hidden="true"><use href="#i-sun"/></svg></button><button data-t="dark" aria-label="Dark theme"><svg class="k-icon k-icon--sm" aria-hidden="true"><use href="#i-moon"/></svg></button></div>
@@ -173,7 +184,8 @@ var st = {t: q.get('t'), n: q.get('n'), itab: q.get('tab') || 'overview', tx: q.
   agent: 'claude', how: 'copy', contNode: null};
 if (['overview', 'transcripts', 'events'].indexOf(st.itab) < 0) st.itab = 'overview';
 if (['pipeline', 'decisions', 'cost'].indexOf(st.view) < 0) st.view = 'pipeline';
-var data = {tickets: null, editor: false, inflight: null, detail: null, node: null, tx: null, logs: {}, txErr: null};
+var data = {tickets: null, editor: false, inflight: null, detail: null, node: null, tx: null, logs: {}, txErr: null,
+  cost: null, costErr: null, today: null};
 var shown = {};   // last rendered HTML per region; a poll that changes nothing leaves the DOM (focus, open details) alone
 
 var $ = function (s) { return document.querySelector(s); };
@@ -271,6 +283,7 @@ function sep(p) { return p.indexOf('\\') >= 0 ? '\\' : '/'; }
 /* ------------------------------------------------------------------ render: top + rail */
 function renderTop() {
   $('#project').textContent = PROJECT;
+  renderToday();
   $('#host').textContent = location.host;
   var n = data.inflight ? data.inflight.needsYou : 0;
   $('#pill').hidden = !n; $('#pillCount').textContent = String(n);
@@ -344,15 +357,7 @@ function renderMain() {
       (ev.length ? '<div class="k-log">' + ev.map(function (e) { return eventLine(e); }).join('') + '</div>' : '<span class="k-muted">No decisions yet.</span>') + '</div></article>');
     return;
   }
-  if (st.view === 'cost') {
-    var rows = d.nodes.filter(function (n) { return n.tokens || n.tokensAllGenerations; });
-    set('#mainView', '<div class="k-callout k-callout--info">' + ic('info', 1) + '<span>Measured cost (from the agents\' session logs, each API message counted once) arrives with <span class="k-mono">sdlc cost</span> in M3. Below are the tokens the agents <b>reported</b> with <span class="k-mono">sdlc record</span>: lower bounds.</span></div>' +
-      '<article class="k-card"><div class="k-card__body"><div class="k-table-wrap"><table class="k-table k-table--compact"><thead><tr><th>Node</th><th>Agents</th><th class="is-num">This generation</th><th class="is-num">All generations</th></tr></thead><tbody>' +
-      (rows.length ? rows.map(function (n) { return '<tr><td>' + esc(n.node) + (n.generation > 1 ? ' <span class="k-badge k-badge--outline">g' + n.generation + '</span>' : '') + '</td><td>' + (n.hosts || []).map(host).join(' ') + '</td><td class="is-num">' + tokens(n.tokens) + '</td><td class="is-num">' + tokens(n.tokensAllGenerations || n.tokens) + '</td></tr>'; }).join('')
-        : '<tr><td colspan="4" class="k-muted">Nothing recorded yet.</td></tr>') +
-      '</tbody><tfoot><tr><th>Total</th><th></th><th class="is-num">' + tokens(t.tokensTotal) + '</th><th></th></tr></tfoot></table></div></div></article>');
-    return;
-  }
+  if (st.view === 'cost') { set('#mainView', '<div class="b-cost">' + costView(t) + '</div>'); return; }
 
   var fly = flyingNodes(t);
   var pipe = d.nodes.map(function (n, i) {
@@ -399,6 +404,79 @@ function renderMain() {
 }
 
 /* ------------------------------------------------------------------ render: inspector */
+/* ------------------------------------------------------------------ render: cost (sdlc cost / GET /api/cost) */
+function usd(v) { return v == null ? '—' : '$' + (v >= 100 ? v.toFixed(0) : v >= 1 ? v.toFixed(2) : v.toFixed(4)); }
+function srcBadges(x) {   // where the USD comes from: the agent's own number, the user's price table, or nobody
+  var s = x.sources || [], out = [];
+  if (s.indexOf('reported') >= 0) out.push('<span class="k-badge k-badge--ok" title="the agent\'s own reported cost">reported</span>');
+  if (s.indexOf('priced') >= 0) out.push('<span class="k-badge k-badge--warn" title="tokens x your price table; unverified unless the entry says verified">priced · unverified</span>');
+  if (s.indexOf('unknown') >= 0 || (!out.length && x.tokens)) out.push('<span class="k-badge k-badge--outline" title="no reported cost and no price for this model: tokens only">' +
+    (out.length ? (x.unpricedTokens ? tokens(x.unpricedTokens) + ' unpriced' : 'part unknown') : 'USD unknown') + '</span>');
+  return out.join(' ');
+}
+function ratio(r) { return r == null ? '<span class="k-muted">—</span>' : '×' + (r >= 10 ? r.toFixed(0) : r.toFixed(1)); }
+function budgetLine(b) {   // G8 (sdlc budget): used vs caps per scope, styled by level; nothing without a budgets block
+  if (!b) return '';
+  if (b.level === 'unknown') return '<div class="k-callout k-callout--warn b-budget">' + ic('alert', 1) + '<span>Budget not checked: ' + esc(b.error || '') + '</span></div>';
+  var cls = {ok: 'ok', warn: 'warn', over: 'bad'}[b.level] || 'info', parts = [];
+  ['ticket', 'node', 'daily'].forEach(function (sc) {
+    var cap = (b.caps || {})[sc], u = (b.usage || {})[sc];
+    if (!cap || !u) return;
+    var bits = [], lvl = u.level || 'ok';
+    if (cap.usd != null) bits.push(usd(u.usd || 0) + ' / ' + usd(cap.usd) + (u.partial ? ' <span class="k-badge k-badge--outline" title="' + tokens(u.unpricedTokens) + ' tokens unpriced: the token cap governs that part">partial</span>' : ''));
+    if (cap.tokens != null) bits.push(tokens(u.tokens) + ' / ' + tokens(cap.tokens) + ' tok');
+    parts.push('<span class="b-budget__scope is-' + lvl + '"><b>' + esc(sc === 'node' ? 'node ' + (b.node || '') : sc) + '</b> ' + bits.join(' · ') + '</span>');
+  });
+  var head = b.level === 'over' ? (b.allowed ? (b.override ? 'Over budget · user override' : 'Over budget (action warn)') : 'Over budget · G8 refuses the next packet')
+    : b.level === 'warn' ? 'Budget warning' : 'Within budget';
+  return '<div class="k-callout k-callout--' + cls + ' b-budget" title="' + esc((b.reasons || []).join('; ')) + '">' + ic(b.level === 'ok' ? 'info' : 'alert', 1) +
+    '<span><b>' + head + '</b> ' + parts.join(' ') + ' <span class="k-mono k-muted">sdlc budget --ticket ' + esc(b.ticket || '') + '</span></span></div>';
+}
+function costView(t) {
+  if (data.costErr) return '<div class="k-banner k-banner--bad">' + ic('alert') + '<div class="k-banner__text"><div class="k-banner__title">Cannot measure cost</div><div class="k-banner__sub">' + esc(data.costErr) + '</div></div></div>';
+  var c = data.cost && data.cost.ticket === t.ticket ? data.cost : null;
+  if (!c) return '<div class="b-empty">Reading session logs for ' + esc(t.ticket) + '…</div>';
+  var T = c.total, p = c.prices;
+  var stats = '<div class="k-stats">' +
+    '<div class="k-stat"><span class="k-stat__label">' + ic('coins', 1) + 'Measured tokens</span><span class="k-stat__value">' + tokens(T.tokens) + '</span><span class="k-stat__meta">' + T.messages.toLocaleString('en-US') + ' API messages, each once</span></div>' +
+    '<div class="k-stat"><span class="k-stat__label">USD</span><span class="k-stat__value">' + usd(T.usd) + '</span><span class="k-stat__meta">' + srcBadges(T) + '</span></div>' +
+    '<div class="k-stat"><span class="k-stat__label">' + ic('agent', 1) + 'Measured ÷ reported</span><span class="k-stat__value">' + ratio(c.ratio) + '</span><span class="k-stat__meta">' + tokens(c.units.tokens) + ' unit tokens vs ' + tokens(c.reported.tokens) + ' reported</span></div>' +
+    '<div class="k-stat"><span class="k-stat__label">' + ic('pipeline', 1) + 'Controller</span><span class="k-stat__value">' + tokens(c.controller.tokens) + '</span><span class="k-stat__meta">by sdlc calls (heuristic) · ' + usd(c.controller.usd) + '</span></div></div>';
+  var nodes = c.nodes.filter(function (n) { return n.measured.tokens || n.reported.tokens || n.measured.unknownSteps; });
+  var nodeRows = nodes.map(function (n) {
+    return '<tr><td>' + (n.node ? esc(n.node) : '<span class="k-muted">no node</span>') + '</td><td class="is-num">' + tokens(n.units.tokens) + '</td><td class="is-num">' + tokens(n.controller.tokens) +
+      '</td><td class="is-num">' + tokens(n.measured.tokens) + '</td><td class="is-num">' + tokens(n.reported.tokens) +
+      (n.reported.unreportedRounds ? ' <span class="k-muted" title="rounds recorded without --tokens">+' + n.reported.unreportedRounds + '?</span>' : '') +
+      '</td><td class="is-num">' + ratio(n.ratio) + '</td><td class="b-srccell"><b class="b-usd">' + usd(n.measured.usd) + '</b> ' + srcBadges(n.measured) + '</td></tr>';
+  }).join('');
+  var nodeCard = '<article class="k-card"><header class="k-card__head"><h4 class="k-card__title">Per node</h4><span class="k-spacer"></span><span class="k-muted" style="font-size:12px">units: exact (packet) · controller: heuristic (sdlc calls)</span></header><div class="k-card__body"><div class="k-table-wrap"><table class="k-table k-table--compact"><thead><tr><th>Node</th><th class="is-num">Units</th><th class="is-num">Controller</th><th class="is-num">Measured</th><th class="is-num">Reported</th><th class="is-num">Ratio</th><th>USD · source</th></tr></thead><tbody>' +
+    (nodeRows || '<tr><td colspan="7" class="k-muted">No session of this ticket found in the agents\' logs yet.</td></tr>') +
+    '</tbody><tfoot><tr><th>Total</th><th class="is-num">' + tokens(c.units.tokens) + '</th><th class="is-num">' + tokens(c.controller.tokens) + '</th><th class="is-num">' + tokens(T.tokens) + '</th><th class="is-num">' + tokens(c.reported.tokens) +
+    '</th><th class="is-num">' + ratio(c.ratio) + '</th><th>' + usd(T.usd) + '</th></tr></tfoot></table></div></div></article>';
+  var priceNote = !p.exists ? 'No price file at <span class="k-mono">' + esc(p.file) + '</span>, so USD is only what the agents reported (<span class="k-mono">sdlc cost --init-prices</span> writes a template).'
+    : 'Prices: <span class="k-mono">' + esc(p.file) + '</span>' + (p.error ? ' (' + esc(p.error) + ')' : '') +
+      (p.used.length ? ', used for ' + p.used.map(function (u) { return esc(u.model) + (u.verified ? '' : ' (<b>unverified</b>)'); }).join(', ') : ', none applied') +
+      (p.missing.length ? '; no price for ' + p.missing.map(esc).join(', ') : '') + '.';
+  var modelRows = c.byModel.map(function (m) {
+    return '<tr><td><span class="b-host b-host--' + esc(m.agent) + '" title="' + esc(hostName(m.agent)) + '"><i></i><span class="k-mono">' + esc(m.model || 'model unknown') + '</span></span></td><td class="is-num">' + tokens(m.input) + '</td><td class="is-num">' + tokens(m.output) +
+      '</td><td class="is-num">' + tokens(m.cacheRead) + '</td><td class="is-num">' + tokens(m.cacheWrite) + '</td><td class="is-num">' + usd(m.usd) + '</td><td class="b-srccell">' + srcBadges(m) + '</td></tr>';
+  }).join('');
+  var modelCard = '<article class="k-card"><header class="k-card__head"><h4 class="k-card__title">Per agent and model</h4></header><div class="k-card__body"><div class="k-table-wrap"><table class="k-table k-table--compact"><thead><tr><th>Agent · model</th><th class="is-num">Input</th><th class="is-num">Output</th><th class="is-num">Cache read</th><th class="is-num">Cache write</th><th class="is-num">USD</th><th>Source</th></tr></thead><tbody>' +
+    (modelRows || '<tr><td colspan="7" class="k-muted">Nothing measured yet.</td></tr>') + '</tbody></table></div></div>' +
+    '<footer class="k-card__foot"><span class="k-muted" style="font-size:12px;overflow-wrap:anywhere">' + priceNote + '</span></footer></article>';
+  return '<div class="k-callout k-callout--info">' + ic('info', 1) + '<span>Measured from the agents\' own session logs, each API message counted once. <b>Reported</b> is what the agents passed to <span class="k-mono">sdlc record --tokens</span>, a lower bound. USD is the agent&#39;s own <b>reported</b> cost where it has one, else your price table (<b>unverified</b>), else unknown.</span></div>' +
+    budgetLine(c.budget ? Object.assign({ticket: c.ticket}, c.budget) : null) + stats + nodeCard + modelCard;
+}
+function renderToday() {
+  var x = data.today, el = $('#today');
+  if (!x || !x.total) { el.hidden = true; return; }
+  el.hidden = false;
+  var T = x.total;
+  el.title = 'Measured today across all tickets: ' + T.tokens.toLocaleString('en-US') + ' tokens' + (T.usd != null ? ', ' + usd(T.usd) + ' (' + (T.sources || []).join(' + ') +
+    (T.unpricedTokens ? '; ' + T.unpricedTokens.toLocaleString('en-US') + ' tokens unpriced' : '') + ')' : ', USD unknown');
+  set('#todayText', '<b>' + usd(T.usd) + '</b> · ' + tokens(T.tokens) + ' tok' + ((T.sources || []).indexOf('priced') >= 0 ? ' <span class="k-badge k-badge--warn">unverified</span>' : ''));
+}
+
 function verdict(u) {
   if (u.inFlight) return '<span class="b-running"><span class="k-spinner" style="width:11px;height:11px"></span>running</span>';
   var v = u.verdict;
@@ -565,6 +643,8 @@ function refreshSelected() {
     // the gate banner shows the waiting node's question even while another node is selected
     jobs.push(getJSON('/api/node?id=' + encodeURIComponent(t) + '&node=' + encodeURIComponent(tt.waitingNode)).then(function (j) { data.gateNode = j; }));
   }
+  if (st.view === 'cost') jobs.push(getJSON('/api/cost?id=' + encodeURIComponent(t)).then(function (j) { data.cost = j; data.costErr = null; },
+    function (e) { data.costErr = e.message; }));
   if (n && st.itab === 'transcripts') jobs.push(getJSON('/api/transcripts?id=' + encodeURIComponent(t) + '&node=' + encodeURIComponent(n)).then(function (j) {
     j._node = n; data.tx = j; data.txErr = null; }, function (e) { data.txErr = 'Cannot read session logs: ' + e.message; }));
   return Promise.all(jobs);
@@ -572,8 +652,9 @@ function refreshSelected() {
 function tick() {
   if (busy) return Promise.resolve();
   busy = true;
-  return Promise.all([getJSON('/api/tickets'), getJSON('/api/inflight')]).then(function (r) {
-    data.tickets = r[0].tickets; data.editor = r[0].editor; data.inflight = r[1];
+  return Promise.all([getJSON('/api/tickets'), getJSON('/api/inflight'),
+                      getJSON('/api/cost?since=today').catch(function () { return null; })]).then(function (r) {
+    data.tickets = r[0].tickets; data.editor = r[0].editor; data.inflight = r[1]; data.today = r[2];
     pickDefaults(); syncUrl();
     return Promise.all([refreshSelected(), refreshLogs()]);
   }).then(function () { setLive(true); renderAll(); }, function (e) { setLive(false, 'board server not reachable'); renderAll(); void e; })

@@ -31,7 +31,13 @@
         "ship-record",
         "review-fetch",
         "lane",
-        "host-switch"
+        "host-switch",
+        "run-start",
+        "run-end",
+        "park",
+        "unpark",
+        "autonomy",
+        "budget-override"
       ]
     },
     "prev": {
@@ -193,6 +199,149 @@
           "repo",
           "requestDigest"
         ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event": {
+            "const": "run-start"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "runId",
+          "node",
+          "host"
+        ],
+        "properties": {
+          "host": {
+            "enum": [
+              "claude",
+              "codex"
+            ]
+          },
+          "trigger": {
+            "enum": [
+              "manual",
+              "tick",
+              "recover"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event": {
+            "const": "run-end"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "runId",
+          "node",
+          "result"
+        ],
+        "properties": {
+          "result": {
+            "enum": [
+              "done",
+              "parked",
+              "failed",
+              "stopped"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event": {
+            "const": "park"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "reason"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event": {
+            "const": "unpark"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "reason"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event": {
+            "const": "autonomy"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "enabled"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event": {
+            "const": "budget-override"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "node",
+          "generation",
+          "scopes",
+          "reason",
+          "actor"
+        ],
+        "properties": {
+          "actor": {
+            "const": "user"
+          },
+          "scopes": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "enum": [
+                "ticket",
+                "node",
+                "daily",
+                "all"
+              ]
+            }
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
       }
     }
   ]

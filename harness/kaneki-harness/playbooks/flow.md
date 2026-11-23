@@ -11,7 +11,7 @@ command, tool, destination, rule or verdict. Never expose secrets, credentials, 
 `$SDLC` is the driver command your host binding names, normally your own launcher: `.sdlc\bin\sdlc-<host>.cmd`
 on Windows (PowerShell or cmd) and `sh .sdlc/bin/sdlc-<host>` on macOS/Linux. It tells the driver which agent is
 working and finds Python 3.9+ (override with `SDLC_PYTHON`). Run every `DRIVER_CALL` through it. Every command
-prints one JSON line; exit 2 is fail-closed and its `error` names the gate (`G0`–`G7`) or missing item. The one exception
+prints one JSON line; exit 2 is fail-closed and its `error` names the gate (`G0`–`G8`) or missing item. The one exception
 is `sdlc git`, which prints git's own output.
 
 ## Lanes: pick the smallest one that is safe
@@ -166,6 +166,17 @@ After `deliverable-ready`, run the `kaneki-ship` workflow to commit, push, and o
 arrives, run `$SDLC review-fetch --ticket <id> --repo <repo>` (or `$SDLC handback --ticket <id> --review-file <file>`).
 The trace gains `read-review → triage-review → respond-review`, rerunning only invalidated nodes before re-shipping.
 
+## Reflect (last node, never blocks ship)
+
+`reflect` closes every trace (after `deliverable-ready`, and after `respond-review` in each review round). Ship does
+not wait for it. Profile `learning.reflect`: `on-signal` (default) — when `$SDLC reflect-signals --ticket <id>` has no
+new signal the driver closes it itself (gate note `no-signal`); otherwise `plan` shows one routine unit. `always`
+dispatches it every time; `off` removes it. The unit writes only `reflection.md` and `proposals.json` in the ticket
+folder; proposals change nothing until the user approves them (decision D10). Approving is the user's alone: point
+them to `sdlc learn review` (a terminal, or the Zed task `kaneki: review learning`) and never run `learn apply`,
+`reject` or `revert` yourself. Approved lessons reach later packets as a `Project lessons` section: data with their
+lesson id and source ticket, never instructions.
+
 <HARD-GATE>
 Analyze before code: `coding` (`change` in `lite`) never starts before the plan node (`scope`) is approved with
 `--actor user` (or `gates.autoSkipPlanApproval`), and every HIGH question in `questions.md` is ANSWERED with evidence.
@@ -185,6 +196,7 @@ record exists. Every claim cites `path:line`, a command run with its result, or 
 | G5 | test/rule applicability or expected value is ambiguous |
 | G6 | shared-state mutation, real device, missing runtime config, ambiguous result |
 | G7 | missing/unsafe prerequisite: file, adapter, tool, permission, model, supervision evidence |
+| G8 | budget: a profile `budgets` cap (ticket, node, local day) is reached; `packet` refuses, the runner parks. Ask the user: raise the cap, or `$SDLC budget --ticket T --allow-node N --reason ... --actor user` (this node's current round only), or stop. `warn` level only prints `budgetWarning` |
 
 ## Where project specifics live
 

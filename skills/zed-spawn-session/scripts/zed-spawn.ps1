@@ -90,7 +90,17 @@ Set-Content -LiteralPath (Join-Path $work 'task.txt') -Value $taskArg -Encoding 
 
 function Q([string]$s) { "'" + ($s -replace "'", "''") + "'" }   # PowerShell single-quote literal
 
-$claudeArgs = @('-n', $Name, '--append-system-prompt-file', $sysFile)
+# A known session id lets this script name the new tab now, while Zed is certainly in front and the
+# new tab is certainly focused, and tell notify-hook which tab that is (tabs/<id>.txt, owner "spawn").
+# Otherwise the tab is named only after the user types a prompt in it, and a toast click can't find it.
+$sessionId = [guid]::NewGuid().ToString()
+$claudeDir = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $env:USERPROFILE '.claude' }
+$notifyDir = Join-Path $claudeDir 'hooks\notify-hook'
+$renameKeys = @('ctrl-alt-shift-6', 'ctrl-alt-shift-7', 'ctrl-alt-shift-8')   # notify-hook's rename bindings
+$canName = (Test-Path -LiteralPath $notifyDir) -and (Test-Path -LiteralPath $keymapPath) -and
+  (@($renameKeys | Where-Object { (Get-Content -Raw -LiteralPath $keymapPath) -notmatch [regex]::Escape($_) }).Count -eq 0)
+
+$claudeArgs = @('-n', $Name, '--session-id', $sessionId, '--append-system-prompt-file', $sysFile)
 if ($Worktree)       { $claudeArgs += @('-w', $Name) }
 if ($PermissionMode) { $claudeArgs += @('--permission-mode', $PermissionMode) }
 
@@ -105,6 +115,7 @@ Set-Location -LiteralPath $(Q $Dir)
 $typed = "powershell -NoLogo -ExecutionPolicy Bypass -File `"$launcher`""
 
 if ($DryRun) {
+  Write-Output "Session id: $sessionId; name the tab '$Name' for notify-hook: $canName"
   Write-Output "Would paste into new Zed terminal tab: $typed"
   Write-Output "--- launcher ($launcher) ---"
   Get-Content -LiteralPath $launcher
@@ -150,8 +161,25 @@ Start-Sleep -Milliseconds $DelayMs
 # Paste rather than type: input methods such as Vietnamese Telex rewrite typed letters
 # (e.g. "test" -> "tét"), but leave pasted text and Ctrl shortcuts alone.
 $savedClip = $null
+$named = $false
 try { $savedClip = Get-Clipboard -Raw -ErrorAction Stop } catch {}
 try {
+  if ($canName) {
+    # Rename the tab: ctrl-alt-shift-6 = terminal::RenameTerminal (Terminal context); -7 / -8 paste and
+    # confirm only inside the single-line rename box, so if the box doesn't open nothing reaches the shell.
+    Set-Clipboard -Value $Name
+    Start-Sleep -Milliseconds 150
+    Send-ZedKeys '^%+6' 'the rename-tab key'
+    Start-Sleep -Milliseconds 350
+    Send-ZedKeys '^%+7' 'the tab name'
+    Start-Sleep -Milliseconds 300
+    Send-ZedKeys '^%+8' 'the rename confirm'
+    Start-Sleep -Milliseconds 300
+    $tabsDir = Join-Path $notifyDir 'tabs'
+    New-Item -ItemType Directory -Force -Path $tabsDir | Out-Null
+    [IO.File]::WriteAllText((Join-Path $tabsDir "$sessionId.txt"), "$Name`nspawn`n", (New-Object Text.UTF8Encoding($false)))
+    $named = $true
+  }
   Set-Clipboard -Value $typed
   Start-Sleep -Milliseconds 150
   Send-ZedKeys '^+v' 'the paste'             # terminal::Paste in Zed
@@ -162,4 +190,5 @@ try {
   if ($null -ne $savedClip) { Set-Clipboard -Value $savedClip }
 }
 
-Write-Output "Spawned session '$Name' (parent '$Parent') in a new Zed terminal tab. Files: $work"
+$tabNote = if ($named) { "tab named '$Name'" } else { "tab not named (notify-hook or its Zed bindings not installed)" }
+Write-Output "Spawned session '$Name' (parent '$Parent', session id $sessionId) in a new Zed terminal tab; $tabNote. Files: $work"

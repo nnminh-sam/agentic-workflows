@@ -104,6 +104,9 @@ def check_artifact(text: str, spec: dict[str, Any], ctx: dict[str, Any]) -> list
                     problems.append(f"the artifact's verdict is {last}, but the gate was asked to approve")
                 if ctx.get("status") == "needs-changes" and last != "NEEDS CHANGES":
                     problems.append(f"the artifact's verdict is {last}, but the gate was asked for needs-changes")
+        elif parser == "proposals":  # proposals.json of the reflect node (contracts/proposal.schema.json)
+            from .learning import proposal_problems
+            problems += proposal_problems(text, ctx["proposals"]) if ctx.get("proposals") else ["no proposal context"]
         elif parser == "reopen":
             m = REOPEN_RE.findall(text)
             if not m:

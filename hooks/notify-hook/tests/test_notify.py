@@ -276,8 +276,40 @@ class TabNames(unittest.TestCase):
                 focus.tab_state("s/../1").write_text("app #s1\n", encoding="utf-8")
                 self.assertEqual(focus.read_tab_label("s/../1"), "app #s1")
                 self.assertEqual(focus.tab_state("s/../1").parent, Path(d))
+                self.assertEqual(focus.read_tab_state("s/../1"), ("app #s1", ""))  # legacy: no owner
+                focus.write_tab_state("s1", "api-review", "123")
+                self.assertEqual(focus.read_tab_state("s1"), ("api-review", "123"))
+                # zed-spawn.ps1 may write a BOM-less file; a BOM must not leak into the label either
+                focus.tab_state("s2").write_bytes("﻿api-review\nspawn\n".encode("utf-8"))
+                self.assertEqual(focus.read_tab_state("s2"), ("api-review", "spawn"))
             finally:
                 focus.TABS_DIR = old
+
+    def test_plan(self):
+        import tabname
+        plan = tabname.plan
+        # first prompt: nothing stored -> rename to the fallback
+        self.assertEqual(plan("", "app #ab12", ("", ""), 10), ("rename", "app #ab12"))
+        # cwd changed: the first label sticks, no keystrokes
+        self.assertEqual(plan("", "dump #ab12", ("app #ab12", "10"), 10), ("skip", "app #ab12"))
+        # /rename: rename to the explicit name
+        self.assertEqual(plan("api", "app #ab12", ("app #ab12", "10"), 10), ("rename", "api"))
+        # zed-spawn named the tab: record the PID, no keystrokes
+        self.assertEqual(plan("api", "app #ab12", ("api", "spawn"), 10), ("adopt", "api"))
+        # resumed under a new claude.exe (new tab): rename even though the label is the same
+        self.assertEqual(plan("api", "app #ab12", ("api", "10"), 20), ("rename", "api"))
+        self.assertEqual(plan("", "dump #ab12", ("app #ab12", "10"), 20), ("rename", "dump #ab12"))
+        # legacy file without an owner: rename once to bind it to this claude.exe
+        self.assertEqual(plan("api", "app #ab12", ("api", ""), 10), ("rename", "api"))
+        # claude.exe not found: fall back to comparing labels only
+        self.assertEqual(plan("api", "x", ("api", "10"), None), ("skip", "api"))
+        self.assertEqual(plan("", "dump #ab12", ("app #ab12", "10"), None), ("skip", "app #ab12"))
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows only")
+    def test_claude_pid_walks_ancestors(self):
+        import tabname
+        pid = tabname.claude_pid()  # None unless the tests run under claude.exe
+        self.assertTrue(pid is None or isinstance(pid, int))
 
     def test_rename_bindings_are_scoped(self):
         ctx = {b["context"]: b["bindings"] for b in focus.ZED_BINDINGS}

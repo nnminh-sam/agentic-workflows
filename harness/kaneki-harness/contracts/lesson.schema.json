@@ -1,0 +1,200 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sdlc-lesson@1",
+  "title": "Approved lesson",
+  "description": "A proposal (proposal.schema.json) the user approved, stored under `.sdlc/learning/` by `sdlc learn apply --actor user` (M4·2/M4·3) in `.sdlc/learning/lessons.json`. Packets include active `lesson` lessons whose appliesTo matches the node, stack and (when known) authorized paths; a `rule` lesson is also a rule of `.sdlc/learning/rulepack.learned.json`; a `profile` lesson is a suggestion file only. The retro (`sdlc learn retro`) measures each lesson and flags the ones with no effect, it never retires one; `sdlc learn revert` retires one by hand. Type `harness` never becomes a lesson: the harness does not rewrite its own graph, gates or driver.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "proposal",
+    "type",
+    "title",
+    "body",
+    "evidence",
+    "scope",
+    "metric",
+    "baseline",
+    "approvedBy",
+    "approvedAt",
+    "appliesTo",
+    "hits",
+    "lastUsedAt",
+    "status"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+      "description": "Unique in .sdlc/learning, e.g. <ticket>-<proposal id>."
+    },
+    "proposal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ticket",
+        "id"
+      ],
+      "properties": {
+        "ticket": {
+          "type": "string",
+          "minLength": 1
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "sha256 of the proposals.json the user approved from."
+        }
+      }
+    },
+    "type": {
+      "enum": [
+        "lesson",
+        "rule",
+        "profile"
+      ]
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "body": {
+      "type": "string",
+      "minLength": 1
+    },
+    "evidence": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ticket",
+          "ref"
+        ],
+        "properties": {
+          "ticket": {
+            "type": "string",
+            "minLength": 1
+          },
+          "ref": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "nodes",
+        "stacks",
+        "paths"
+      ],
+      "properties": {
+        "nodes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "stacks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "metric": {
+      "type": "string",
+      "minLength": 1
+    },
+    "baseline": {
+      "type": [
+        "string",
+        "number"
+      ]
+    },
+    "round": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "approvedBy": {
+      "enum": [
+        "user"
+      ],
+      "description": "Only --actor user activates a proposal (D10)."
+    },
+    "approvedAt": {
+      "type": "string",
+      "minLength": 1
+    },
+    "appliesTo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "nodes",
+        "stacks",
+        "paths"
+      ],
+      "description": "The filter packets use: the proposal's scope, possibly narrowed by the user at approval.",
+      "properties": {
+        "nodes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "stacks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "hits": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Packets this lesson was added to."
+    },
+    "lastUsedAt": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "status": {
+      "enum": [
+        "active",
+        "retired"
+      ]
+    },
+    "retiredAt": {
+      "type": "string"
+    },
+    "retiredReason": {
+      "type": "string"
+    }
+  }
+}

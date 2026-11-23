@@ -10,6 +10,7 @@ from . import schema
 from .errors import HarnessError
 
 PHASES = ("design", "code", "test", "evidence", "delivery")
+LEARNED = "learned:"  # <workspace>/.sdlc/learning/rulepack.learned.json (harness/learn.py)
 
 
 def load_rulepacks(home: Path, profile_dir: Path, profile: dict[str, Any], ctx: dict[str, Any]) -> list[dict[str, Any]]:
@@ -22,7 +23,7 @@ def load_rulepacks(home: Path, profile_dir: Path, profile: dict[str, Any], ctx: 
             refs.append(fam["rulepack"])
     rules: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
-    for ref in dict.fromkeys(refs):  # keep order, drop duplicates
+    for ref in list(dict.fromkeys(refs)) + [LEARNED]:  # keep order, drop duplicates; learned rules last
         pack = _read_pack(home, profile_dir, ref)
         if pack is None:
             continue
@@ -37,6 +38,9 @@ def load_rulepacks(home: Path, profile_dir: Path, profile: dict[str, Any], ctx: 
 
 
 def _read_pack(home: Path, profile_dir: Path, ref: str) -> dict[str, Any] | None:
+    if ref == LEARNED:  # rules the user approved (`sdlc learn apply`): picked up when present, no profile edit
+        from .learn import learned_rulepack
+        return learned_rulepack(profile_dir)
     if ref.startswith("stack:"):
         path = home / "rulepacks" / "stack" / f"{ref[6:]}.json"
         if not path.exists():

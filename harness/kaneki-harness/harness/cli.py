@@ -14,6 +14,7 @@ from . import ship as SHIP
 from . import gitid
 from . import graph as G
 from . import hosts as H
+from . import learning as L
 from . import onboard as OB
 from . import rules as R
 from . import usage as U
@@ -74,10 +75,12 @@ class Session:
             if repo.get("worktreeRel"):
                 wt = Path(repo["worktreeRel"])
                 repo["worktree"] = str(wt if wt.is_absolute() else (self.pdir / wt).resolve())
+        self.ctx["reflect"] = L.reflect_mode(self.profile)  # the profile in force decides (off drops reflect)
         self.graph = G.load_graph(HOME, self.profile, self.pdir)
         self.order = G.trace(self.graph, self.ctx)
         for node in self.order:  # nodes that enter the trace later (review round) get a record
             self.state["nodes"].setdefault(node, new_node_record())
+        self._signals: tuple[Any, dict[str, Any]] | None = None
 
     def spec(self, node: str) -> dict[str, Any]:
         if node not in self.order:
@@ -85,11 +88,27 @@ class Session:
         spec = self.graph["nodes"][node]
         if G.is_inline(self.graph, self.ctx, node):  # this lane: the controller does it, no subagent, no reviewer
             spec = {**{k: v for k, v in spec.items() if k != "reviewer"}, "units": [], "pattern": "controller-inline"}
+        if node == L.REFLECT and self.reflect_quiet():  # on-signal and nothing new went wrong: close without a unit
+            spec = {**spec, "units": [], "artifacts": [], "checks": {}, "pattern": "no-signal"}
         return spec
 
-    def artifacts(self, node: str) -> list[str]:
+    def signals(self) -> dict[str, Any]:
+        """`sdlc reflect-signals` for this ticket, cached until the decision log or a ticket file it reads changes."""
+        files = (self.ticket.log_path, self.ticket.dir / "questions.md", self.ticket.dir / "triage.md")
+        key = (tuple((p.stat().st_mtime_ns, p.stat().st_size) if p.is_file() else None for p in files),
+               self.ctx.get("reviewRound"))
+        if self._signals is None or self._signals[0] != key:
+            self._signals = (key, L.collect(self))
+        return self._signals[1]
+
+    def reflect_quiet(self) -> bool:
+        return self.ctx.get("reflect") == "on-signal" and self.signals()["empty"]
+
+    def artifacts(self, node: str, static: bool = False) -> list[str]:
+        """Artifact names of a node. `static`: as the graph declares them, even when this round needs none
+        (a quiet reflect), for marking superseded files."""
         names = []
-        for name in self.spec(node).get("artifacts", []):
+        for name in (self.graph["nodes"][node] if static else self.spec(node)).get("artifacts", []):
             if name == "@delivery.drafts":
                 names += [f"drafts/{d}.md" for d in self.profile["delivery"].get("drafts", [])]
             else:
@@ -412,6 +431,13 @@ def cmd_plan(args: argparse.Namespace) -> None:
         "loopCap": s.profile.get("gates", {}).get("loopCap", 2), "attempts": rec["attempts"],
         "closeWith": f"sdlc gate --ticket {s.ctx['ticket']} --node {node} --status approved",
     }
+    if node == L.REFLECT:
+        report = s.signals()
+        quiet = s.reflect_quiet()
+        plan["reflect"] = {"mode": s.ctx.get("reflect"), "newSignals": report["newSignals"], "counts": report["counts"],
+                           "noSignal": quiet, "signals": f"sdlc reflect-signals --ticket {s.ctx['ticket']}"}
+        if quiet:
+            plan["closeWith"] += " --note no-signal"
     if args.card:
         plan = {k: v for k, v in plan.items() if v is not None}
     out(plan)
@@ -441,6 +467,7 @@ def build_packet(s: Session, node: str, unit_id: str, facts_arg: str | None = No
     staged = s.stage_problem(node, unit_id)
     if staged:
         raise HarnessError(staged)
+    budget = budget_gate(s, node)
     tier, escalated = s.tier(node, unit_id)
     exe = s.execution(node, unit_id, tier)
     facts = json.loads(Path(facts_arg).read_text(encoding="utf-8")) if facts_arg else {}
@@ -456,6 +483,14 @@ def build_packet(s: Session, node: str, unit_id: str, facts_arg: str | None = No
     result_path = s.ticket.dir / "results" / f"{dispatch}.md"
     adapters = _adapters_for(node, spec, resolve_adapters(HOME, s.pdir, s.profile, s.ctx))
     inputs = packet_inputs(s, node, pdir / f"{dispatch}.inputs")
+    from . import learn as LS
+    lessons = LS.packet_lessons(s, node, facts, rules, pdir / f"{dispatch}.lessons.json")
+    signals_path = None
+    if node == L.REFLECT:  # the unit reflects on exactly what `sdlc reflect-signals` reported, pinned by digest
+        signals_path = pdir / f"{dispatch}.signals.json"
+        signals_path.write_text(json.dumps(s.signals(), indent=2, ensure_ascii=False), encoding="utf-8")
+        inputs.append({"token": "signals", "from": "sdlc reflect-signals", "file": str(signals_path),
+                       "sha256": sha256_file(signals_path)})
     window = exe["contextWindow"]
     logs_dir = s.ticket.dir / "logs"
     logs_dir.mkdir(exist_ok=True)
@@ -479,8 +514,12 @@ def build_packet(s: Session, node: str, unit_id: str, facts_arg: str | None = No
         "repositories": _repositories_block(s),
         "weakestClaim": facts.get("weakestClaim", "(controller: name it)"),
         "observed": _bullets(facts.get("observed")), "doubts": _bullets(facts.get("doubts")),
-        "settled": _bullets(facts.get("settled")), "authorizedPaths": _bullets(facts.get("authorizedPaths")),
+        "settled": _bullets(facts.get("settled")),
+        "authorizedPaths": _bullets(facts.get("authorizedPaths")) if node != L.REFLECT else
+        f"- `{s.ticket.dir}` only: write `reflection.md` and `proposals.json` there and nothing anywhere else. "
+        "Proposals change nothing until the user approves them.",
         "findingsToFix": _bullets(facts.get("findingsToFix")),
+        "lessons": lessons["text"],
         "languages": _languages_block(s, node),
         "git": _git_block(s, exe["host"]),
     }
@@ -499,10 +538,76 @@ def build_packet(s: Session, node: str, unit_id: str, facts_arg: str | None = No
            "handedTokens": estimate, "contextWindow": window}
     if escalated:
         res["escalated"] = {"from": unit["tier"], "why": escalated}
+    if budget is not None:
+        res["budget"] = _budget_brief(budget)
+        from . import budget as B
+        warn = B.warning(budget)
+        if warn:
+            res["budgetWarning"] = warn
+    if signals_path is not None:
+        res["signals"] = str(signals_path)
+    if lessons["lessons"] or lessons["learnedRules"]:
+        res.update({k: lessons[k] for k in ("lessons", "learnedRules", "lessonsDigest")})
+    if lessons["warning"]:
+        res["lessonsWarning"] = lessons["warning"]
     if estimate > window // 4:
         res["contextWarning"] = (f"the packet and its inputs are ~{estimate:,} tokens, over a quarter of the {window:,}-token "
                                  f"window assumed for {tier}; trim the inputs or split the unit before dispatching")
     return res, exe
+
+
+def budget_gate(s: Session, node: str) -> dict[str, Any] | None:
+    """G8: refuse a packet while a budget is over (profile `budgets`, harness/budget.py). Returns the check (None
+    without a budgets block) so the packet can carry the level and a warning. The refusal is an error only: no
+    state change, no event."""
+    if s.profile.get("budgets") is None:
+        return None
+    from . import budget as B
+    events, _ = s.ticket.verify_log()
+    res = B.check(s.ppath, s.ctx["ticket"], node, prof=s.profile, events=events,
+                  generation=s.state["nodes"][node]["generation"])
+    if not res["allowed"]:
+        raise HarnessError(B.refusal(res))
+    return res
+
+
+def _budget_brief(res: dict[str, Any]) -> dict[str, Any]:
+    return {k: res.get(k) for k in ("level", "allowed", "over", "usage", "caps", "override")}
+
+
+def cmd_budget(args: argparse.Namespace) -> None:
+    """`sdlc budget --ticket T [--node N]`: caps, measured usage and level (read-only). With `--allow-node N --reason R
+    --actor user`: the user lets that node through G8 for its current round (a budget-override decision event)."""
+    from . import budget as B
+    s = Session(args)
+    node = args.allow_node or args.node or next_pending(s.state, s.order)
+    if node is not None and node not in s.order:
+        raise HarnessError(f"{node} is not in this ticket's trace: {s.order}")
+    if s.profile.get("budgets") is None:
+        if args.allow_node:
+            raise HarnessError("G8: this profile has no budgets block, so there is nothing to override")
+        out({"ok": True, "ticket": s.ctx["ticket"], "node": node, "configured": False, "level": "ok",
+             "note": "no budgets block in the profile: no budget checks"})
+        return
+    events, _ = s.ticket.verify_log()
+    gen = s.state["nodes"][node]["generation"] if node else None
+    res = B.check(s.ppath, s.ctx["ticket"], node, prof=s.profile, events=events, generation=gen)
+    if not args.allow_node:
+        out({"ok": True, **res, "warning": B.warning(res), "status": B.line(res)})
+        return
+    if args.actor != "user":
+        raise HarnessError("G8: letting a node through its budget is the user's decision: repeat with --actor user")
+    if not (args.reason or "").strip():
+        raise HarnessError("--reason is required: say why this node may spend past the budget")
+    scopes = args.scope or res["over"]
+    if not scopes:
+        raise HarnessError(f"G8: {node} is not over any budget ({res['level']}); nothing to override "
+                           "(pass --scope ticket|node|daily|all to record one ahead)")
+    ev = s.ticket.log({"event": "budget-override", "node": node, "generation": gen, "scopes": sorted(set(scopes)),
+                       "reason": args.reason.strip(), "actor": "user",
+                       "usage": {k: {"usd": v["usd"], "tokens": v["tokens"]} for k, v in res["usage"].items()}})
+    out({"ok": True, "ticket": s.ctx["ticket"], "node": node, "generation": gen, "override": ev["scopes"],
+         "note": f"G8 lets {node} through at generation {gen} only; a rerun or loop-back needs a new decision"})
 
 
 def cmd_packet(args: argparse.Namespace) -> None:
@@ -624,6 +729,11 @@ def record_unit(s: Session, node: str, unit_id: str, result_path: Path, model: s
         entry["plannedModel"] = exe["model"]
     if mismatch:
         entry["modelMismatch"] = True
+    from . import learn as LS
+    round_no = 1 + sum(1 for u in rec["units"] if u["unit"] == unit_id and u["generation"] == rec["generation"])
+    # the lesson ids and learned rules this round's packet handed over (build_packet's sidecar), so the retro can
+    # measure their effect from the ticket's own log
+    entry.update(LS.unit_lessons(s.ticket.dir / "packets" / f"{node}.g{rec['generation']}.{unit_id}.r{round_no}.lessons.json"))
     previous = _last_recorded_unit(s)
     rec["units"].append(entry)
     rec["status"] = "in_progress" if rec["status"] in ("pending", "stale") else rec["status"]
@@ -832,12 +942,46 @@ def cmd_gate(args: argparse.Namespace) -> None:
         rec["verdict"] = args.status
         result["verdict"] = args.status
 
-    s.ticket.log({"event": "gate", "gate": args.gate, "actor": args.actor, "node": node,
-                  "generation": rec["generation"], "verdict": result["verdict"], "note": args.note})
+    event: dict[str, Any] = {"event": "gate", "gate": args.gate, "actor": args.actor, "node": node,
+                             "generation": rec["generation"], "verdict": result["verdict"], "note": args.note}
+    if args.reopen and args.status == "approved":
+        event["reopen"] = args.reopen
+    if result.get("citationWarnings"):
+        event["citationWarnings"] = result["citationWarnings"]
+    if node == L.REFLECT and args.status == "approved":
+        # the signals this close covered: a later round (PR review) reflects only on what is new
+        event["covered"] = L.new_ids(s.signals())
+        if s.reflect_quiet() and not (args.note or "").startswith("no-signal"):
+            event["note"] = "no-signal: nothing new went wrong; no unit dispatched" + (f" ({args.note})" if args.note else "")
+        result["covered"] = len(event["covered"])
+    s.ticket.log(event)
+    if args.status == "approved":
+        auto = _auto_close_reflect(s, node)
+        if auto:
+            result["autoClosed"] = auto
     s.save()
     result["tokenUsageFile"] = str(U.write_ticket_file(s.ticket.dir, s.ctx["ticket"], s.order, s.state["nodes"]))
     result["nextPending"] = next_pending(s.state, s.order)
     out(result)
+
+
+def _auto_close_reflect(s: "Session", after: str) -> dict[str, Any] | None:
+    """learning.reflect on-signal: when reflect is next, ready, has no unit at this generation and nothing new went
+    wrong, the driver closes it in the same command (no dispatch, a `no-signal` gate note). Ship never waits on it."""
+    if after == L.REFLECT or L.REFLECT not in s.order or s.ctx.get("reflect") != "on-signal":
+        return None
+    if next_pending(s.state, s.order) != L.REFLECT:
+        return None
+    rec = s.state["nodes"][L.REFLECT]
+    if any(u["generation"] == rec["generation"] for u in rec["units"]) or not s.reflect_quiet():
+        return None
+    if next(gate_readiness(s, L.REFLECT, "approved", "controller", None), None):
+        return None
+    note = f"no-signal: nothing new went wrong (closed after {after}); no unit dispatched"
+    rec.update({"status": "done", "verdict": "approved", "closedAt": now(), "artifactDigests": {}})
+    s.ticket.log({"event": "gate", "gate": "G0", "actor": "controller", "node": L.REFLECT,
+                  "generation": rec["generation"], "verdict": "approved", "note": note, "auto": True, "covered": []})
+    return {"node": L.REFLECT, "verdict": "approved", "note": note}
 
 
 def node_rule_ids(s: "Session", node: str) -> list[str]:
@@ -848,7 +992,9 @@ def node_rule_ids(s: "Session", node: str) -> list[str]:
 def artifact_problems(s: "Session", node: str, status: str, reopen: str | None) -> list[str]:
     spec = s.spec(node)
     out = []
-    ctx = {"ruleIds": node_rule_ids(s, node), "status": status, "reopen": reopen}
+    ctx: dict[str, Any] = {"ruleIds": node_rule_ids(s, node), "status": status, "reopen": reopen}
+    if any("proposals" in (c.get("parsers") or []) for c in (spec.get("checks") or {}).values()):
+        ctx["proposals"] = proposal_context(s)
     for name, check in (spec.get("checks") or {}).items():
         path = s.ticket.dir / name
         if not path.is_file():
@@ -856,6 +1002,15 @@ def artifact_problems(s: "Session", node: str, status: str, reopen: str | None) 
             continue
         out += [f"{name}: {p}" for p in C.check_artifact(live_text(path), check, ctx)]
     return out
+
+
+def proposal_context(s: "Session") -> dict[str, Any]:
+    """What the reflect gate checks proposals.json against (learning.proposal_problems)."""
+    events, _ = s.ticket.verify_log()
+    stacks = {r["stack"] for r in s.profile["repositories"]} | {p.stem for p in (HOME / "adapters" / "stack").glob("*.json")}
+    files = {p.relative_to(s.ticket.dir).as_posix() for pat in ("*", "*/*") for p in s.ticket.dir.glob(pat) if p.is_file()}
+    return {"ticket": s.ctx["ticket"], "nodes": set(s.graph["nodes"]), "stacks": stacks, "logLines": len(events),
+            "roots": citation_roots(s), "ticketFiles": files}
 
 
 def citation_roots(s: "Session") -> list[Path]:
@@ -931,7 +1086,7 @@ def mark_superseded(s: "Session", node: str, from_node: str, generation: int) ->
     content can never pass the gate again. One header per invalidation; replaying the same one adds nothing."""
     marked = []
     reason = f"rerun from {from_node} (generation {generation}) invalidated this artifact"
-    for name in s.artifacts(node):
+    for name in s.artifacts(node, static=True):
         path = s.ticket.dir / name
         if not name.endswith(".md") or path.is_symlink() or not path.is_file():
             continue
@@ -1053,10 +1208,14 @@ def do_handback(s: "Session", src: Path) -> dict[str, Any]:
     dest = s.ticket.dir / "reviews" / f"round-{rnd}{src.suffix or '.md'}"
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_bytes(src.read_bytes())
-    for node in ("read-review", "triage-review", "respond-review"):
+    # every PR round is reflected: reflect restarts with the review nodes (when learning.reflect keeps it in the trace)
+    restart = ("read-review", "triage-review", "respond-review") + ((L.REFLECT,) if L.REFLECT in s.order else ())
+    for node in restart:
         rec = s.state["nodes"].setdefault(node, new_node_record())
         if rec["units"] or rec["status"] == "done":
             rec.update({"status": "pending", "generation": rec["generation"] + 1, "verdict": None, "attempts": 0})
+            if node == L.REFLECT:
+                mark_superseded(s, node, "handback", rec["generation"])
     s.save()
     s.ticket.log({"event": "handback", "round": rnd, "file": str(dest), "digest": sha256_file(dest)})
     order = G.trace(s.graph, s.ctx)
@@ -1244,7 +1403,7 @@ def cmd_host(args: argparse.Namespace) -> None:
 def cmd_tickets(args: argparse.Namespace) -> None:
     from . import board
     from .contract import CONTRACT_VERSION
-    out({"contractVersion": CONTRACT_VERSION, "tickets": board.list_tickets(profile_path(args))})
+    out({"contractVersion": CONTRACT_VERSION, "tickets": board.list_tickets(profile_path(args), measured=True)})
 
 
 def ticket_of_path(ppath: Path, path: Path) -> str | None:
@@ -1309,6 +1468,76 @@ def cmd_transcripts(args: argparse.Namespace) -> None:
     out(sessions.transcripts(profile_path(args), args.ticket, args.node, max_steps=args.max_steps))
 
 
+def cmd_reflect_signals(args: argparse.Namespace) -> None:
+    """What went wrong on a ticket, for the reflect node (one JSON line). Read-only."""
+    s = Session(args)
+    out(s.signals())
+
+
+def _learn_session(args: argparse.Namespace) -> Session:
+    return Session(argparse.Namespace(profile=args.profile, ticket=args.ticket, host=getattr(args, "host", None)))
+
+
+def cmd_learn(args: argparse.Namespace) -> int | None:
+    """`sdlc learn`: review reflect proposals (people only, D10), the workspace learning store, retro (harness/learn.py)."""
+    from . import learn as LS
+    ppath = profile_path(args)
+    pdir = ppath.parent
+    act = args.learn_cmd
+    if act == "list":
+        prof = load_profile(ppath)
+        out(LS.list_learning(pdir, ticket_root(prof, pdir), args.ticket, args.status))
+    elif act == "apply":
+        out(LS.apply(_learn_session(args), args.id, args.actor, args.note, args.phase, args.severity))
+        _refresh_status(args)
+    elif act == "reject":
+        out(LS.reject(_learn_session(args), args.id, args.actor, args.reason))
+        _refresh_status(args)
+    elif act == "revert":
+        out(LS.revert(pdir, args.id, args.actor, args.reason))
+    elif act == "verify":
+        if args.accept_current:
+            out(LS.accept_current(pdir, args.reason))
+        else:
+            store = LS.Store(pdir)
+            problems = store.problems()
+            out({"ok": not problems, "store": str(store.dir), "problems": problems or None})
+    elif act == "retro":
+        prof = load_profile(ppath)
+        out(LS.retro(pdir, ticket_root(prof, pdir), prof, G.load_graph(HOME, prof, pdir), args.since))
+    elif act == "review":
+        prof = load_profile(ppath)
+
+        def rows() -> list[dict[str, Any]]:
+            return LS.list_learning(pdir, ticket_root(prof, pdir), args.ticket, "proposed")["proposals"]
+
+        return LS.review(args, rows, main)
+    return None
+
+
+def cmd_cost(args: argparse.Namespace) -> None:
+    """Measured usage and USD from the agents' own logs (harness/cost.py). Read-only for tickets; caches under the
+    user config dir. One JSON line with --json, else a short table."""
+    from . import cost
+    if args.init_prices:
+        out(cost.init_prices())
+        return
+    if not args.ticket and not args.since:
+        raise HarnessError("cost needs --ticket T or --since DATE (or --init-prices)")
+    if args.node and not args.ticket:
+        raise HarnessError("--node needs --ticket")
+    if args.until and not args.since:
+        raise HarnessError("--until needs --since")
+    if args.ticket:
+        rep = cost.ticket_report(profile_path(args), args.ticket, args.node, since=args.since, until=args.until)
+    else:
+        rep = cost.range_report(profile_path(args), args.since, args.until)
+    if args.json:
+        out(rep)
+    else:
+        print(cost.render_text(rep))
+
+
 def cmd_contract(args: argparse.Namespace) -> None:
     """The contract version the desktop app checks at start-up; needs no profile or ticket and writes nothing."""
     from .contract import contract_info
@@ -1323,6 +1552,54 @@ def cmd_web(args: argparse.Namespace) -> None:
 def cmd_zed_setup(args: argparse.Namespace) -> None:
     from . import zed
     out(zed.setup(HOME, Path(args.target).resolve(), dry_run=args.dry_run))
+
+
+def _runner(args: argparse.Namespace) -> Any:
+    from .runner import Runner
+    return Runner(profile_path(args))
+
+
+def cmd_run(args: argparse.Namespace) -> None:
+    """Run the ticket's next node(s) unattended in a fresh agent session each (harness/runner.py), or --stop it."""
+    r = _runner(args)
+    if args.stop:
+        out(r.stop(args.ticket))
+        return
+    host = args.host if args.host and args.host != "profile" else None
+    out(r.run(args.ticket, max_nodes=args.max_nodes, host=host, trigger=args.trigger))
+
+
+def cmd_tick(args: argparse.Namespace) -> None:
+    host = args.host if args.host and args.host != "profile" else None
+    out(_runner(args).tick(host=host, foreground=args.foreground, recover=not args.no_recover))
+
+
+def cmd_recover(args: argparse.Namespace) -> None:
+    out(_runner(args).recover(restart=not args.no_restart, foreground=args.foreground))
+
+
+def cmd_autonomy(args: argparse.Namespace) -> None:
+    out(_runner(args).autonomy(args.ticket, args.set, args.reason))
+
+
+def cmd_unpark(args: argparse.Namespace) -> None:
+    out(_runner(args).unpark(args.ticket, args.reason))
+
+
+def cmd_schedule(args: argparse.Namespace) -> int | None:
+    """Scheduled tick / recover (harness/schedule.py): Windows Task Scheduler, or crontab on macOS/Linux."""
+    from . import schedule as SCH
+    ppath = profile_path(args)
+    if args.run_pass:
+        return SCH.main_pass(ppath, args.run_pass)
+    if args.install:
+        out(SCH.install(ppath, every=args.every, dry_run=args.dry_run, write=args.write, platform=args.platform,
+                        show_console=args.show_console))
+    elif args.uninstall:
+        out(SCH.uninstall(ppath, platform=args.platform))
+    else:
+        out(SCH.status(ppath, platform=args.platform))
+    return None
 
 
 def cmd_digest(args: argparse.Namespace) -> None:
@@ -1540,6 +1817,70 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--max-steps", type=_non_negative, default=200, help="steps kept per session (first + most recent)")
     x.set_defaults(fn=cmd_transcripts)
 
+    x = sub.add_parser("reflect-signals", parents=[ticketed],
+                       help="what went wrong on the ticket (loop-backs, escalations, gate firings, PR findings, ...) "
+                            "for the reflect node (read-only)")
+    x.set_defaults(fn=cmd_reflect_signals)
+
+    x = sub.add_parser("cost", parents=[common],
+                       help="measured tokens and USD per ticket/node from the agents' own logs (read-only)")
+    x.add_argument("--ticket", help="one ticket")
+    x.add_argument("--node", help="one node of --ticket")
+    x.add_argument("--since", help="first local day (YYYY-MM-DD, today, yesterday); without --ticket: every ticket")
+    x.add_argument("--until", help="last local day, inclusive (default: --since and later)")
+    x.add_argument("--json", action="store_true", help="one JSON line instead of the table")
+    x.add_argument("--init-prices", action="store_true",
+                   help="write a price-table template (null prices, unverified) to the user config if missing")
+    x.set_defaults(fn=cmd_cost)
+
+    x = sub.add_parser("budget", parents=[ticketed],
+                       help="budget caps, measured usage and level of a ticket (read-only); --allow-node lets one node "
+                            "through G8 (--actor user)")
+    x.add_argument("--node", help="node to check (default: next pending)")
+    x.add_argument("--allow-node", help="the user lets this node through G8 for its current round")
+    x.add_argument("--scope", action="append", choices=["ticket", "node", "daily", "all"],
+                   help="scope(s) the override covers (default: the scopes over now)")
+    x.add_argument("--reason")
+    x.add_argument("--actor", default="controller", choices=["controller", "user"])
+    x.set_defaults(fn=cmd_budget)
+
+    x = sub.add_parser("learn", help="review reflect proposals (people only), lessons, learned rules, retro")
+    lsub = x.add_subparsers(dest="learn_cmd", required=True)
+    y = lsub.add_parser("list", parents=[common], help="proposals of every ticket joined with the learning log, and lessons")
+    y.add_argument("--ticket")
+    y.add_argument("--status", default="proposed", choices=["proposed", "applied", "rejected", "all"])
+    y.set_defaults(fn=cmd_learn)
+    y = lsub.add_parser("apply", parents=[ticketed], help="apply one proposal (people only: --actor user)")
+    y.add_argument("--id", required=True, help="proposal id in the ticket's proposals.json")
+    y.add_argument("--actor", required=True, help="must be `user`: a person approved it (D10)")
+    y.add_argument("--note")
+    y.add_argument("--phase", choices=list(R.PHASES), help="rule proposals: the review phase (default: from scope nodes)")
+    y.add_argument("--severity", default="medium", choices=["critical", "high", "medium", "low"],
+                   help="rule proposals: severity of the learned rule (default medium, non-blocking)")
+    y.set_defaults(fn=cmd_learn)
+    y = lsub.add_parser("reject", parents=[ticketed], help="reject one proposal (people only: --actor user)")
+    y.add_argument("--id", required=True)
+    y.add_argument("--actor", required=True)
+    y.add_argument("--reason", required=True)
+    y.set_defaults(fn=cmd_learn)
+    y = lsub.add_parser("revert", parents=[common], help="retire a lesson (and remove its learned rule); --actor user")
+    y.add_argument("--id", required=True, help="lesson id (<ticket>-<proposal id>)")
+    y.add_argument("--actor", required=True)
+    y.add_argument("--reason", required=True)
+    y.set_defaults(fn=cmd_learn)
+    y = lsub.add_parser("review", parents=[common],
+                        help="walk pending proposals at a terminal: apply / reject / skip (TTY only)")
+    y.add_argument("--ticket")
+    y.set_defaults(fn=cmd_learn)
+    y = lsub.add_parser("retro", parents=[common],
+                        help="read-only effect report of active lessons and learned rules (never retires anything)")
+    y.add_argument("--since", help="only tickets started on or after this day (YYYY-MM-DD)")
+    y.set_defaults(fn=cmd_learn)
+    y = lsub.add_parser("verify", parents=[common], help="check the learning store; --accept-current after a hand edit")
+    y.add_argument("--accept-current", action="store_true")
+    y.add_argument("--reason")
+    y.set_defaults(fn=cmd_learn)
+
     x = sub.add_parser("contract", help="the data contract version the desktop app checks (read-only, no profile)")
     x.set_defaults(fn=cmd_contract)
 
@@ -1548,7 +1889,7 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--open", action="store_true", help="open it in the browser")
     x.set_defaults(fn=cmd_web)
 
-    x = sub.add_parser("zed-setup", help="add kaneki tasks (board, tickets, status, decide) to <target>/.zed/tasks.json")
+    x = sub.add_parser("zed-setup", help="add kaneki tasks (board, tickets, status, decide, review learning) to <target>/.zed/tasks.json")
     x.add_argument("--target", required=True, help="the folder you open in Zed (the workspace with sdlc.profile.json)")
     x.add_argument("--dry-run", action="store_true")
     x.set_defaults(fn=cmd_zed_setup)
@@ -1557,6 +1898,54 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--path", required=True)
     x.add_argument("--expect")
     x.set_defaults(fn=cmd_digest)
+
+    x = sub.add_parser("run", parents=[ticketed],
+                       help="run the ticket's next node unattended (claude --bg or codex exec, one node per fresh session); "
+                            "parks at user gates; never Antigravity")
+    x.add_argument("--max-nodes", type=int, default=1, help="nodes to run one after another (default 1)")
+    x.add_argument("--stop", action="store_true", help="stop the running node's session and release the run lease")
+    x.add_argument("--trigger", default="manual", choices=["manual", "tick", "recover"], help=argparse.SUPPRESS)
+    x.set_defaults(fn=cmd_run)
+
+    x = sub.add_parser("tick", parents=[common],
+                       help="one scheduler pass: recover, then start at most one node per opted-in ticket "
+                            "(maxConcurrent in .sdlc/runner.local.json)")
+    x.add_argument("--foreground", action="store_true", help="run the nodes in this process instead of detached runs")
+    x.add_argument("--no-recover", action="store_true", help="skip the recover pass")
+    x.set_defaults(fn=cmd_tick)
+
+    x = sub.add_parser("recover", parents=[common],
+                       help="release leases whose runner is gone; restart orphaned nodes once (opted-in tickets)")
+    x.add_argument("--no-restart", action="store_true", help="only release / park, never restart")
+    x.add_argument("--foreground", action="store_true", help="restart in this process instead of a detached run")
+    x.set_defaults(fn=cmd_recover)
+
+    x = sub.add_parser("autonomy", parents=[ticketed],
+                       help="show or set whether tick may run this ticket unattended (off until you turn it on)")
+    x.add_argument("--set", choices=["on", "off"])
+    x.add_argument("--reason")
+    x.set_defaults(fn=cmd_autonomy)
+
+    x = sub.add_parser("unpark", parents=[ticketed], help="let the runner continue a parked ticket")
+    x.add_argument("--reason")
+    x.set_defaults(fn=cmd_unpark)
+
+    x = sub.add_parser("schedule", parents=[common],
+                       help="run tick every N minutes and recover at logon: Windows Task Scheduler (per user, no "
+                            "admin) or crontab lines on macOS/Linux; --status, --uninstall")
+    g = x.add_mutually_exclusive_group(required=True)
+    g.add_argument("--install", action="store_true", help="create the scheduled tick and recover for this workspace")
+    g.add_argument("--status", action="store_true", help="whether they exist, next / last run, last log lines")
+    g.add_argument("--uninstall", action="store_true", help="remove only the tasks / crontab lines this created")
+    g.add_argument("--pass", dest="run_pass", choices=["tick", "recover"], help=argparse.SUPPRESS)
+    x.add_argument("--every", type=int, default=15, help="minutes between ticks (default 15)")
+    x.add_argument("--dry-run", action="store_true", help="print the exact commands / crontab lines, change nothing")
+    x.add_argument("--write", action="store_true", help="macOS/Linux: also add the lines to your crontab")
+    x.add_argument("--platform", choices=["windows", "posix"], help="default: this machine's")
+    x.add_argument("--show-console", action="store_true",
+                   help="Windows: run the wrapper directly instead of through conhost.exe --headless (a console "
+                        "window then flashes at each pass)")
+    x.set_defaults(fn=cmd_schedule)
 
     x = sub.add_parser("host", parents=[common], help="show or set the local agent host binding (.sdlc/host.local.json)")
     x.add_argument("--set", choices=list(H.KNOWN_HOSTS), help="write/switch .sdlc/host.local.json to this host preset")
@@ -1568,15 +1957,22 @@ def build_parser() -> argparse.ArgumentParser:
 
 READ_ONLY = {"status", "plan", "validate", "digest", "host", "onboard-scan", "onboard-verify", "onboard-write", "install",
              "tickets", "status-of", "web", "zed-setup", "contract", "ticket-detail", "gate-request",
-             "transcripts",
+             "transcripts", "cost", "budget", "reflect-signals",
+             "learn",  # the workspace learning store has its own lock; apply/reject refresh STATUS.md themselves
              "decide"}  # decide takes the lock only for the gate it runs (through main), never while it waits for you
 NO_STATUS_REFRESH = READ_ONLY | {"git"}
+# Commands that take the ticket lock themselves, only around each write: a run lasts as long as its node, and the
+# agent's own `sdlc` calls need the lock meanwhile (harness/runner.py).
+SELF_LOCKING = {"run", "tick", "recover"}
 
 
 def _ticket_lock(args: argparse.Namespace):
     """One writer per ticket: every command that changes a ticket holds its lock for the whole read-modify-write."""
     from contextlib import nullcontext
+    if args.cmd in SELF_LOCKING:
+        return nullcontext()
     if ((args.cmd in READ_ONLY and not (args.cmd == "status" and args.accept_current_state))
+            and not (args.cmd == "budget" and args.allow_node)
             or not getattr(args, "ticket", None) or (args.cmd == "lang" and not (args.set or args.clear))):
         return nullcontext()
     try:
@@ -1597,7 +1993,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         with _ticket_lock(args):
             rc = args.fn(args)
-            if args.cmd not in NO_STATUS_REFRESH and getattr(args, "ticket", None):
+            if ((args.cmd not in NO_STATUS_REFRESH or (args.cmd == "budget" and args.allow_node))
+                    and getattr(args, "ticket", None)):
                 _refresh_status(args)
     except HarnessError as exc:
         out({"error": str(exc)})
