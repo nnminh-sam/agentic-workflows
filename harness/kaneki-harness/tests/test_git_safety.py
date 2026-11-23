@@ -105,6 +105,40 @@ class LinkedWorktreeSafetyTests(GitSafetyBase):
         self.raw(wt, "rebase", "--abort")
         self.assertEqual(self.rev(self.repo, "refs/heads/ticket/GS-2"), head)
 
+    def test_any_move_of_an_existing_branch_needs_an_approved_ship(self) -> None:
+        wt = self.bind("GS-6")
+        head = self.rev(wt, "HEAD")
+        # --no-verify skips pre-commit; the fast-forward is still refused by reference-transaction
+        self.assert_refused(self.commit_file(wt, "ff.txt", "ff\n", "--no-verify"),
+                            "branches move only through an approved ship")
+        self.assertEqual(self.rev(wt, "refs/heads/ticket/GS-6"), head)
+        git(wt, "reset", "-q")
+        git(self.repo, *ID, "commit", "-q", "--allow-empty", "-m", "ahead")  # unguarded main checkout
+        self.assert_refused(self.raw(wt, "merge", "--ff-only", self.base), "branches move only through an approved ship")
+        # approval for another branch does not cover the ticket branch
+        approvals.grant(self.tmp, "GS-6", "app", str(wt), "ticket/other", "f" * 64)
+        self.assert_refused(self.commit_file(wt, "ff.txt", "ff\n", "--no-verify"), "branches move only through")
+        git(wt, "reset", "-q")
+        approvals.grant(self.tmp, "GS-6", "app", str(wt), "ticket/GS-6", "f" * 64)
+        self.assertEqual(self.commit_file(wt, "ff.txt", "ff\n").returncode, 0)
+        self.assertNotEqual(self.rev(wt, "refs/heads/ticket/GS-6"), head)
+        # new branches (worktree add -b, switch -c) still pass
+        self.assertEqual(self.raw(wt, "branch", "new-branch").returncode, 0)
+
+    def test_existing_tags_are_never_deleted_or_moved_outside_a_ship(self) -> None:
+        wt = self.bind("GS-7")
+        self.assertEqual(self.raw(wt, "tag", "v1", "HEAD~1").returncode, 0)  # creating a tag passes
+        self.assert_refused(self.raw(wt, "tag", "-f", "v1", "HEAD"), "tags are never moved")
+        self.assert_refused(self.raw(wt, "tag", "-d", "v1"), "tags are never deleted")
+        self.assert_refused(self.raw(wt, "update-ref", "-d", "refs/tags/v1"), "tags are never deleted")
+        self.assertEqual(self.rev(wt, "refs/tags/v1"), self.rev(wt, "HEAD~1"))
+
+        approvals.grant(self.tmp, "GS-7", "app", str(wt), "ticket/GS-7", "9" * 64)
+        self.assertEqual(self.raw(wt, "push", "origin", "refs/tags/v1").returncode, 0)
+        self.assertEqual(self.raw(wt, "tag", "-f", "v1", "HEAD").returncode, 0)  # inside the approved ship
+        self.assert_refused(self.raw(wt, "push", "--force", "origin", "refs/tags/v1"), "tags are never moved")
+        self.assertEqual(self.rev(self.remote, "refs/tags/v1"), self.rev(wt, "HEAD~1"))
+
     def test_protected_branches_are_never_updated(self) -> None:
         wt = self.bind("GS-3")
         for branch in ("main", "develop/base"):

@@ -7,10 +7,11 @@ hooks are the part of the git-safety rules that holds for every agent, because g
 - `pre-push`: the same approval, and even with it: never delete a remote ref, never force (non-fast-forward) a
   branch, never push to `main`, `develop/base` or the repository's base branch.
 - `reference-transaction` (prepared phase, Git 2.28+): refuses deleting any `refs/heads/*` ref (`branch -d/-D/
-  --delete`, `branch -m`, `update-ref -d`), any update of `main`, `develop/base` or the base branch, and any
-  non-fast-forward move of a branch (`reset --hard HEAD~1`, `rebase`, `commit --amend`, `branch -f`) unless an
-  approved ship covers that branch in this checkout. Fast-forward moves (the approved ship's commit) pass. Unlike
-  `pre-commit` it cannot be skipped with `--no-verify`.
+  --delete`, `branch -m`, `update-ref -d`), any update of `main`, `develop/base` or the base branch, and any move
+  of an existing branch, fast-forward or not (`commit --no-verify`, `reset --hard HEAD~1`, `rebase`,
+  `commit --amend`, `branch -f`), unless an approved ship covers that branch in this checkout. Creating a new
+  branch (`worktree add -b`, `switch -c`) passes. Existing tags (`refs/tags/*`) are never deleted or moved outside
+  an approved ship; creating a new tag passes. Unlike `pre-commit` it cannot be skipped with `--no-verify`.
 
 Where they are installed (`sdlc worktree`, and `sdlc init` for in-place lanes):
 
@@ -33,6 +34,11 @@ a ref: `git clean -f`, `git checkout -- .`, `git restore`, `git reset --hard` wi
 `git stash drop/clear`, deleting files, or editing `.git` (including these hooks and the marker) by hand. Those are
 covered by the agent-side policies: Claude's PreToolUse guard (guard_git.py / gitpolicy.py), Codex approvals and
 sandbox (`sandbox_mode`, `approval_policy`), and Antigravity's terminal command rules (deny list / request review).
+
+Known gap with the ship flow: when `ship._verify_commit` rejects a commit it suggests
+`sdlc git ... -- reset --soft <approved head>`. That moves the ticket branch, so these hooks allow it only while the
+approval is live. The `native-git` backend revokes the approval in its `finally`, so after a failed verify the reset
+needs a new approval (`sdlc ship-request` + `sdlc ship`). The `my-git` backend keeps the approval until `ship-record`.
 """
 
 from __future__ import annotations
@@ -67,9 +73,10 @@ an approved ship):
   commit  needs an approved ship for this checkout.
   push    needs an approved ship for this checkout; never deletes a remote ref, never forces (non-fast-forward)
           a branch, never pushes to main, develop/base or the base branch.
-  ref     never deletes refs/heads/*; never updates main, develop/base or the base branch; never moves a branch
-          to a commit that does not contain its current one (reset to an older commit, rebase, amend, branch -f)
-          unless an approved ship covers that branch here. Fast-forward moves pass.
+  ref     never deletes refs/heads/*; never updates main, develop/base or the base branch; never moves an
+          existing branch (fast-forward or not: commit --no-verify, reset, rebase, amend, branch -f) unless an
+          approved ship covers that branch here; new branches pass. Never deletes or moves an existing tag outside
+          an approved ship for this checkout; new tags pass.
 
 In-place mode (lite lane in the repository's own checkout) enforces only while active.json names a ticket whose
 state.json still binds the repository to this checkout; otherwise every action passes.
@@ -174,14 +181,36 @@ def _protected(cfg: dict) -> set:
     return set(cfg.get("protected") or ["main", "develop/base"])
 
 
+def _current(ref: str, old: str) -> str:
+    """The ref's value before this transaction ("" when it does not exist yet)."""
+    if not ZERO_RE.match(old):
+        return old
+    res = _git("rev-parse", "--verify", "--quiet", ref)  # unverified update: read the ref itself
+    return res.stdout.strip() if res.returncode == 0 else ""
+
+
+def _check_tag(cfg: dict, projects: list, old: str, new: str, ref: str) -> None:
+    tag = ref[len("refs/tags/"):]
+    cur = _current(ref, old)
+    if not cur or cur == new or _approved(cfg, projects, "commit"):
+        return  # new tag, no-op, or inside an approved ship
+    if ZERO_RE.match(new):
+        raise Blocked(f"rule: tags are never deleted outside an approved ship. Refusing to delete tag {tag}.")
+    raise Blocked(f"rule: tags are never moved outside an approved ship. Tag {tag} would move from "
+                  f"{cur[:10]} to {new[:10]}.")
+
+
 def _check_refs(cfg: dict, projects: list, lines: list) -> None:
     for line in lines:
         parts = line.split()
-        if len(parts) != 3 or not parts[2].startswith("refs/heads/"):
+        if len(parts) != 3 or not parts[2].startswith(("refs/heads/", "refs/tags/")):
             continue
         old, new, ref = parts
         if old.startswith("ref:") or new.startswith("ref:"):
             continue  # symbolic-ref update (HEAD), not a branch move
+        if ref.startswith("refs/tags/"):
+            _check_tag(cfg, projects, old, new, ref)
+            continue
         branch = ref[len("refs/heads/"):]
         if ZERO_RE.match(new):
             raise Blocked(f"rule: branches are never deleted. Refusing to delete {branch} "
@@ -190,14 +219,15 @@ def _check_refs(cfg: dict, projects: list, lines: list) -> None:
         if branch in _protected(cfg):
             raise Blocked(f"rule: {branch} is protected; agents never move main, develop/base or the base branch. "
                           "Work on the ticket branch; kaneki-ship delivers it.")
-        cur = old
-        if ZERO_RE.match(old):  # unverified update: compare with the branch's current value
-            res = _git("rev-parse", "--verify", "--quiet", ref)
-            cur = res.stdout.strip() if res.returncode == 0 else ""
-        if not cur or cur == new or _is_ancestor(cur, new):
-            continue  # new branch, no-op, or fast-forward
+        cur = _current(ref, old)
+        if not cur or cur == new:
+            continue  # new branch (worktree add -b, switch -c) or no-op
         if _approved(cfg, projects, "commit", branch):
             continue
+        if _is_ancestor(cur, new):
+            raise Blocked(f"rule: branches move only through an approved ship. {branch} would move forward from "
+                          f"{cur[:10]} to {new[:10]} (a commit, merge or reset outside kaneki-ship; "
+                          "--no-verify does not skip this check).")
         raise Blocked(f"rule: history is never rewritten outside an approved ship. {branch} would move from "
                       f"{cur[:10]} to {new[:10]}, which drops commits (reset to an older commit, rebase, "
                       "commit --amend, branch -f).")
@@ -213,6 +243,11 @@ def _check_push(cfg: dict, projects: list, lines: list) -> None:
         _lref, lsha, rref, rsha = parts
         if ZERO_RE.match(lsha):
             raise Blocked(f"rule: branches are never deleted. Refusing to delete {rref} on the remote.")
+        if rref.startswith("refs/tags/"):
+            if not ZERO_RE.match(rsha) and rsha != lsha:
+                raise Blocked(f"rule: tags are never moved. Refusing to overwrite tag {rref[len('refs/tags/'):]} "
+                              "on the remote.")
+            continue
         if not rref.startswith("refs/heads/"):
             continue
         branch = rref[len("refs/heads/"):]
@@ -298,7 +333,7 @@ _SH_BODY = {
     "reference-transaction": (
         "input=$(cat; echo x); input=${input%x}\n"
         'if [ "$1" = prepared ] && enforcing; then\n'
-        "  case \"$input\" in *refs/heads/*) printf '%s' \"$input\" | guard ref || exit $? ;; esac\n"
+        "  case \"$input\" in *refs/heads/*|*refs/tags/*) printf '%s' \"$input\" | guard ref || exit $? ;; esac\n"
         "fi\n"
         'if [ -n "$chain" ] && [ -x "$chain" ]; then printf \'%s\' "$input" | "$chain" "$@"; exit $?; fi\n'
         "exit 0\n"
