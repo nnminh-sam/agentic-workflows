@@ -104,6 +104,31 @@ Background and decisions: [docs/zed-workspace/plan.md](docs/zed-workspace/plan.m
    `agy -p` or a community bridge: Antigravity's terms do not allow third-party software to drive it.
    Codex units run through `sdlc dispatch` (`codex exec -m <model> -c model_reasoning_effort=<effort> <prompt>`).
 
+## Unattended runs (Claude Code and Codex)
+
+The runner works a ticket's nodes while you are away, one node per fresh agent session, in the workspace folder:
+Claude Code as a background session (`claude --bg -n kaneki:<ticket>:<node>:<runId>`), Codex with `codex exec`.
+It never starts Antigravity, never crosses a user gate, and never commits, pushes or ships.
+
+```bash
+sdlc autonomy --ticket ISSUE-123 --set on        # opt in; nothing runs unattended without it
+sdlc run --ticket ISSUE-123 --max-nodes 3        # run now (--host claude|codex; default: the active binding)
+sdlc tick                                        # one scheduler pass: recover, then start one node per opted-in ticket
+sdlc recover                                     # after a shutdown: release dead runs, restart orphaned nodes once
+sdlc run --stop --ticket ISSUE-123               # stop the running session and release the run lease
+sdlc unpark --ticket ISSUE-123                   # let the runner continue a ticket it parked
+```
+
+- A node is done when its `gate` event is in `decisions.jsonl`, not when the session says so.
+- The runner **parks** a ticket (event `park`, an entry in `.sdlc/inbox.jsonl`, a desktop toast through the
+  notify-hook when it is installed) when the next node closes on you (`sdlc decide`), or when a session stops without
+  its gate: answer it with `claude attach <id>`. A parked ticket continues by itself once the gate is closed.
+- A usage-limit error writes `.sdlc/run/backoff-<host>.json`; nothing starts on that host until its retry time.
+- Settings live in `.sdlc/runner.local.json`: `maxConcurrent` (1), `pollSeconds` (15), `nodeTimeoutMinutes` (180),
+  `retries` (1), `backoffMinutes` (60), `claudeArgs`, `codexTier`, `notifyCommand` (argv with `{title}`
+  `{message}` `{ticket}` `{kind}`; `[]` turns it off), `notifyHook`.
+- Run state per ticket: `run/lease.json` (separate from the 10-minute command lock) and `run/<runId>.jsonl`.
+
 ## Workspace layout
 
 Run the harness from a workspace folder that holds the repositories, not from inside a repository. Every ticket
