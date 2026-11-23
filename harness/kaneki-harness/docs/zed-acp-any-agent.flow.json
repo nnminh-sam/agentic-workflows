@@ -1,0 +1,351 @@
+{
+  "title": "Zed + Board — Claude, Codex, Antigravity on the Kaneki Harness",
+  "description": "Target design: you work in Zed with Claude Code, Codex or Antigravity (Agent Panel over ACP, or a CLI terminal tab), every agent follows the same kaneki playbook and writes to the agent-free ticket kernel, and a local web board shows every ticket, node and transcript and hands back to Zed.",
+  "lang": "en",
+  "lanes": [
+    {
+      "id": "ui",
+      "label": "You · Zed + browser board",
+      "context": "UI"
+    },
+    {
+      "id": "acp",
+      "label": "ACP · the editor ↔ agent plug",
+      "context": "ACP"
+    },
+    {
+      "id": "agents",
+      "label": "Agents in scope · swap any time",
+      "context": "Agents"
+    },
+    {
+      "id": "harness",
+      "label": "Harness · same for all",
+      "context": "Harness"
+    },
+    {
+      "id": "kernel",
+      "label": "On disk · agent-free",
+      "context": "Kernel",
+      "rows": 2
+    }
+  ],
+  "nodes": [
+    {
+      "id": "you",
+      "lane": "ui",
+      "col": 0,
+      "kind": "frontend",
+      "label": "You",
+      "sublabel": "pick agent · approve",
+      "detail": "One person. You pick the agent for a ticket, answer its HIGH questions, approve user gates (plan, deliverable-ready, ship) and review code in the ticket worktree with Zed's editor."
+    },
+    {
+      "id": "panel",
+      "lane": "ui",
+      "col": 1,
+      "kind": "frontend",
+      "label": "Agent Panel",
+      "sublabel": "Zed's ACP client",
+      "detail": "Default interface. One thread = one agent session: messages, tool calls, diffs, permission prompts. New thread menu: ctrl-alt-shift-n; Threads sidebar: ctrl-alt-j; debug: 'dev: open acp logs'. Verified on this machine: Zed 1.28.1 with Claude Agent installed from the ACP Registry (latest stable 1.29.3)."
+    },
+    {
+      "id": "term",
+      "lane": "ui",
+      "col": 2,
+      "kind": "frontend",
+      "label": "Terminal tab",
+      "sublabel": "claude / codex CLI",
+      "detail": "Alternative interface: run the Claude Code CLI (`claude`) or the Codex CLI (`codex`) in a Zed terminal tab or task. Same skill, same kernel. Antigravity is used only through its official ACP server, not a wrapped CLI."
+    },
+    {
+      "id": "tasks",
+      "lane": "ui",
+      "col": 5,
+      "kind": "frontend",
+      "label": "Zed tasks",
+      "sublabel": "board · decide",
+      "detail": "From `sdlc zed-setup` (harness/zed.py): 'kaneki: board (web)', 'kaneki: tickets', 'kaneki: ticket status (from open file)', 'kaneki: validate profile'. Planned: 'kaneki: decide gate'."
+    },
+    {
+      "id": "board",
+      "lane": "ui",
+      "col": 6,
+      "kind": "frontend",
+      "label": "Web board",
+      "sublabel": "127.0.0.1:8765",
+      "detail": "`sdlc web` upgraded to the board in app/design-system/board-zed-mock.html: tickets, pipeline with the agent per node, node inspector (units, artifacts, events), Transcripts read from the agents' own session logs, In-flight units, live decision log. Buttons: Open in Zed (file:line, works today) and Continue in Zed (zed://agent?prompt=… or copy + focus). Read-only; local only; actions need the per-run token."
+    },
+    {
+      "id": "acp",
+      "lane": "acp",
+      "col": 1,
+      "kind": "messagebus",
+      "label": "ACP",
+      "sublabel": "JSON-RPC over stdio",
+      "detail": "Agent Client Protocol: the standard between an editor and a coding agent, as LSP is for language servers. Zed starts the agent program and exchanges JSON-RPC on stdin/stdout: session/new, session/prompt, session/update (message, tool_call, diff, plan), session/request_permission. Agents come from the ACP Registry (`zed: acp registry`) or an `agent_servers` entry in settings."
+    },
+    {
+      "id": "ag_claude",
+      "lane": "agents",
+      "col": 1,
+      "kind": "backend",
+      "label": "Claude Code",
+      "sublabel": "ACP or CLI · subagents",
+      "detail": "Registry 'claude-acp' (Anthropic, Zed, JetBrains; Windows build; bundles its own claude.exe; sign in with /login in a thread) or the `claude` CLI. hosts/claude: dispatchMode native (Agent tool: kaneki-light / worker / deep), tiers haiku / sonnet / opus. Background runs: allowed (claude --bg / -p)."
+    },
+    {
+      "id": "ag_codex",
+      "lane": "agents",
+      "col": 2,
+      "kind": "backend",
+      "label": "Codex",
+      "sublabel": "ACP or CLI · dispatch",
+      "detail": "Registry 'codex-acp' (OpenAI, JetBrains, Zed; via npx) or the `codex` CLI (not installed yet on this machine). hosts/codex: dispatchMode subprocess — the controller runs `sdlc dispatch`, which starts `codex exec` per unit. Background runs: allowed (codex exec)."
+    },
+    {
+      "id": "ag_agy",
+      "lane": "agents",
+      "col": 3,
+      "kind": "backend",
+      "label": "Antigravity",
+      "sublabel": "official agy acp only",
+      "detail": "Registry 'antigravity-acp' (Google LLC, Windows build from dl.google.com). hosts/antigravity: dispatchMode native (invoke_subagent). Policy: Antigravity's terms and FAQ forbid third-party software wrapping agy on consumer plans, so it is interactive only — never `sdlc dispatch` / runner / agy -p from kaneki."
+    },
+    {
+      "id": "skill",
+      "lane": "harness",
+      "col": 1,
+      "kind": "backend",
+      "label": "kaneki-flow",
+      "sublabel": "skill · 5 intents",
+      "detail": "One controller playbook for every agent (playbooks/flow.md), installed per host by `sdlc install --host claude|codex|antigravity` (.claude/ or .agents/). Intents: DRIVER_CALL, DISPATCH_UNIT, RESUME_UNIT, ASK_USER, INSPECT_CODE. Planned fix: codex and antigravity both install into .agents/ and overwrite each other."
+    },
+    {
+      "id": "hostbind",
+      "lane": "harness",
+      "col": 2,
+      "kind": "security",
+      "label": "Host binding",
+      "sublabel": "SDLC_HOST → tiers",
+      "detail": "hosts/<h>/preamble.md maps the intents to the agent's tools; hosts/<h>/tiers.json maps light / routine / deep to its models. Active host: --host, then $SDLC_HOST, then .sdlc/host.local.json. Planned: bake SDLC_HOST into each rendered skill, and log a host-switch event."
+    },
+    {
+      "id": "sdlc",
+      "lane": "harness",
+      "col": 3,
+      "kind": "backend",
+      "label": "sdlc CLI",
+      "sublabel": "one JSON line out",
+      "detail": "The only writer of ticket state: init, status, plan, packet, record, gate, invalidate, worktree, handback, receipts, ship-request / ship / ship-record, ticket-detail, gate-request, host, web. Exit 2 = fail-closed with the gate named."
+    },
+    {
+      "id": "dispatch",
+      "lane": "harness",
+      "col": 4,
+      "kind": "backend",
+      "label": "sdlc dispatch",
+      "sublabel": "codex units",
+      "detail": "harness/dispatch.py: renders the packet, starts the host's runner without a shell (codex exec, claude -p), checks the result file and records the unit with host and model. Not used for Antigravity."
+    },
+    {
+      "id": "decide",
+      "lane": "harness",
+      "col": 5,
+      "kind": "security",
+      "optional": true,
+      "label": "sdlc decide",
+      "sublabel": "gate prompt (planned)",
+      "detail": "Planned: terminal prompt that reads `sdlc gate-request` and writes `sdlc gate --actor user`, so a gate can be approved from a Zed task whichever agent ran the node."
+    },
+    {
+      "id": "runner",
+      "lane": "kernel",
+      "col": 2,
+      "kind": "backend",
+      "optional": true,
+      "label": "Runner",
+      "sublabel": "claude · codex only",
+      "detail": "Planned: `sdlc run / tick / recover` under Task Scheduler (at logon + every N min). Runs controller-boundary nodes unattended with Claude Code or Codex, parks at user gates, restarts at nextPending after a shutdown. Refuses SDLC_HOST=antigravity."
+    },
+    {
+      "id": "files",
+      "lane": "kernel",
+      "col": 3,
+      "kind": "database",
+      "label": "Ticket files",
+      "sublabel": "state · decisions.jsonl",
+      "detail": ".sdlc/tickets/<id>/: state.json (digest-checked), decisions.jsonl (hash-chained), packets/, results/, artifacts, questions.md, STATUS.md, token-usage.md. Switching agents is safe because the next agent resumes at nextPending from these files."
+    },
+    {
+      "id": "worktrees",
+      "lane": "kernel",
+      "col": 4,
+      "row": 1,
+      "kind": "database",
+      "label": "Ticket worktrees",
+      "sublabel": "git hooks guard",
+      "detail": "<worktreeRoot>/<repoId>-<ticket> on ticket/<id>. Per-worktree pre-commit / pre-push hooks (harness/worktree_hooks.py) refuse commit and push without a ship approval, for any agent."
+    },
+    {
+      "id": "logs",
+      "lane": "kernel",
+      "col": 5,
+      "kind": "database",
+      "label": "Session logs",
+      "sublabel": "transcripts · cost",
+      "detail": "Each agent's own conversation logs: Claude Code ~/.claude/projects/<workspace>/*.jsonl (+ subagents/), Codex ~/.codex/sessions/…, sdlc dispatch logs under <ticket>/logs/. Antigravity log location: to verify. The board matches a unit to its log by the packet path in the first message (exact) and the controller thread by its sdlc calls."
+    }
+  ],
+  "edges": [
+    {
+      "from": "you",
+      "to": "panel",
+      "label": "pick",
+      "variant": "emphasis"
+    },
+    {
+      "from": "panel",
+      "to": "acp",
+      "label": "prompt",
+      "variant": "emphasis"
+    },
+    {
+      "from": "acp",
+      "to": "ag_claude",
+      "label": "session",
+      "variant": "emphasis"
+    },
+    {
+      "from": "acp",
+      "to": "ag_codex"
+    },
+    {
+      "from": "acp",
+      "to": "ag_agy"
+    },
+    {
+      "from": "term",
+      "to": "ag_claude"
+    },
+    {
+      "from": "term",
+      "to": "ag_codex",
+      "label": "CLI"
+    },
+    {
+      "from": "ag_claude",
+      "to": "skill",
+      "label": "same skill",
+      "variant": "emphasis"
+    },
+    {
+      "from": "ag_codex",
+      "to": "skill"
+    },
+    {
+      "from": "ag_agy",
+      "to": "skill"
+    },
+    {
+      "from": "skill",
+      "to": "hostbind",
+      "label": "tools"
+    },
+    {
+      "from": "skill",
+      "to": "sdlc",
+      "label": "DRIVER_CALL",
+      "variant": "emphasis",
+      "route": "under"
+    },
+    {
+      "from": "sdlc",
+      "to": "dispatch",
+      "label": "units"
+    },
+    {
+      "from": "sdlc",
+      "to": "files",
+      "label": "state + log",
+      "variant": "emphasis"
+    },
+    {
+      "from": "dispatch",
+      "to": "worktrees",
+      "label": "edit code"
+    },
+    {
+      "from": "tasks",
+      "to": "decide",
+      "label": "approve",
+      "variant": "security"
+    },
+    {
+      "from": "decide",
+      "to": "files",
+      "label": "gate --actor user",
+      "variant": "security"
+    },
+    {
+      "from": "runner",
+      "to": "files",
+      "label": "resume",
+      "variant": "dashed"
+    },
+    {
+      "from": "logs",
+      "to": "board",
+      "label": "transcripts",
+      "variant": "dashed"
+    },
+    {
+      "from": "board",
+      "to": "panel",
+      "label": "Continue in Zed",
+      "variant": "dashed",
+      "route": "over"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "How you work",
+      "items": [
+        "Agent Panel (default) — new thread → Claude Code, Codex or Antigravity → run the kaneki-flow skill for the ticket. ACP is the plug that lets Zed show any of them the same way.",
+        "Terminal tab — the claude or codex CLI in Zed, when you prefer the CLI. Same skill, same files.",
+        "Web board — every ticket, node, agent, transcript and in-flight unit, live, without asking an agent. Open in Zed jumps to a file:line; Continue in Zed starts a thread with the right prompt (Zed has no link to an existing thread yet).",
+        "Claude usage ends — open a new thread with Codex or Antigravity on the same ticket; it resumes at nextPending."
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Agents in scope",
+      "items": [
+        "Claude Code — ACP 'claude-acp' or claude CLI; native subagents; background runs allowed.",
+        "Codex — ACP 'codex-acp' or codex CLI; units through sdlc dispatch (codex exec); background runs allowed.",
+        "Antigravity — official 'antigravity-acp' (Google) in the Agent Panel only; native subagents; never wrapped or automated by kaneki on a personal plan.",
+        "Out of scope — Gemini CLI, pi, OpenCode, Cursor: presets may stay in code but are not planned, documented or tested here."
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Why it is agent-agnostic",
+      "items": [
+        "Harness — one playbook + hosts/<h>/preamble.md + tiers.json (PR #22): any agent drives the same sdlc commands.",
+        "UI — ACP and the terminal: Zed doesn't care which agent runs.",
+        "State — ticket files on disk: each record keeps host + model; the next agent resumes from them.",
+        "View — the board reads the kernel and the session logs, never an agent."
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Planned work (see zed-workspace/plan.md)",
+      "items": [
+        "P0 spike — Claude Agent loads skills/hooks over ACP; codex-acp and agy acp on Windows; zed://agent?prompt= behaviour.",
+        "P1 host fixes — SDLC_HOST in each rendered skill; .agents/ conflict; host-switch event; Antigravity refused by dispatch/runner; install --host required.",
+        "P2 board — node inspector, transcripts (Claude, Codex), in-flight, Open/Continue in Zed. P3 sdlc decide. P4 cost and budgets. P5 runner. P6 reflect node."
+      ]
+    }
+  ]
+}

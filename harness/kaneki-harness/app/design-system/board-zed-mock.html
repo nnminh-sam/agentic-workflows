@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kaneki Board Mock</title>
+<!-- Mock of `sdlc web` (http://127.0.0.1:8765): ticket board with a node inspector, per-node transcripts read from
+     the agents' own session logs, and Zed hand-offs. Sample data only; nothing here runs a command. -->
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="components.css">
+<style>
+html,body{height:100%;overflow:hidden}
+:root{--inspector-width:440px}
+.k-inspector__body{overflow-x:hidden}
+.k-pipeline{overflow-x:auto;padding-bottom:6px}
+.k-tier{white-space:nowrap}
+.b-back .k-icon{transform:rotate(180deg)}
+.b-art{flex-wrap:wrap}
+.b-art__meta{flex-basis:100%;padding-left:22px;font-size:11px;color:var(--ink-3)}
+.b-tool summary{align-items:flex-start}
+.b-tool summary .b-cmd{flex:1;min-width:0;word-break:break-word}
+.b-url{font:12px/1 var(--font-mono);color:var(--ink-3);padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface-2)}
+.b-live{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-3)}
+.b-host{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:999px;border:1px solid var(--border);background:var(--surface-2);font-size:12px;color:var(--ink-2);white-space:nowrap}
+.b-host i{width:8px;height:8px;border-radius:50%;display:inline-block}
+.b-host--claude i{background:var(--tier-deep)}.b-host--codex i{background:var(--ink)}.b-host--antigravity i{background:var(--accent)}.b-host--gemini i{background:var(--tier-light)}
+.b-switch{font-size:12px;color:var(--ink-3);display:inline-flex;align-items:center;gap:4px}
+.b-node-host{display:block;margin-top:2px;font-size:10.5px;color:var(--ink-3);text-align:center}
+.k-node{cursor:pointer}
+.b-ins-tabs{padding:0 var(--space-4);border-bottom:1px solid var(--border)}
+.b-ins-tabs .k-tabs{border-bottom:0}
+.b-actions{display:flex;flex-wrap:wrap;gap:var(--space-2)}
+.b-section{display:grid;gap:var(--space-2)}
+.b-section>h5{margin:0;font-size:11px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--ink-3)}
+.b-art{display:flex;align-items:center;gap:var(--space-2);padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface-2);font-size:13px}
+.b-art .k-mono{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.b-sess{display:grid;gap:4px;padding:10px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface);cursor:pointer;text-align:left;width:100%;color:var(--ink)}
+.b-sess:hover{background:var(--surface-3)}
+.b-sess.is-selected{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.b-sess__top{display:flex;align-items:center;gap:var(--space-2);font-weight:500}
+.b-sess__sub{font-size:12px;color:var(--ink-3)}
+.b-match{font-size:11px;padding:1px 6px;border-radius:999px;background:var(--ok-soft);color:var(--ok-text);white-space:nowrap}
+.b-match--heur{background:var(--warn-soft);color:var(--warn-text)}
+.b-tx{display:grid;gap:10px}
+.b-msg{display:grid;gap:4px}
+.b-msg__who{font-size:11px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;color:var(--ink-3)}
+.b-msg__text{font-size:13px;line-height:1.5;padding:8px 10px;border-radius:var(--radius-md);background:var(--surface-2);border:1px solid var(--border)}
+.b-msg--user .b-msg__text{background:var(--accent-soft);border-color:transparent}
+.b-tool{border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface)}
+.b-tool summary{display:flex;align-items:center;gap:6px;padding:6px 10px;cursor:pointer;font:12px/1.4 var(--font-mono);color:var(--ink-2);list-style:none}
+.b-tool summary::-webkit-details-marker{display:none}
+.b-tool summary b{color:var(--ink);font-weight:600}
+.b-tool pre{margin:0;padding:8px 10px;border-top:1px solid var(--border);font:12px/1.55 var(--font-mono);white-space:pre-wrap;word-break:break-word;color:var(--ink-2);background:var(--surface-2)}
+.b-src{font:11px/1.4 var(--font-mono);color:var(--ink-3);word-break:break-all}
+.b-back{display:inline-flex;align-items:center;gap:4px;border:0;background:none;color:var(--accent-text);font-size:12px;padding:0;cursor:pointer}
+.b-running{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--accent-text)}
+.b-disabled-note{font-size:12px;color:var(--ink-3)}
+.b-flight{display:grid;grid-template-columns:14px 110px 1fr auto;gap:var(--space-3);align-items:center;padding:7px 10px;border-radius:var(--radius-md);font-size:13px;cursor:pointer}
+.b-flight:hover{background:var(--surface-3)}
+.b-flight .k-mono{font-size:12px}
+.b-choice-row{display:grid;gap:8px}
+</style>
+</head>
+<body>
+<div class="k-app">
+  <header class="k-topbar">
+    <div class="k-brand"><span class="k-brand__mark"><svg class="k-icon"><use href="#i-pipeline"/></svg></span>kaneki board</div>
+    <div class="k-breadcrumb"><svg class="k-icon k-icon--sm"><use href="#i-chevron-right"/></svg><b>shop-workspace</b></div>
+    <span class="b-url">127.0.0.1:8765</span>
+    <span class="k-spacer"></span>
+    <span class="b-live"><span class="k-dot k-dot--run" style="width:6px;height:6px"></span>live · reads .sdlc/tickets</span>
+    <button class="k-pill k-pill--attention" id="pill"><span class="k-pill__count">2</span>need you</button>
+    <div class="k-segmented" id="theme" aria-label="Theme"><button data-t="light" class="is-selected" aria-label="Light"><svg class="k-icon k-icon--sm"><use href="#i-sun"/></svg></button><button data-t="dark" aria-label="Dark"><svg class="k-icon k-icon--sm"><use href="#i-moon"/></svg></button></div>
+  </header>
+
+  <aside class="k-rail">
+    <div class="k-rail__head"><span class="k-overline">Tickets</span><span class="k-spacer"></span><span class="k-muted" style="font-size:12px" id="ticketCount"></span></div>
+    <div class="k-rail__list" id="rail"></div>
+    <div class="k-rail__foot"><div class="k-callout k-callout--info" style="font-size:12px"><span>Read-only board. Gates are approved in Zed (agent thread) or with <code class="k-mono">sdlc decide</code>.</span></div></div>
+  </aside>
+
+  <main class="k-main">
+    <div class="k-main__head" id="mainHead"></div>
+    <div class="k-main__tabs"><nav class="k-tabs" id="mainTabs">
+      <button class="k-tab is-selected" data-v="pipeline"><svg class="k-icon k-icon--sm"><use href="#i-pipeline"/></svg>Pipeline</button>
+      <button class="k-tab" data-v="decisions"><svg class="k-icon k-icon--sm"><use href="#i-list"/></svg>Decisions <span class="k-tab__count" id="decCount"></span></button>
+      <button class="k-tab" data-v="cost"><svg class="k-icon k-icon--sm"><use href="#i-coins"/></svg>Cost</button></nav></div>
+    <div class="k-main__view" id="mainView"></div>
+  </main>
+
+  <aside class="k-inspector">
+    <header class="k-inspector__head" id="insHead"></header>
+    <div class="b-ins-tabs"><nav class="k-tabs" id="insTabs">
+      <button class="k-tab is-selected" data-t="overview"><svg class="k-icon k-icon--sm"><use href="#i-eye"/></svg>Overview</button>
+      <button class="k-tab" data-t="transcripts"><svg class="k-icon k-icon--sm"><use href="#i-agent"/></svg>Transcripts <span class="k-tab__count" id="txCount"></span></button>
+      <button class="k-tab" data-t="events"><svg class="k-icon k-icon--sm"><use href="#i-activity"/></svg>Events</button></nav></div>
+    <div class="k-inspector__body" id="insBody"></div>
+  </aside>
+
+  <section class="k-dock">
+    <section><div class="k-dock__head"><span class="k-overline">In flight</span><span class="k-badge" id="flightCount"></span><span class="k-muted" style="font-size:12px">packet rendered · no result recorded yet</span></div><div class="k-dock__list" id="flight" style="padding:0 6px"></div></section>
+    <section><div class="k-dock__head"><span class="k-overline">Decision log</span><span class="k-dot k-dot--run" style="width:6px;height:6px"></span><span class="k-muted" style="font-size:12px">all tickets · live</span></div><div class="k-dock__list" style="padding:0 16px"><div class="k-log" id="log"></div></div></section>
+  </section>
+</div>
+
+<div class="k-toasts" id="toasts" style="bottom:calc(var(--dock-height) + 16px)"></div>
+
+<!-- Continue in Zed -->
+<div class="k-scrim" id="cont" hidden>
+<div class="k-dialog" role="dialog" aria-label="Continue in Zed">
+  <header class="k-dialog__head"><span class="k-dialog__icon" style="background:var(--accent-soft);color:var(--accent-text)"><svg class="k-icon"><use href="#i-zed"/></svg></span><div style="flex:1"><h3 class="k-dialog__title" id="contTitle">Continue in Zed</h3><p class="k-dialog__sub" id="contSub"></p></div><button class="k-btn k-btn--ghost k-btn--icon k-btn--sm" aria-label="Close" data-close="cont"><svg class="k-icon k-icon--sm"><use href="#i-x"/></svg></button></header>
+  <div class="k-dialog__body">
+    <div class="k-banner k-banner--info"><svg class="k-icon"><use href="#i-info"/></svg><div class="k-banner__text"><div class="k-banner__title">Zed can't open an existing thread from outside yet</div><div class="k-banner__sub">So the board starts a new thread with the right prompt. The ticket resumes at <span class="k-mono">nextPending</span> from the files, so nothing is lost.</div></div></div>
+    <label class="k-field"><span class="k-label">Agent for the new thread</span>
+      <div class="k-segmented" id="agentPick"><button data-a="claude" class="is-selected">Claude Agent</button><button data-a="codex">Codex</button><button data-a="antigravity">Antigravity</button><button data-a="gemini">Gemini CLI</button></div></label>
+    <label class="k-field"><span class="k-label">Prompt</span><textarea class="k-textarea k-mono" id="contPrompt" style="min-height:60px;font-size:12px"></textarea></label>
+    <div class="b-choice-row" id="contHow">
+      <label class="k-choice is-selected" data-h="url"><input type="radio" name="h" checked><span><span class="k-choice__title">Open Zed's Agent Panel with the prompt filled in</span><br><span class="k-choice__sub">Uses <span class="k-mono">zed://agent?prompt=…</span>. You pick the agent in the new-thread menu and press send. (Needs a check on Windows.)</span></span></label>
+      <label class="k-choice" data-h="copy"><input type="radio" name="h"><span><span class="k-choice__title">Copy the prompt and bring Zed to the front</span><br><span class="k-choice__sub">Then <span class="k-kbd">Ctrl</span><span class="k-kbd">Alt</span><span class="k-kbd">Shift</span><span class="k-kbd">N</span> → pick the agent → paste.</span></span></label>
+    </div>
+    <div class="k-command"><div class="k-command__head"><svg class="k-icon k-icon--sm"><use href="#i-terminal"/></svg><span class="k-overline">The board will run (on 127.0.0.1, with its token)</span></div><pre class="k-command__body" id="contCmd"></pre></div>
+  </div>
+  <footer class="k-dialog__foot"><span class="k-muted" style="font-size:12px">Nothing is sent to the agent until you press send in Zed.</span><span class="k-spacer"></span><button class="k-btn" data-close="cont">Cancel</button><button class="k-btn k-btn--primary" id="contGo">Open in Zed</button></footer>
+</div>
+</div>
+
+<script src="icons.js"></script>
+<script>
+(function () {
+'use strict';
+/* ------------------------------------------------------------------ sample data (shape of `sdlc ticket-detail`) */
+var HOST = {claude: 'Claude Agent', codex: 'Codex', antigravity: 'Antigravity', gemini: 'Gemini CLI'};
+var T = [
+ { id: 'ISSUE-12', title: 'Login fails after password reset', kind: 'bug', lane: 'full', host: 'claude', round: 0,
+   nodes: [
+    {n: 'prepare', s: 'done', g: 1, host: 'claude'}, {n: 'investigate', s: 'done', g: 1, host: 'claude'},
+    {n: 'fix-plan', s: 'done', g: 1, host: 'claude', user: true}, {n: 'coding', s: 'done', g: 2, host: 'claude'},
+    {n: 'code-review', s: 'run', g: 2, host: 'claude'}, {n: 'testcase', s: 'todo'}, {n: 'testcase-review', s: 'todo'},
+    {n: 'execute-and-evidence', s: 'todo'}, {n: 'final-review', s: 'todo'}, {n: 'delivery-drafts', s: 'todo'}, {n: 'deliverable-ready', s: 'todo', user: true}],
+   now: 'code-review', who: 'Agent · semantic-review running', dot: 'run', tokens: '1.21M',
+   loop: 'code-review g1 NEEDS CHANGES → coding reopened · 10:58' },
+ { id: 'ISSUE-15', title: 'Export orders to CSV', kind: 'feature', lane: 'full', host: 'codex', switched: 'claude', round: 0,
+   nodes: [
+    {n: 'prepare', s: 'done', g: 1, host: 'claude'}, {n: 'requirement-analysis', s: 'done', g: 1, host: 'claude'},
+    {n: 'impact-analysis', s: 'done', g: 1, host: 'codex'}, {n: 'feature-plan', s: 'attention', g: 1, host: 'codex', user: true},
+    {n: 'coding', s: 'todo'}, {n: 'code-review', s: 'todo'}, {n: 'testcase', s: 'todo'}, {n: 'testcase-review', s: 'todo'},
+    {n: 'execute-and-evidence', s: 'todo'}, {n: 'final-review', s: 'todo'}, {n: 'delivery-drafts', s: 'todo'}, {n: 'deliverable-ready', s: 'todo', user: true}],
+   now: 'feature-plan', who: 'You · approve the plan', dot: 'attention', tokens: '640k' },
+ { id: 'ISSUE-9', title: 'Retry webhook on 5xx', kind: 'bug', lane: 'full', host: 'gemini', round: 0,
+   nodes: [
+    {n: 'prepare', s: 'done', g: 1, host: 'gemini'}, {n: 'investigate', s: 'done', g: 1, host: 'gemini'}, {n: 'fix-plan', s: 'done', g: 1, host: 'gemini', user: true},
+    {n: 'coding', s: 'done', g: 1, host: 'gemini'}, {n: 'code-review', s: 'done', g: 1, host: 'gemini'}, {n: 'testcase', s: 'done', g: 1, host: 'gemini'},
+    {n: 'testcase-review', s: 'done', g: 1, host: 'gemini'}, {n: 'execute-and-evidence', s: 'attention', g: 1, host: 'gemini'},
+    {n: 'final-review', s: 'todo'}, {n: 'delivery-drafts', s: 'todo'}, {n: 'deliverable-ready', s: 'todo', user: true}],
+   now: 'execute-and-evidence', who: 'You · G6 shared-state mutation', dot: 'attention', tokens: '2.04M' },
+ { id: 'CSS-3', title: 'Button contrast on dark theme', kind: 'bug', lane: 'lite', host: 'antigravity', round: 0,
+   nodes: [{n: 'scope', s: 'done', g: 1, host: 'antigravity', user: true}, {n: 'change', s: 'done', g: 1, host: 'antigravity'},
+    {n: 'check', s: 'done', g: 1, host: 'antigravity'}, {n: 'delivery-drafts', s: 'done', g: 1, host: 'antigravity'}, {n: 'deliverable-ready', s: 'done', g: 1, host: 'antigravity', user: true}],
+   now: null, who: 'Shipped · PR #48 open', dot: 'ok', tokens: '96k' }
+];
+
+/* node details, keyed ticket/node; anything missing gets a generic view */
+var D = {
+ 'ISSUE-12/code-review': {
+   purpose: 'Staged review over the real diff: technical-review (routine) first, semantic-review (deep) only after its PASS.',
+   units: [
+     {u: 'technical-review', tier: 'routine', model: 'sonnet', host: 'claude', v: 'PASS', tok: '61,204', r: 1},
+     {u: 'semantic-review', tier: 'deep', model: 'opus', host: 'claude', v: 'running', tok: '—', r: 1}],
+   arts: [['code-review.md', 'missing until close'], ['results/code-review.technical-review.g2.md', 'PASS'], ['packets/code-review.semantic-review.g2.md', 'sha256 4b7d…e10a']],
+   events: [['11:42', 'record', 'technical-review PASS · sonnet · 61,204 tok'], ['11:43', 'packet', 'semantic-review g2 rendered (opus)'], ['10:58', 'gate', 'code-review g1 needs-changes → coding'], ['10:21', 'record', 'semantic-review FAIL (artifact) g1']],
+   tx: [
+    {id: 'ctl', title: 'Controller thread', who: 'Claude Agent · Zed thread', match: 'sdlc calls for code-review', exact: false,
+     src: '~/.claude/projects/D--workspace-shop-workspace/3f2a91c4….jsonl', running: false, msgs: [
+      ['user', '/kaneki-flow ISSUE-12'],
+      ['agent', 'Resuming ISSUE-12 at code-review, generation 2 (coding was reopened after round 1).'],
+      ['tool', 'Bash', 'sh .sdlc/bin/sdlc plan --ticket ISSUE-12 --card', '{"node":"code-review","units":[{"id":"technical-review","tier":"routine","model":"sonnet"},{"id":"semantic-review","tier":"deep","model":"opus","after":"technical-review"}],"boundary":"controller"}'],
+      ['tool', 'Bash', 'sh .sdlc/bin/sdlc packet --ticket ISSUE-12 --node code-review --unit technical-review --facts facts/cr-g2.json', '{"path":".sdlc/tickets/ISSUE-12/packets/code-review.technical-review.g2.md","packetDigest":"9c1e…77a2","handedTokens":18400}'],
+      ['tool', 'Agent', 'kaneki-worker · sonnet', 'Read the packet at .sdlc/tickets/ISSUE-12/packets/code-review.technical-review.g2.md (sha256 9c1e…77a2) and execute it.\n→ PASS · build ok · 214 tests pass · lint 0 · result file written'],
+      ['tool', 'Bash', 'sh .sdlc/bin/sdlc record --ticket ISSUE-12 --node code-review --unit technical-review --verdict PASS --model sonnet --tokens 61204', '{"ok":true,"nodeTokens":61204}'],
+      ['agent', 'Technical review passed. Dispatching semantic-review on the deep tier.'],
+      ['tool', 'Agent', 'kaneki-deep · opus', 'Read the packet at .sdlc/tickets/ISSUE-12/packets/code-review.semantic-review.g2.md (sha256 4b7d…e10a) and execute it.\n… running (7m)']]},
+    {id: 'tech', title: 'technical-review', who: 'kaneki-worker · sonnet · subagent', match: 'packet path (exact)', exact: true,
+     src: '~/.claude/projects/D--workspace-shop-workspace/3f2a91c4…/subagents/agent-a81f….jsonl', running: false, msgs: [
+      ['user', 'Read the packet at .sdlc/tickets/ISSUE-12/packets/code-review.technical-review.g2.md (sha256 9c1e…77a2) and execute it.'],
+      ['tool', 'Read', '.sdlc/tickets/ISSUE-12/packets/code-review.technical-review.g2.md', 'Node code-review, unit technical-review, role worker … Findings to fix (round two): F1 token not invalidated on reset'],
+      ['tool', 'Bash', 'npm run build > .sdlc/tickets/ISSUE-12/logs/build.log 2>&1; echo "exit $?"', 'exit 0'],
+      ['tool', 'Bash', 'npm test > .sdlc/tickets/ISSUE-12/logs/test.log 2>&1; echo "exit $?"', 'exit 0  (214 passed)'],
+      ['tool', 'Grep', 'invalidateSessions', 'src/auth/password-reset.service.ts:88:    await this.sessions.invalidateSessions(user.id);'],
+      ['tool', 'Write', 'results/code-review.technical-review.g2.md', 'Verdict: PASS · rules CODE-01…CODE-09 PASS · F1 fixed at src/auth/password-reset.service.ts:88'],
+      ['agent', 'PASS. Result: results/code-review.technical-review.g2.md (sha256 1d0c…). Build, 214 tests and lint clean; F1 fixed at password-reset.service.ts:88. Weakest link: no test for two concurrent sessions.']]},
+    {id: 'sem', title: 'semantic-review', who: 'kaneki-deep · opus · subagent', match: 'packet path (exact)', exact: true,
+     src: '~/.claude/projects/D--workspace-shop-workspace/3f2a91c4…/subagents/agent-c3e9….jsonl', running: true, msgs: [
+      ['user', 'Read the packet at .sdlc/tickets/ISSUE-12/packets/code-review.semantic-review.g2.md (sha256 4b7d…e10a) and execute it.'],
+      ['tool', 'Read', '.sdlc/tickets/ISSUE-12/fix-plan.md', '## Condition → negative case … reset with an active session elsewhere → that session is rejected'],
+      ['tool', 'Bash', 'npm run start:test > .sdlc/tickets/ISSUE-12/logs/app.log 2>&1 &', '(app on :3001)'],
+      ['agent', 'Checking the weakest claim on the running app: an old session must be rejected after a reset…']]}
+   ]},
+ 'ISSUE-15/feature-plan': {
+   purpose: 'Design and task plan the user approves; design-phase rules judged on the plan.',
+   units: [{u: 'worker', tier: 'routine', model: 'gpt-5.2-codex', host: 'codex', v: 'recorded', tok: '88,930', r: 1}],
+   arts: [['plan.md', 'ready for your approval'], ['questions.md', '1 HIGH answered']],
+   gate: 'Plan waiting for your approval since 12:05 · G3: two export formats considered',
+   events: [['12:05', 'record', 'worker · gpt-5.2-codex · 88,930 tok'], ['11:30', 'host', 'switched claude → codex (Claude usage limit)'], ['11:28', 'gate', 'impact-analysis approved']],
+   tx: [
+    {id: 'ctl', title: 'Controller thread', who: 'Codex · Zed thread', match: 'sdlc calls for feature-plan', exact: false,
+     src: '~/.codex/sessions/2026/11/23/rollout-…-7c1d.jsonl', running: false, msgs: [
+      ['user', 'Use the kaneki-flow skill for ISSUE-15 and continue where it stopped.'],
+      ['tool', 'shell', 'sh .sdlc/bin/sdlc status --ticket ISSUE-15 --compact', '{"nextPending":"feature-plan","waitingOn":"agent"}'],
+      ['tool', 'shell', 'sh .sdlc/bin/sdlc dispatch --ticket ISSUE-15 --node feature-plan --unit worker', '{"ok":true,"tokens":88930,"log":".sdlc/tickets/ISSUE-15/logs/fp-g1-worker.dispatch.log"}'],
+      ['agent', 'The plan is ready (plan.md). It needs your approval: Proceed / Re-run / Stop? (1) Proceed (Recommended) …']]},
+    {id: 'w', title: 'worker', who: 'codex exec · gpt-5.2-codex · subprocess', match: 'packet path (exact)', exact: true,
+     src: '.sdlc/tickets/ISSUE-15/logs/fp-g1-worker.dispatch.log', running: false, msgs: [
+      ['user', 'Read the packet at .sdlc/tickets/ISSUE-15/packets/feature-plan.worker.g1.md (sha256 0e55…) and execute it.'],
+      ['agent', 'Wrote plan.md: streaming CSV export behind GET /orders/export, 5 tasks, 7 negative cases. Open doubt (LOW): Excel BOM.']]}
+   ]}
+};
+
+var FLIGHT = [
+  {dot: 'run', t: 'ISSUE-12', n: 'code-review', unit: 'semantic-review · opus', age: '7m'},
+  {dot: 'attention', t: 'ISSUE-15', n: 'feature-plan', unit: 'waiting on you (user gate)', age: '18m'},
+  {dot: 'attention', t: 'ISSUE-9', n: 'execute-and-evidence', unit: 'G6 asked · shared-state mutation', age: '1h 02m'}];
+var LOG = [['11:43', 'is-accent', 'packet', 'ISSUE-12 code-review semantic-review g2'], ['11:42', 'is-accent', 'record', 'ISSUE-12 technical-review PASS'],
+  ['12:05', 'is-accent', 'record', 'ISSUE-15 feature-plan worker (codex)'], ['11:30', 'is-bad', 'host', 'ISSUE-15 claude → codex'],
+  ['10:58', 'is-bad', 'gate', 'ISSUE-12 code-review needs-changes'], ['10:40', 'is-ok', 'gate', 'ISSUE-9 testcase-review approved']];
+
+/* ------------------------------------------------------------------ state + helpers */
+var st = {t: 'ISSUE-12', n: 'code-review', itab: 'overview', tx: null, view: 'pipeline', agent: 'claude', how: 'url'};
+var $ = function (s) { return document.querySelector(s); };
+function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+function ic(n, sm) { return '<svg class="k-icon' + (sm ? ' k-icon--sm' : '') + '"><use href="#i-' + n + '"/></svg>'; }
+function host(h) { return h ? '<span class="b-host b-host--' + h + '"><i></i>' + HOST[h] + '</span>' : ''; }
+function tk() { return T.filter(function (x) { return x.id === st.t; })[0]; }
+function nd() { var t = tk(); return t.nodes.filter(function (x) { return x.n === st.n; })[0] || t.nodes[0]; }
+function det() {
+  var k = st.t + '/' + st.n; if (D[k]) return D[k]; var n = nd();
+  return {purpose: n.s === 'todo' ? 'Not started. It runs after the nodes before it close.' : 'Closed node. Artifacts and transcripts are kept.',
+    units: n.s === 'todo' ? [] : [{u: 'worker', tier: 'routine', model: n.host === 'codex' ? 'gpt-5.2-codex' : n.host === 'gemini' ? 'gemini-2.5-flash' : n.host === 'antigravity' ? 'flash' : 'sonnet', host: n.host, v: n.s === 'attention' ? 'recorded' : 'PASS', tok: '—', r: 1}],
+    arts: n.s === 'todo' ? [] : [[st.n + '.md', 'closed']], events: [], tx: n.s === 'todo' ? [] : [{id: 'ctl', title: 'Controller thread', who: HOST[n.host] + ' · Zed thread', match: 'sdlc calls for ' + st.n, exact: false, src: '(session log of ' + HOST[n.host] + ')', msgs: [['agent', 'Transcript sample omitted in this mock.']]}],
+    gate: n.s === 'attention' ? (st.t === 'ISSUE-9' ? 'G6: the evidence run would write to the shared staging queue. Allow?' : 'Waiting for you') : null};
+}
+function toast(title, body, kind) {
+  var el = document.createElement('div'); el.className = 'k-toast k-toast--' + (kind || 'ok');
+  el.innerHTML = '<span class="k-toast__icon">' + ic(kind === 'attention' ? 'gate' : 'check-circle') + '</span><div class="k-toast__body"><span class="k-toast__title">' + esc(title) + '</span>' + body + '</div>';
+  $('#toasts').appendChild(el); setTimeout(function () { el.remove(); }, 4200);
+}
+function openInZed(rel) {
+  var p = 'D:\\workspace\\shop-workspace\\.sdlc\\tickets\\' + st.t + '\\' + rel.replace(/\//g, '\\');
+  toast('Opened in Zed', '<span class="k-mono" style="font-size:11px">zed -e "' + esc(p) + ':1"</span>');
+}
+
+/* ------------------------------------------------------------------ render */
+function renderRail() {
+  $('#ticketCount').textContent = T.length + ' tickets';
+  $('#rail').innerHTML = T.map(function (t) {
+    var done = t.nodes.filter(function (n) { return n.s === 'done'; }).length;
+    var seg = t.nodes.map(function (n) { return '<i class="' + ({done: 'is-ok', run: 'is-run', attention: 'is-attention'}[n.s] || '') + '"></i>'; }).join('');
+    return '<div class="k-ticket' + (t.id === st.t ? ' is-selected' : '') + '" data-t="' + t.id + '"><div class="k-ticket__head"><span class="k-dot k-dot--' + t.dot + '"></span>' + t.id +
+      '<span class="k-ticket__count">' + done + '/' + t.nodes.length + '</span></div><div class="k-ticket__title">' + esc(t.title) + '</div><div class="k-segments">' + seg + '</div>' +
+      '<div class="k-ticket__who" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><span>' + (t.dot === 'attention' ? '<b>' + esc(t.who) + '</b>' : esc(t.who)) + '</span>' + host(t.host) + '</div></div>';
+  }).join('');
+  document.querySelectorAll('#rail .k-ticket').forEach(function (el) { el.onclick = function () {
+    st.t = el.dataset.t; var t = tk(); st.n = t.now || t.nodes[t.nodes.length - 1].n; st.tx = null; renderAll(); }; });
+}
+function renderMain() {
+  var t = tk();
+  $('#mainHead').innerHTML = '<h1 class="k-main__title">' + t.id + ' · ' + esc(t.title) + '</h1><span class="k-badge">' + t.lane + ' lane</span><span class="k-badge k-badge--outline">' + t.kind + '</span>' +
+    host(t.host) + (t.switched ? '<span class="b-switch">' + ic('reopen', 1) + 'switched from ' + HOST[t.switched] + '</span>' : '') +
+    '<span class="k-spacer"></span><span class="k-muted" style="font-size:12px">' + t.tokens + ' tokens</span>' +
+    '<button class="k-btn" data-zed-file="STATUS.md">' + ic('zed') + 'STATUS.md in Zed</button>';
+  var d = (D[t.id + '/x'] || {}); void d;
+  $('#decCount').textContent = String(6 + t.nodes.filter(function (n) { return n.s === 'done'; }).length * 3);
+  if (st.view !== 'pipeline') {
+    $('#mainView').innerHTML = '<div class="k-empty" style="padding:40px;text-align:center;color:var(--ink-3)">' + (st.view === 'cost' ? 'Cost view (measured from session logs vs reported) — not part of this mock.' : 'Decision log for ' + t.id + ' — same rows as the dock, filtered to this ticket.') + '</div>';
+  } else {
+    var pipe = t.nodes.map(function (n, i) {
+      var cls = {done: 'k-node--done', run: 'k-node--run', attention: 'k-node--attention'}[n.s] || '';
+      var dot = n.s === 'done' ? ic('check') : n.s === 'run' ? '<span class="k-spinner" style="width:12px;height:12px"></span>' : n.s === 'attention' ? ic('gate') : String(i + 1);
+      var gen = n.g > 1 ? '<span class="k-node__gen">g' + n.g + '</span>' : '';
+      return (i ? '<span class="k-edge' + (t.nodes[i - 1].s === 'done' ? ' k-edge--done' : '') + '"></span>' : '') +
+        '<button class="k-node ' + cls + (n.n === st.n ? ' is-selected' : '') + '" data-n="' + n.n + '" title="' + n.n + (n.user ? ' · closes on your approval' : '') + '"><span class="k-node__dot">' + dot + gen + '</span><span class="k-node__label">' + n.n +
+        (n.host ? '<span class="b-node-host">' + HOST[n.host] + '</span>' : '') + '</span></button>';
+    }).join('');
+    var dd = det(), n = nd();
+    var gate = dd.gate ? '<div class="k-banner k-banner--attention">' + ic('gate') + '<div class="k-banner__text"><div class="k-banner__title">' + esc(dd.gate) + '</div><div class="k-banner__sub">Answer it in the agent thread in Zed, or run <span class="k-mono">sdlc decide --ticket ' + t.id + '</span> from a Zed task.</div></div><button class="k-btn k-btn--attention k-btn--sm" data-cont="1">' + ic('zed', 1) + 'Continue in Zed</button></div>' : '';
+    $('#mainView').innerHTML = '<div class="k-pipeline">' + pipe + '</div>' + (t.loop ? '<div class="k-loopnote">' + ic('reopen', 1) + '<b>' + esc(t.loop) + '</b></div>' : '') + gate +
+      '<article class="k-card"><header class="k-card__head"><h4 class="k-card__title">' + n.n + '</h4>' + (n.g ? '<span class="k-badge k-badge--outline">generation ' + n.g + '</span>' : '') + host(n.host) +
+      '<span class="k-spacer"></span><span class="k-muted" style="font-size:12px">Click any node · details on the right →</span></header><div class="k-card__body"><p style="margin:0;color:var(--ink-2)">' + esc(dd.purpose) + '</p></div></article>';
+    document.querySelectorAll('#mainView .k-node').forEach(function (b) { b.onclick = function () { st.n = b.dataset.n; st.tx = null; renderAll(); }; });
+  }
+  document.querySelectorAll('#mainTabs .k-tab').forEach(function (b) { b.classList.toggle('is-selected', b.dataset.v === st.view); });
+}
+function verdict(v) {
+  if (v === 'PASS') return '<span class="k-verdict k-verdict--pass">' + ic('check-circle', 1) + 'PASS</span>';
+  if (v === 'FAIL') return '<span class="k-verdict k-verdict--fail">' + ic('x-circle', 1) + 'FAIL</span>';
+  if (v === 'running') return '<span class="b-running"><span class="k-spinner" style="width:11px;height:11px"></span>running</span>';
+  return '<span class="k-verdict k-verdict--pending">' + ic('clock', 1) + esc(v) + '</span>';
+}
+function renderInspector() {
+  var t = tk(), n = nd(), d = det();
+  $('#insHead').innerHTML = ic('pipeline') + '<b>' + n.n + '</b>' + (n.g ? '<span class="k-badge k-badge--outline">g' + n.g + '</span>' : '') + '<span class="k-spacer"></span><span class="k-muted" style="font-size:12px">' + t.id + '</span>';
+  $('#txCount').textContent = String(d.tx.length);
+  document.querySelectorAll('#insTabs .k-tab').forEach(function (b) { b.classList.toggle('is-selected', b.dataset.t === st.itab); });
+  var body = '';
+  if (st.itab === 'overview') {
+    body += '<div class="b-section"><h5>Units</h5>' + (d.units.length ? '<div class="k-table-wrap"><table class="k-table k-table--compact"><thead><tr><th>Unit</th><th>Agent · model</th><th>Verdict</th><th class="is-num">Tokens</th></tr></thead><tbody>' +
+      d.units.map(function (u) { return '<tr><td>' + u.u + '</td><td><span class="k-tier k-tier--' + u.tier + '">' + u.tier + ' <span class="k-tier__model">· ' + u.model + '</span></span><div style="margin-top:3px">' + host(u.host) + '</div></td><td>' + verdict(u.v) + '</td><td class="is-num">' + u.tok + '</td></tr>'; }).join('') +
+      '</tbody></table></div>' : '<span class="k-muted" style="font-size:13px">No units yet.</span>') + '</div>';
+    body += '<div class="b-section" style="margin-top:16px"><h5>Artifacts</h5>' + (d.arts.length ? d.arts.map(function (a) {
+      return '<div class="b-art">' + ic('file', 1) + '<span class="k-mono" title="' + esc(a[0]) + '">' + esc(a[0]) + '</span><button class="k-btn k-btn--sm" data-zed-file="' + esc(a[0]) + '">' + ic('zed', 1) + 'Open</button><span class="b-art__meta">' + esc(a[1]) + '</span></div>'; }).join('') : '<span class="k-muted" style="font-size:13px">None yet.</span>') + '</div>';
+    body += '<div class="b-section" style="margin-top:16px"><h5>Zed</h5><div class="b-actions"><button class="k-btn k-btn--primary k-btn--sm" data-cont="1">' + ic('zed', 1) + 'Continue in Zed</button>' +
+      '<button class="k-btn k-btn--sm" disabled title="Zed has no link to an existing thread yet">' + ic('external', 1) + 'Open this thread</button></div>' +
+      '<span class="b-disabled-note">"Open this thread" lights up when Zed ships thread links. Until then, read the thread here in Transcripts.</span></div>';
+  } else if (st.itab === 'transcripts') {
+    if (!d.tx.length) body = '<span class="k-muted">No sessions yet for this node.</span>';
+    else if (!st.tx) {
+      body = '<div class="b-section"><h5>Sessions that worked on ' + n.n + '</h5>' + d.tx.map(function (x) {
+        return '<button class="b-sess" data-tx="' + x.id + '"><span class="b-sess__top">' + ic(x.id === 'ctl' ? 'agent' : 'layers', 1) + esc(x.title) + (x.running ? '<span class="b-running"><span class="k-spinner" style="width:10px;height:10px"></span>live</span>' : '') +
+          '<span class="k-spacer"></span><span class="b-match' + (x.exact ? '' : ' b-match--heur') + '">' + (x.exact ? 'exact' : 'matched') + '</span></span><span class="b-sess__sub">' + esc(x.who) + ' · ' + x.msgs.length + ' steps</span><span class="b-sess__sub">Matched by ' + esc(x.match) + '</span></button>';
+      }).join('') + '</div><div class="k-callout k-callout--info" style="margin-top:14px;font-size:12px">Read-only, from each agent\'s own session log on this machine. Nothing leaves 127.0.0.1.</div>';
+    } else {
+      var x = d.tx.filter(function (y) { return y.id === st.tx; })[0];
+      body = '<button class="b-back" data-back="1">' + ic('chevron-right', 1) + 'All sessions</button><div style="display:flex;align-items:center;gap:8px;margin:8px 0 2px"><b>' + esc(x.title) + '</b><span class="b-match' + (x.exact ? '' : ' b-match--heur') + '">' + esc(x.match) + '</span></div>' +
+        '<div class="b-src">' + esc(x.src) + '</div><div class="b-tx" style="margin-top:12px">' + x.msgs.map(function (m) {
+          if (m[0] === 'tool') return '<details class="b-tool"><summary>' + ic('terminal', 1) + '<b>' + esc(m[1]) + '</b><span class="b-cmd">' + esc(m[2]) + '</span></summary><pre>' + esc(m[3]) + '</pre></details>';
+          return '<div class="b-msg b-msg--' + m[0] + '"><span class="b-msg__who">' + (m[0] === 'user' ? (x.id === 'ctl' ? 'You' : 'Controller → unit') : x.who.split(' · ')[0]) + '</span><div class="b-msg__text">' + esc(m[1]) + '</div></div>';
+        }).join('') + (x.running ? '<span class="b-running"><span class="k-spinner" style="width:11px;height:11px"></span>still running · updates as the log grows</span>' : '') + '</div>' +
+        (x.id === 'ctl' ? '<div class="b-actions" style="margin-top:14px"><button class="k-btn k-btn--sm k-btn--primary" data-cont="1">' + ic('zed', 1) + 'Continue in Zed</button></div>' : '');
+    }
+  } else {
+    body = d.events.length ? '<div class="k-log">' + d.events.map(function (e) { return '<div>' + e[0] + ' <span class="' + (e[1] === 'gate' || e[1] === 'host' ? 'is-bad' : 'is-accent') + '">' + e[1] + '</span> <b>' + esc(e[2]) + '</b></div>'; }).join('') + '</div>' : '<span class="k-muted">No events recorded for this node in the sample.</span>';
+  }
+  $('#insBody').innerHTML = body;
+  document.querySelectorAll('[data-tx]').forEach(function (b) { b.onclick = function () { st.tx = b.dataset.tx; renderInspector(); }; });
+  var back = document.querySelector('[data-back]'); if (back) back.onclick = function () { st.tx = null; renderInspector(); };
+}
+function renderDock() {
+  $('#flightCount').textContent = String(FLIGHT.length);
+  $('#flight').innerHTML = FLIGHT.map(function (f) { return '<div class="b-flight" data-t="' + f.t + '" data-n="' + f.n + '"><span class="k-dot k-dot--' + f.dot + '"></span><b>' + f.t + '</b><span><span class="k-mono">' + f.n + '</span> · ' + esc(f.unit) + '</span><span class="k-muted" style="font-size:12px">' + f.age + '</span></div>'; }).join('');
+  document.querySelectorAll('.b-flight').forEach(function (el) { el.onclick = function () { st.t = el.dataset.t; st.n = el.dataset.n; st.tx = null; renderAll(); }; });
+  $('#log').innerHTML = LOG.map(function (l) { return '<div>' + l[0] + ' <span class="' + l[1] + '">' + l[2] + '</span> <b>' + esc(l[3]) + '</b></div>'; }).join('');
+}
+function wire() {
+  document.querySelectorAll('[data-zed-file]').forEach(function (b) { b.onclick = function () { openInZed(b.dataset.zedFile); }; });
+  document.querySelectorAll('[data-cont]').forEach(function (b) { b.onclick = openCont; });
+}
+function renderAll() { renderRail(); renderMain(); renderInspector(); renderDock(); wire(); }
+
+/* ------------------------------------------------------------------ continue in Zed */
+function prompt() {
+  var p = st.agent === 'claude' ? '/kaneki-flow ' + st.t + ' --node ' + st.n : 'Use the kaneki-flow skill for ' + st.t + ' and continue at node ' + st.n + '.';
+  return p;
+}
+function contCmd() {
+  var p = $('#contPrompt').value;
+  $('#contCmd').innerHTML = st.how === 'url'
+    ? '<span class="t-dim">start</span> "zed://agent?prompt=' + esc(encodeURIComponent(p)) + '"'
+    : '<span class="t-dim">clipboard</span> ← ' + esc(p) + '\n<span class="t-dim">zed</span> -e "D:\\workspace\\shop-workspace"';
+  $('#contGo').textContent = st.how === 'url' ? 'Open in Zed' : 'Copy and focus Zed';
+}
+function openCont() {
+  st.agent = tk().host === 'claude' || !tk().host ? 'claude' : tk().host;
+  document.querySelectorAll('#agentPick button').forEach(function (b) { b.classList.toggle('is-selected', b.dataset.a === st.agent); });
+  $('#contSub').textContent = st.t + ' · ' + st.n + ' · resumes at nextPending';
+  $('#contPrompt').value = prompt(); contCmd(); $('#cont').hidden = false;
+}
+document.querySelectorAll('#agentPick button').forEach(function (b) { b.onclick = function () {
+  st.agent = b.dataset.a; document.querySelectorAll('#agentPick button').forEach(function (x) { x.classList.toggle('is-selected', x === b); }); $('#contPrompt').value = prompt(); contCmd(); }; });
+document.querySelectorAll('#contHow .k-choice').forEach(function (l) { l.onclick = function () {
+  st.how = l.dataset.h; document.querySelectorAll('#contHow .k-choice').forEach(function (x) { x.classList.toggle('is-selected', x === l); }); contCmd(); }; });
+$('#contPrompt').oninput = contCmd;
+$('#contGo').onclick = function () { $('#cont').hidden = true;
+  toast(st.how === 'url' ? 'Zed opened with the prompt' : 'Prompt copied · Zed in front', 'Pick <b>' + HOST[st.agent] + '</b> in the new-thread menu and press send.'); };
+
+/* ------------------------------------------------------------------ chrome */
+function setTheme(t) { document.documentElement.setAttribute('data-theme', t); document.querySelectorAll('#theme button').forEach(function (b) { b.classList.toggle('is-selected', b.dataset.t === t); }); }
+document.querySelectorAll('#theme button').forEach(function (b) { b.onclick = function () { setTheme(b.dataset.t); }; });
+document.querySelectorAll('#insTabs .k-tab').forEach(function (b) { b.onclick = function () { st.itab = b.dataset.t; st.tx = null; renderInspector(); wire(); }; });
+document.querySelectorAll('#mainTabs .k-tab').forEach(function (b) { b.onclick = function () { st.view = b.dataset.v; renderMain(); wire(); }; });
+document.querySelectorAll('[data-close]').forEach(function (b) { b.onclick = function () { document.getElementById(b.dataset.close).hidden = true; }; });
+$('#pill').onclick = function () { st.t = 'ISSUE-15'; st.n = 'feature-plan'; st.tx = null; renderAll(); };
+document.addEventListener('keydown', function (e) { if (e.key === 'Escape') $('#cont').hidden = true; });
+
+/* deep links for screenshots: ?theme=dark&t=ISSUE-12&n=code-review&tab=transcripts&tx=tech&open=continue */
+var q = new URLSearchParams(location.search);
+if (q.get('theme')) setTheme(q.get('theme'));
+if (q.get('t')) st.t = q.get('t');
+if (q.get('n')) st.n = q.get('n');
+if (q.get('tab')) st.itab = q.get('tab');
+if (q.get('tx')) st.tx = q.get('tx');
+renderAll();
+if (q.get('open') === 'continue') openCont();
+})();
+</script>
+</body>
+</html>
