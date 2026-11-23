@@ -30,7 +30,8 @@ HISTORY = {"commit", "merge", "rebase", "cherry-pick", "revert", "am", "tag", "p
 APPROVABLE = {"commit", "push"}
 APPROVAL_PATHS = (Path(".sdlc") / "ship-approvals.json", Path(".claude") / "kaneki-ship-approvals.json")
 APPROVALS = APPROVAL_PATHS[0]
-WRAPPER_RE = re.compile(r"""sdlc(?:\.py)?["']?(?:\s+--profile\s+(?:"[^"]*"|'[^']*'|\S+))?\s+git\b""")
+# The driver's own `git` subcommand, through any launcher: sdlc, sdlc.py, sdlc.cmd, sdlc-<host>, sdlc-<host>.cmd.
+WRAPPER_RE = re.compile(r"""sdlc(?:-[A-Za-z0-9_]+)?(?:\.py|\.cmd)?["']?(?:\s+--profile\s+(?:"[^"]*"|'[^']*'|\S+))?\s+git\b""")
 GIT_RE = re.compile(r"""(?:^|[\s;|&(`]|\$\()(?:[^\s;|&()`'"]*[/\\])?git(?:\.exe)?(?=\s)""")
 
 

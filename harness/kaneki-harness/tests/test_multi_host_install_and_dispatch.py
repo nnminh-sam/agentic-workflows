@@ -27,8 +27,8 @@ class MultiHostInstallTests(unittest.TestCase):
     def tearDown(self) -> None:
         shutil.rmtree(self.target, ignore_errors=True)
 
-    def test_default_install_is_antigravity_with_working_shim(self) -> None:
-        code, res = run("install", "--target", str(self.target))
+    def test_antigravity_install_with_working_shim(self) -> None:
+        code, res = run("install", "--target", str(self.target), "--host", "antigravity")
         self.assertEqual(code, 0, res)
         self.assertEqual(res["host"], "antigravity")
 
