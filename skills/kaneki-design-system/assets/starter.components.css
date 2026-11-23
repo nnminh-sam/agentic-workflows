@@ -1,0 +1,54 @@
+/* Component CSS for the design system. Rules:
+   - every class starts with the system prefix; no bare element selectors (they leak into the gallery);
+   - every colour, shadow, radius, space and duration comes from a token: var(--name);
+   - states that need a pointer or focus also get a state class (is-hover, is-focus) so the gallery can show them. */
+
+.ds-icon { width: 16px; height: 16px; flex: none; }
+
+.ds-title { font: 600 24px/32px var(--font-text); letter-spacing: -0.3px; color: var(--ink); }
+
+/* Button */
+.ds-btn { display: inline-flex; align-items: center; gap: var(--space-1); height: var(--control-h); padding: 0 12px; border-radius: var(--radius-md);
+  border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink); font: 500 13px/1 var(--font-text); cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out); }
+.ds-btn:hover, .ds-btn.is-hover { background: var(--surface-2); }
+.ds-btn:focus-visible, .ds-btn.is-focus { outline: 2px solid var(--focus); outline-offset: 2px; }
+.ds-btn:disabled { opacity: .5; cursor: not-allowed; }
+.ds-btn--primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.ds-btn--primary:hover, .ds-btn--primary.is-hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.ds-btn--danger { background: var(--bad); border-color: var(--bad); color: var(--on-bad); }
+.ds-btn--ghost { background: transparent; border-color: transparent; color: var(--ink-2); }
+.ds-btn--sm { height: var(--control-h-sm); padding: 0 8px; font-size: 12px; }
+
+/* Badge */
+.ds-badge { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 8px; border-radius: var(--radius-full);
+  background: var(--surface-2); color: var(--ink-2); font: 600 11px/1 var(--font-text); vertical-align: middle; }
+.ds-badge .ds-icon { width: 12px; height: 12px; }
+.ds-badge--ok { background: var(--ok-soft); color: var(--ok-text); }
+.ds-badge--bad { background: var(--bad-soft); color: var(--bad-text); }
+
+/* Alert */
+.ds-alert { display: flex; gap: var(--space-2); padding: 12px var(--space-4); border-radius: var(--radius-md); border: 1px solid var(--border);
+  background: var(--surface); color: var(--ink-2); font: 400 13px/20px var(--font-text); }
+.ds-alert > .ds-icon { margin-top: 2px; color: var(--accent); }
+.ds-alert__title { margin: 0 0 2px; font-weight: 600; color: var(--ink); }
+.ds-alert--ok { background: var(--ok-soft); border-color: transparent; }
+.ds-alert--ok > .ds-icon { color: var(--ok); }
+.ds-alert--bad { background: var(--bad-soft); border-color: transparent; }
+.ds-alert--bad > .ds-icon, .ds-alert--bad .ds-alert__title { color: var(--bad-text); }
+
+/* Text field */
+.ds-field { display: grid; gap: 6px; font: 400 13px/18px var(--font-text); color: var(--ink); }
+.ds-field__label { font-weight: 600; }
+.ds-field__hint { font-size: 12px; color: var(--ink-2); }
+.ds-input { box-sizing: border-box; width: 100%; height: var(--control-h); padding: 0 10px; border-radius: var(--radius-md); border: 1px solid var(--border-strong);
+  background: var(--surface); color: var(--ink); font: inherit; }
+.ds-input:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.ds-field.is-invalid .ds-input { border-color: var(--bad); }
+.ds-field.is-invalid .ds-field__hint { color: var(--bad-text); }
+
+/* Card */
+.ds-card { padding: var(--space-4); border-radius: var(--radius-lg); border: 1px solid var(--border); background: var(--surface); box-shadow: var(--shadow-sm); color: var(--ink); font-family: var(--font-text); }
+.ds-card__title { display: flex; align-items: center; gap: var(--space-2); margin: 0 0 4px; font: 600 15px/22px var(--font-text); }
+.ds-card__body { margin: 0; font-size: 13px; color: var(--ink-2); }
+.ds-card__footer { display: flex; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-4); padding-top: 12px; border-top: 1px solid var(--border); }
