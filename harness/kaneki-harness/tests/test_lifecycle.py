@@ -5,12 +5,14 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import os
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 HOME = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(HOME))
@@ -30,6 +32,17 @@ def run(*argv: str) -> tuple[int, dict]:
 class Base(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = Path(tempfile.mkdtemp(prefix="sdlc-test-"))
+        # The user-level dirs (agent logs read by sessions/cost, the cost cache and price file written by cost) live
+        # outside self.tmp so read-only snapshots of self.tmp stay exact, and never in the real home folder.
+        self.user_home = Path(tempfile.mkdtemp(prefix="sdlc-home-"))
+        self.addCleanup(shutil.rmtree, self.user_home, True)
+        env = mock.patch.dict(os.environ, {"KANEKI_HOME": str(self.user_home / "kaneki"),
+                                           "CLAUDE_CONFIG_DIR": str(self.user_home / "claude"),
+                                           "CODEX_HOME": str(self.user_home / "codex"),
+                                           "ANTIGRAVITY_CLI_ROOT": str(self.user_home / "agy")})
+        env.start()
+        self.addCleanup(env.stop)
+        os.environ.pop("KANEKI_PRICES", None)
         self.repo = self.tmp / "app"
         self.repo.mkdir()
         subprocess.run(["git", "init", "-q", str(self.repo)], check=True)

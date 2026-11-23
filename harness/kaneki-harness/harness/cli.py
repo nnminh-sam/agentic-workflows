@@ -1244,7 +1244,7 @@ def cmd_host(args: argparse.Namespace) -> None:
 def cmd_tickets(args: argparse.Namespace) -> None:
     from . import board
     from .contract import CONTRACT_VERSION
-    out({"contractVersion": CONTRACT_VERSION, "tickets": board.list_tickets(profile_path(args))})
+    out({"contractVersion": CONTRACT_VERSION, "tickets": board.list_tickets(profile_path(args), measured=True)})
 
 
 def ticket_of_path(ppath: Path, path: Path) -> str | None:
@@ -1307,6 +1307,29 @@ def cmd_transcripts(args: argparse.Namespace) -> None:
     """Agent sessions per node of one ticket, from the agents' own logs; steps only with --node. Read-only."""
     from . import sessions
     out(sessions.transcripts(profile_path(args), args.ticket, args.node, max_steps=args.max_steps))
+
+
+def cmd_cost(args: argparse.Namespace) -> None:
+    """Measured usage and USD from the agents' own logs (harness/cost.py). Read-only for tickets; caches under the
+    user config dir. One JSON line with --json, else a short table."""
+    from . import cost
+    if args.init_prices:
+        out(cost.init_prices())
+        return
+    if not args.ticket and not args.since:
+        raise HarnessError("cost needs --ticket T or --since DATE (or --init-prices)")
+    if args.node and not args.ticket:
+        raise HarnessError("--node needs --ticket")
+    if args.until and not args.since:
+        raise HarnessError("--until needs --since")
+    if args.ticket:
+        rep = cost.ticket_report(profile_path(args), args.ticket, args.node, since=args.since, until=args.until)
+    else:
+        rep = cost.range_report(profile_path(args), args.since, args.until)
+    if args.json:
+        out(rep)
+    else:
+        print(cost.render_text(rep))
 
 
 def cmd_contract(args: argparse.Namespace) -> None:
@@ -1540,6 +1563,17 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--max-steps", type=_non_negative, default=200, help="steps kept per session (first + most recent)")
     x.set_defaults(fn=cmd_transcripts)
 
+    x = sub.add_parser("cost", parents=[common],
+                       help="measured tokens and USD per ticket/node from the agents' own logs (read-only)")
+    x.add_argument("--ticket", help="one ticket")
+    x.add_argument("--node", help="one node of --ticket")
+    x.add_argument("--since", help="first local day (YYYY-MM-DD, today, yesterday); without --ticket: every ticket")
+    x.add_argument("--until", help="last local day, inclusive (default: --since and later)")
+    x.add_argument("--json", action="store_true", help="one JSON line instead of the table")
+    x.add_argument("--init-prices", action="store_true",
+                   help="write a price-table template (null prices, unverified) to the user config if missing")
+    x.set_defaults(fn=cmd_cost)
+
     x = sub.add_parser("contract", help="the data contract version the desktop app checks (read-only, no profile)")
     x.set_defaults(fn=cmd_contract)
 
@@ -1568,7 +1602,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 READ_ONLY = {"status", "plan", "validate", "digest", "host", "onboard-scan", "onboard-verify", "onboard-write", "install",
              "tickets", "status-of", "web", "zed-setup", "contract", "ticket-detail", "gate-request",
-             "transcripts",
+             "transcripts", "cost",
              "decide"}  # decide takes the lock only for the gate it runs (through main), never while it waits for you
 NO_STATUS_REFRESH = READ_ONLY | {"git"}
 
