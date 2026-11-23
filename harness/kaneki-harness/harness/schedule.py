@@ -11,6 +11,9 @@ macOS / Linux: one crontab line per pass (`*/N * * * *` for tick, `@reboot` for 
 exact marker comment, so `--uninstall` removes only these lines. `--install` prints them; `--install --write` also
 adds them to the user's crontab.
 
+On Windows the task starts the wrapper through `conhost.exe --headless`, so no console window flashes at each pass
+(an undocumented Windows switch; `--show-console` installs without it, and so does a Windows without conhost.exe).
+
 Both run a generated wrapper in `<workspace>/.sdlc/bin` (`sdlc-schedule.cmd` / `sdlc-schedule`), so the task command
 is just `<wrapper> tick`: the wrapper goes through the project launcher (`sdlc.cmd` / `sdlc`, which finds Python
 3.9+) and calls `sdlc schedule --pass tick|recover`. That pass:
@@ -382,8 +385,29 @@ def current_user() -> str | None:
     return f"{domain}\\{user}" if user and domain else user
 
 
-def task_xml(pdir: Path, kind: str, every: int, user: str | None, start: datetime | None = None) -> str:
+def find_conhost(override: Any = None) -> str | None:
+    """`conhost.exe` for `--headless`: the parameter, else `$SDLC_CONHOST` (set but empty = absent, for tests), else
+    conhost.exe in %SystemRoot%'s System32 folder when it exists. None when there is none (older Windows)."""
+    if override is not None:
+        return str(override) or None
+    if "SDLC_CONHOST" in os.environ:
+        return os.environ["SDLC_CONHOST"].strip() or None
+    root = os.environ.get("SystemRoot") or os.environ.get("windir") or r"C:\Windows"
+    path = Path(root) / "System32" / "conhost.exe"
+    return str(path) if path.is_file() else None
+
+
+def task_action(pdir: Path, kind: str, conhost: str | None) -> tuple[str, str]:
+    """`(Command, Arguments)` of the task's Exec action: the wrapper, behind `conhost.exe --headless` when given."""
     wrapper = bin_dir(pdir) / WRAPPER_CMD
+    if conhost:
+        return conhost, f'--headless "{wrapper}" {kind}'
+    return f'"{wrapper}"', kind
+
+
+def task_xml(pdir: Path, kind: str, every: int, user: str | None, start: datetime | None = None,
+             conhost: str | None = None) -> str:
+    command, arguments = task_action(pdir, kind, conhost)
     who = f"<UserId>{escape(user)}</UserId>" if user else ""
     if kind == "tick":
         start = (start or datetime.now()).replace(second=0, microsecond=0) + timedelta(minutes=1)
@@ -414,7 +438,7 @@ def task_xml(pdir: Path, kind: str, every: int, user: str | None, start: datetim
         f"<ExecutionTimeLimit>{TICK_TIME_LIMIT}</ExecutionTimeLimit><Priority>7</Priority>"
         "</Settings>\n"
         '  <Actions Context="Author"><Exec>'
-        f'<Command>"{escape(str(wrapper))}"</Command><Arguments>{kind}</Arguments>'
+        f"<Command>{escape(command)}</Command><Arguments>{escape(arguments)}</Arguments>"
         f"<WorkingDirectory>{escape(str(pdir))}</WorkingDirectory></Exec></Actions>\n"
         "</Task>\n"
     )
@@ -453,21 +477,29 @@ def _task_view(kind: str, name: str, proc: subprocess.CompletedProcess) -> dict[
     return view
 
 
-def _windows_install(pdir: Path, ppath: Path, every: int, dry_run: bool, schtasks: Any) -> dict[str, Any]:
+def _windows_install(pdir: Path, ppath: Path, every: int, dry_run: bool, schtasks: Any, show_console: bool,
+                     conhost: Any) -> dict[str, Any]:
     profile_name = _check_profile_name(ppath)
     exe = ["schtasks"] if dry_run and not (schtasks or os.environ.get("SDLC_SCHTASKS")) else tool("schtasks", schtasks)
     user = current_user()
     wrapper = bin_dir(pdir) / WRAPPER_CMD
+    host_exe = None if show_console else find_conhost(conhost)
+    if show_console:
+        console = "shown: --show-console (a console window flashes at each pass)"
+    elif host_exe:
+        console = f"hidden: {host_exe} --headless (an undocumented Windows switch; --show-console turns it off)"
+    else:
+        console = "shown: conhost.exe not found on this Windows, so the tasks run the wrapper directly"
     plan = []
     for kind in PASSES:
-        xml = task_xml(pdir, kind, every, user)
+        xml = task_xml(pdir, kind, every, user, conhost=host_exe)
         argv = [*exe, "/Create", "/TN", task_name(pdir, kind), "/XML", str(xml_path(pdir, kind)), "/F"]
         plan.append((kind, xml, argv))
     res: dict[str, Any] = {
         "platform": "windows", "workspace": str(pdir), "every": every, "dryRun": dry_run,
-        "wrapper": str(wrapper), "user": user,
+        "wrapper": str(wrapper), "user": user, "console": console, "headless": bool(host_exe),
         "tasks": [{"kind": k, "name": task_name(pdir, k), "xml": str(xml_path(pdir, k)),
-                   "runs": f'"{wrapper}" {k}',
+                   "runs": " ".join(task_action(pdir, k, host_exe)),
                    "trigger": f"every {every} minutes" if k == "tick" else f"at logon of {user or 'you'} (+2 min)"}
                   for k, _, _ in plan],
         "commands": [_cmdline(a) for _, _, a in plan],
@@ -628,12 +660,13 @@ def _workspace(ppath: Path) -> tuple[Path, Path]:
 
 
 def install(ppath: Path, *, every: int = 15, dry_run: bool = False, write: bool = False,
-            platform: str | None = None, schtasks: Any = None, crontab: Any = None) -> dict[str, Any]:
+            platform: str | None = None, schtasks: Any = None, crontab: Any = None, show_console: bool = False,
+            conhost: Any = None) -> dict[str, Any]:
     if not 1 <= int(every) <= 1440:
         raise HarnessError("--every must be between 1 and 1440 minutes")
     ppath, pdir = _workspace(ppath)
     plat = platform_name(platform)
-    res = (_windows_install(pdir, ppath, int(every), dry_run, schtasks) if plat == "windows"
+    res = (_windows_install(pdir, ppath, int(every), dry_run, schtasks, show_console, conhost) if plat == "windows"
            else _posix_install(pdir, ppath, int(every), dry_run, write, crontab))
     work = pending_work(ppath)
     res["optedIn"] = work["optedIn"]

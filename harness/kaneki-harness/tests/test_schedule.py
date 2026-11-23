@@ -23,6 +23,7 @@ from harness.errors import HarnessError  # noqa: E402
 
 FAKE = Path(__file__).resolve().parent / "fakes" / "fake_sched.py"
 IS_WINDOWS = os.name == "nt"
+CONHOST = r"C:\Windows\System32\conhost.exe"
 
 SAMPLE_LIST = r"""
 Folder: \
@@ -47,6 +48,7 @@ class ScheduleBase(Base):
             "SDLC_SCHTASKS": json.dumps([sys.executable, str(FAKE), "schtasks"]),
             "SDLC_CRONTAB": json.dumps([sys.executable, str(FAKE), "crontab"]),
             "FAKE_SCHED_DIR": str(self.state),
+            "SDLC_CONHOST": CONHOST,
         })
         self.env.start()
         self.addCleanup(self.env.stop)
@@ -111,8 +113,11 @@ class WindowsTests(ScheduleBase):
         self.assertIn("<Interval>PT7M</Interval>", tasks[tick])  # every-N, written as UTF-16 (the fake decodes it)
         self.assertIn("<MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>", tasks[tick])
         self.assertIn("<LogonTrigger>", tasks[recover])
-        self.assertIn("<Arguments>recover</Arguments>", tasks[recover])
-        self.assertIn(str(self.bin / "sdlc-schedule.cmd"), tasks[tick])
+        self.assertIn(f'"{self.bin / "sdlc-schedule.cmd"}" recover</Arguments>', tasks[recover])
+        self.assertIn(f"<Command>{CONHOST}</Command>", tasks[tick])  # hidden console by default
+        self.assertIn(f'<Arguments>--headless "{self.bin / "sdlc-schedule.cmd"}" tick</Arguments>', tasks[tick])
+        self.assertTrue(res["headless"])
+        self.assertIn("--headless", res["console"])
         wrapper = (self.bin / "sdlc-schedule.cmd").read_bytes()
         self.assertEqual(wrapper.count(b"\n"), wrapper.count(b"\r\n"))
         text = wrapper.decode("utf-8")
@@ -131,6 +136,39 @@ class WindowsTests(ScheduleBase):
         self.assertEqual(len(res["commands"]), 2)
         self.assertIn(f'/TN "{S.task_name(self.ws, "tick")}" /XML', res["commands"][0])
         self.assertIn("<Interval>PT15M</Interval>", res["taskXml"]["tick"])
+        self.assertIn("--headless", res["taskXml"]["tick"])
+        self.assertTrue(res["tasks"][0]["runs"].startswith(CONHOST + " --headless "))
+
+    def test_show_console_runs_the_wrapper_directly(self) -> None:
+        self.launchers()
+        code, res = run("schedule", "--install", "--show-console", "--platform", "windows", *self.p)
+        self.assertEqual(code, 0, res)
+        self.assertFalse(res["headless"])
+        self.assertIn("--show-console", res["console"])
+        xml = self.tasks()[S.task_name(self.ws, "tick")]
+        self.assertNotIn("conhost", xml)
+        self.assertNotIn("--headless", xml)
+        self.assertIn(f'<Command>"{self.bin / "sdlc-schedule.cmd"}"</Command><Arguments>tick</Arguments>', xml)
+
+    def test_without_conhost_the_install_falls_back_and_says_so(self) -> None:
+        self.launchers()
+        with mock.patch.dict(os.environ, {"SDLC_CONHOST": ""}):
+            code, res = run("schedule", "--install", "--platform", "windows", *self.p)
+        self.assertEqual(code, 0, res)
+        self.assertFalse(res["headless"])
+        self.assertIn("conhost.exe not found", res["console"])
+        xml = self.tasks()[S.task_name(self.ws, "recover")]
+        self.assertNotIn("--headless", xml)
+        self.assertIn("<Arguments>recover</Arguments>", xml)
+
+    def test_conhost_is_found_in_system32(self) -> None:
+        root = self.tmp / "win"
+        (root / "System32").mkdir(parents=True)
+        env = {k: v for k, v in os.environ.items() if k != "SDLC_CONHOST"}
+        with mock.patch.dict(os.environ, {**env, "SystemRoot": str(root)}, clear=True):
+            self.assertIsNone(S.find_conhost())
+            (root / "System32" / "conhost.exe").write_bytes(b"")
+            self.assertEqual(S.find_conhost(), str(root / "System32" / "conhost.exe"))
 
     def test_install_needs_the_project_launcher(self) -> None:
         code, res = run("schedule", "--install", "--platform", "windows", *self.p)

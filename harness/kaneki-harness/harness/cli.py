@@ -1364,7 +1364,8 @@ def cmd_schedule(args: argparse.Namespace) -> int | None:
     if args.run_pass:
         return SCH.main_pass(ppath, args.run_pass)
     if args.install:
-        out(SCH.install(ppath, every=args.every, dry_run=args.dry_run, write=args.write, platform=args.platform))
+        out(SCH.install(ppath, every=args.every, dry_run=args.dry_run, write=args.write, platform=args.platform,
+                        show_console=args.show_console))
     elif args.uninstall:
         out(SCH.uninstall(ppath, platform=args.platform))
     else:
@@ -1648,6 +1649,9 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--dry-run", action="store_true", help="print the exact commands / crontab lines, change nothing")
     x.add_argument("--write", action="store_true", help="macOS/Linux: also add the lines to your crontab")
     x.add_argument("--platform", choices=["windows", "posix"], help="default: this machine's")
+    x.add_argument("--show-console", action="store_true",
+                   help="Windows: run the wrapper directly instead of through conhost.exe --headless (a console "
+                        "window then flashes at each pass)")
     x.set_defaults(fn=cmd_schedule)
 
     x = sub.add_parser("host", parents=[common], help="show or set the local agent host binding (.sdlc/host.local.json)")

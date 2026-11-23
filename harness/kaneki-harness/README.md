@@ -143,6 +143,7 @@ shutdown or reboot. Nothing runs until a ticket opts in: `sdlc autonomy --ticket
 ```bash
 sdlc schedule --install --dry-run          # print the exact commands / crontab lines; change nothing
 sdlc schedule --install [--every 15]       # Windows: create the two tasks; macOS/Linux: print the crontab lines
+sdlc schedule --install --show-console     # Windows: without conhost --headless (a console window flashes)
 sdlc schedule --install --write            # macOS/Linux: also add the lines to your crontab
 sdlc schedule --status                     # tasks present?, next / last run, last result, last log lines
 sdlc schedule --uninstall                  # remove only what --install created
@@ -153,7 +154,12 @@ sdlc schedule --uninstall                  # remove only what --install created
   plus a hash of its path, so each workspace has its own pair; `--uninstall` deletes exactly these two names and
   never another task. The tasks are created from XML (`.sdlc/run/schedule-<pass>.xml`): a pass never starts while
   the previous one runs, and a tick missed while the machine slept runs when it wakes. They run only while you are
-  logged on (a console window may flash briefly at each pass).
+  logged on.
+- **No console window on Windows**: the tasks start the wrapper through `conhost.exe --headless "<wrapper>" tick`,
+  so nothing flashes at each pass. `--headless` is an undocumented Windows switch and a Windows update may change
+  it. If passes stop running or a window appears, reinstall with `sdlc schedule --install --show-console`, which
+  runs the wrapper directly (a console window then flashes briefly at each pass). On a Windows without
+  `conhost.exe` the install does the same by itself and says so in its `console` field.
 - **macOS / Linux**: `*/N * * * *` runs tick and `@reboot` runs recover. Each line ends with the marker
   `# kaneki tick|recover <workspace>-<hash>`, and `--install --write` / `--uninstall` change only lines with those
   markers. `--every` must be below 60 or whole hours. The wrapper keeps the `PATH` of the shell that installed it
