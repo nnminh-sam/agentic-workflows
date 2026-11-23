@@ -31,7 +31,9 @@ _VERDICT_RE = re.compile(
 _FAILURE_CLASS_RE = re.compile(
     r"(?im)failure[-_ ]?class(?:\*\*)?\s*[:\-]\s*(?:\*\*)?(record|artifact)\b"
 )
-_TOKEN_RE = re.compile(r"(?:total[_ ]tokens?|tokens used)\s*[:=]\s*([0-9][0-9,]*)", re.I)
+# `codex exec` text output ends with `tokens used: N` (older releases) or `tokens used` with `N` on the next line.
+_TOKEN_RE = re.compile(r"(?:total[_ ]tokens?|tokens used)(?:\s*[:=]\s*|[ \t]*\r?\n[ \t]*)([0-9][0-9,]*)\b", re.I)
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
 # Hosts whose units run only on the host's own subagents, never through `sdlc dispatch` or any runner.
 # Antigravity's terms forbid third-party software wrapping its `agy` CLI on consumer plans (plan decision D6).
@@ -195,10 +197,8 @@ def extract_tokens(stdout: str, stderr: str = "") -> int | None:
                         return tok
                 except json.JSONDecodeError:
                     continue
-    m = _TOKEN_RE.search(stdout + "\n" + stderr)
-    if m:
-        return int(m.group(1).replace(",", ""))
-    return None
+    matches = _TOKEN_RE.findall(_ANSI_RE.sub("", stdout + "\n" + stderr))
+    return int(matches[-1].replace(",", "")) if matches else None
 
 
 def extract_verdict(result_text: str) -> tuple[str | None, str | None]:
