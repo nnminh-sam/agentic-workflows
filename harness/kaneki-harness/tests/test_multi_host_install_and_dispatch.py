@@ -160,11 +160,11 @@ class DispatchTests(Base):
 
         cmd_ok = f"{sys.executable} {runner} {{result}} NONE ok"
         code, res = run("dispatch", "--ticket", "DS-1", "--node", "prepare", "--unit", "worker",
-                        "--host", "antigravity", "--command", cmd_ok, *self.p)
+                        "--host", "codex", "--command", cmd_ok, *self.p)
         self.assertEqual(code, 0, res)
         self.assertTrue(res["ok"])
         self.assertEqual(res["tokens"], 200)
-        self.assertEqual(res["recorded"]["model"], "flash_lite")
+        self.assertEqual(res["recorded"]["model"], "gpt-5-codex-mini")
         self.assertEqual(res["recorded"]["tokens"], 200)
         self.assertTrue(Path(res["log"]).is_file())
         self.assertIn("200", (self.tdir("DS-1") / "token-usage.md").read_text(encoding="utf-8"))
@@ -173,14 +173,14 @@ class DispatchTests(Base):
         self.complete("DS-1", "prepare")
         cmd_fail_exit = f"{sys.executable} {runner} {{result}} NONE fail_exit"
         code, err1 = run("dispatch", "--ticket", "DS-1", "--node", "investigate", "--unit", "worker",
-                         "--host", "antigravity", "--command", cmd_fail_exit, *self.p)
+                         "--host", "codex", "--command", cmd_fail_exit, *self.p)
         self.assertEqual(code, 2, err1)
         self.assertIn("failed with exit code 3", err1["error"])
 
         # Missing result file fails closed (G7)
         cmd_no_file = f"{sys.executable} {runner} {{result}} NONE no_write"
         code, err2 = run("dispatch", "--ticket", "DS-1", "--node", "investigate", "--unit", "worker",
-                         "--host", "antigravity", "--command", cmd_no_file, *self.p)
+                         "--host", "codex", "--command", cmd_no_file, *self.p)
         self.assertEqual(code, 2, err2)
         self.assertIn("G7:", err2["error"])
 

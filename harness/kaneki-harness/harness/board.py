@@ -14,6 +14,24 @@ from .errors import HarnessError
 
 HIDDEN_EVENTS = {"state-write"}
 STATUS_FILE = "STATUS.md"
+PROFILE_HOST = "profile"  # a unit recorded on the profile binding stores no `host` (cli.record_unit)
+
+
+def unit_host(u: dict[str, Any]) -> str:
+    """The agent (host) a unit record ran on."""
+    return u.get("host") or PROFILE_HOST
+
+
+def ticket_hosts(state: dict[str, Any]) -> tuple[str | None, list[str]]:
+    """`(host, hosts)`: the agent of the most recently recorded unit (any node, any generation), and every agent
+    that recorded a unit on this ticket in first-seen order. `(None, [])` before the first record."""
+    units = sorted((u for rec in (state.get("nodes") or {}).values() for u in rec.get("units", [])),
+                   key=lambda u: u.get("at") or "")
+    seen: list[str] = []
+    for u in units:
+        if unit_host(u) not in seen:
+            seen.append(unit_host(u))
+    return (unit_host(units[-1]) if units else None), seen
 
 
 def summarize(s: Any, events_limit: int = 40, detail: bool = False) -> dict[str, Any]:
@@ -44,7 +62,8 @@ def summarize(s: Any, events_limit: int = 40, detail: bool = False) -> dict[str,
             "boundary": spec["boundary"], "executor": "controller" if not planned else "subagents",
             "units": planned, "unitsDone": sorted({u["unit"] for u in current if u["status"] == "ok"}),
             "lastUnitVerdict": next((u.get("verdict") for u in reversed(current) if u.get("verdict")), None),
-            "models": sorted({u["model"] for u in current}), "tokens": toks, "closedAt": rec.get("closedAt"),
+            "models": sorted({u["model"] for u in current}), "hosts": sorted({unit_host(u) for u in current}),
+            "tokens": toks, "closedAt": rec.get("closedAt"),
             "artifacts": arts,
         })
     nxt = next_pending(s.state, s.order)
@@ -57,8 +76,9 @@ def summarize(s: Any, events_limit: int = 40, detail: bool = False) -> dict[str,
     waits = {n["node"]: waiting(s, n["node"], problems=problems) for n in nodes}
     strip = [{"node": n["node"], "status": n["status"], "verdict": n["verdict"], "generation": n["generation"],
               "boundary": n["boundary"], "waiting": waits[n["node"]]} for n in nodes]
+    host, hosts = ticket_hosts(s.state)
     summary = {
-        "ticket": s.ctx["ticket"], "title": _title(s), "kind": s.ctx["kind"], "lane": G.lane_of(s.ctx),
+        "ticket": s.ctx["ticket"], "host": host, "hosts": hosts, "title": _title(s), "kind": s.ctx["kind"], "lane": G.lane_of(s.ctx),
         "reviewRound": s.ctx["reviewRound"], "contractVersion": CONTRACT_VERSION,
         "ticketDir": str(s.ticket.dir), "createdAt": s.state.get("createdAt"),
         "updatedAt": events[-1]["at"] if events else s.state.get("createdAt"),
@@ -94,14 +114,15 @@ def _node_detail(s: Any, node: str, wait: dict[str, Any]) -> dict[str, Any]:
     planned = []
     for u in s.units(node):
         tier, why = s.tier(node, u["id"])  # escalation included, as `sdlc plan` prints it
-        row: dict[str, Any] = {"id": u["id"], "role": u.get("role"), "tier": tier, "model": s.model(tier)}
+        row: dict[str, Any] = {"id": u["id"], "role": u.get("role"), "tier": tier, "model": s.model(tier),
+                               "host": s.execution(node, u["id"], tier)["host"]}
         if why:
             row["escalated"] = {"from": u["tier"], "why": why}
         planned.append(row)
     usage = node_usage(rec)
     return {
         "plannedUnits": planned,
-        "unitRecords": [dict(u) for u in rec["units"] if u["generation"] == rec["generation"]],
+        "unitRecords": [{**u, "host": unit_host(u)} for u in rec["units"] if u["generation"] == rec["generation"]],
         "agents": usage["agents"], "tokensAllGenerations": usage["allGenerations"],
         "tokensEarlier": usage["earlierGenerations"],
         "loopBackTo": spec.get("loopBackTo"), "reopens": spec.get("reopens"), "gates": list(spec.get("gates", [])),
@@ -439,13 +460,15 @@ def render_status_md(summary: dict[str, Any], mismatched_nodes: set[str] | None 
         "> Written by the driver after every change. Do not edit: it is regenerated.",
         "",
         f"**Progress:** {t['settled']}/{t['traceLength']} nodes · **Next:** {t['next']} · **Tokens:** {t['tokensTotal']}"
+        + (f" · **Agent:** {t['host']}" if t.get("host") else "")
+        + (f" (also {', '.join(h for h in t['hosts'] if h != t['host'])})" if len(t.get("hosts") or []) > 1 else "")
         + (f" · **Review round:** {t['reviewRound']}" if t["reviewRound"] else ""),
         "",
     ]
     if t.get("integrity"):
         lines += ["> ⚠️ **Integrity problem:** " + "; ".join(t["integrity"]), ""]
-    lines += ["| # | Node | Status | Verdict | Who | Model | Tokens | Artifacts |",
-              "|---|------|--------|---------|-----|-------|--------|-----------|"]
+    lines += ["| # | Node | Status | Verdict | Who | Agent | Model | Tokens | Artifacts |",
+              "|---|------|--------|---------|-----|-------|-------|--------|-----------|"]
     for i, n in enumerate(t["nodes"], 1):
         arts = ", ".join(f"[{a['name']}]({_rel(a['path'], tdir)})" for a in n["artifacts"] if a["exists"]) or "—"
         who = ("you approve · " if n["boundary"] == "user" else "") + ("inline" if n["executor"] == "controller" else
@@ -455,8 +478,9 @@ def render_status_md(summary: dict[str, Any], mismatched_nodes: set[str] | None 
         model_col = ", ".join(n["models"]) or "—"
         if n["node"] in mismatched and model_col != "—":
             model_col += " ⚠"
+        agent_col = ", ".join(n.get("hosts") or []) or "—"
         lines.append(f"| {i} | {n['node']}{gen} | {ICON.get(n['status'], '')} {n['status']} | {verdict} | {who} | "
-                     f"{model_col} | {n['tokens'] or ''} | {arts} |")
+                     f"{agent_col} | {model_col} | {n['tokens'] or ''} | {arts} |")
     if mismatched:
         lines += ["", "> ⚠️ **Model verification:** one or more current-round units ran on an inherited or unverified host model."]
     if (tdir / "token-usage.md").is_file():
@@ -471,7 +495,7 @@ def render_status_md(summary: dict[str, Any], mismatched_nodes: set[str] | None 
 
 def _event_text(e: dict[str, Any]) -> str:
     parts = []
-    for key in ("node", "unit", "verdict", "actor", "lane", "from", "repo"):
+    for key in ("node", "unit", "host", "verdict", "actor", "lane", "from", "to", "repo"):
         if e.get(key):
             parts.append(f"{key}={e[key]}")
     if e.get("stale"):

@@ -116,7 +116,7 @@ class TicketDetailTests(Base):
         self.assertEqual((change["plannedUnits"], change["unitRecords"], change["agents"]), ([], [], []))
         check = self.node(res, "check")
         self.assertEqual(check["plannedUnits"], [{"id": "quick-review", "role": "worker", "tier": "routine",
-                                                  "model": "sonnet"}])
+                                                  "model": "sonnet", "host": "profile"}])
         self.assertEqual((check["loopBackTo"], check["reopens"]), ("change", None))
         self.assertIsInstance(check["gates"], list)
         self.complete(t, "scope", actor="user")
