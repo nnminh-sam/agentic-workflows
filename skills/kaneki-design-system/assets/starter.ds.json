@@ -1,0 +1,177 @@
+{
+  "system": {
+    "id": "__ID__",
+    "name": "__NAME__",
+    "version": "v1",
+    "status": "Draft",
+    "tagline": "Every component, one at a time",
+    "description": "STARTER CONTENT: replace every token, component and screen below with the real system before building for anyone.",
+    "date": "__DATE__",
+    "lang": "__LANG__",
+    "prefix": "ds-",
+    "sources": ["Starter scaffold from kaneki-design-system (replace with the files the system was taken from, e.g. <code>src/styles/theme.css</code>)."],
+    "stage": { "background": "canvas", "color": "ink", "font": "font-text", "surface": "surface" }
+  },
+  "principles": [
+    { "title": "Colour is a role", "body": "Pick a colour by meaning (<code>bad</code> = destructive or failed), never by looks." },
+    { "title": "One primary action", "body": "Each view has at most one primary button: the step the user most likely takes next." }
+  ],
+  "tokens": {
+    "themes": [
+      { "id": "light", "name": "Light", "scheme": "light" },
+      { "id": "dark", "name": "Dark", "scheme": "dark" }
+    ],
+    "notes": {
+      "colour": "Every colour is a role. Text tokens are checked for 4.5:1 on the grounds their usage names, in both themes.",
+      "spacing": "A 4 px grid. Layout gaps use these steps."
+    },
+    "color": [
+      { "name": "canvas", "group": "Surfaces", "value": { "light": "#f5f6f8", "dark": "#0b0d11" }, "usage": "Page ground behind panels." },
+      { "name": "surface", "group": "Surfaces", "value": { "light": "#ffffff", "dark": "#121519" }, "usage": "Cards, inputs, menus, dialogs." },
+      { "name": "surface-2", "group": "Surfaces", "value": { "light": "#f0f2f5", "dark": "#1c2129" }, "usage": "Hover fill, sunken wells, table headers." },
+      { "name": "border", "group": "Surfaces", "value": { "light": "#e4e7ec", "dark": "#252a33" }, "usage": "Hairlines between regions; card borders." },
+      { "name": "border-strong", "group": "Surfaces", "value": { "light": "#808a9a", "dark": "#5d6675" }, "usage": "Control borders (inputs, secondary buttons): 3:1 so a field is findable." },
+      { "name": "ink", "group": "Text", "value": { "light": "#101828", "dark": "#eef1f5" }, "usage": "Primary text on canvas and surface." },
+      { "name": "ink-2", "group": "Text", "value": { "light": "#475467", "dark": "#b3bac6" }, "usage": "Secondary text: descriptions, hints." },
+      { "name": "accent", "group": "Accent", "value": { "light": "#2f54d0", "dark": "#7591ff" }, "usage": "Primary button fill, links, focus ring." },
+      { "name": "accent-hover", "group": "Accent", "value": { "light": "#2445b8", "dark": "#8aa2ff" }, "usage": "Primary button hover." },
+      { "name": "on-accent", "group": "Accent", "value": { "light": "#ffffff", "dark": "#0b0d11" }, "usage": "Text and icons on accent." },
+      { "name": "focus", "group": "Accent", "value": "{accent}", "usage": "Focus ring colour (alias of accent)." },
+      { "name": "ok", "group": "Status", "value": { "light": "#14855e", "dark": "#3cc796" }, "usage": "Success icon and dot." },
+      { "name": "ok-soft", "group": "Status", "value": { "light": "#e8f6f0", "dark": "#0f2a20" }, "usage": "Success badge and alert fill." },
+      { "name": "ok-text", "group": "Status", "value": { "light": "#0c6b4a", "dark": "#62d9ad" }, "usage": "Success text on ok-soft or surface." },
+      { "name": "bad", "group": "Status", "value": { "light": "#d0343e", "dark": "#f26b6b" }, "usage": "Danger button fill, error icon." },
+      { "name": "bad-soft", "group": "Status", "value": { "light": "#fdeeee", "dark": "#2e1517" }, "usage": "Error badge and alert fill." },
+      { "name": "bad-text", "group": "Status", "value": { "light": "#b0222c", "dark": "#ff8f8f" }, "usage": "Error text on bad-soft or surface." },
+      { "name": "on-bad", "group": "Status", "value": { "light": "#ffffff", "dark": "#1a0a0b" }, "usage": "Text on a bad fill." }
+    ],
+    "shadow": [
+      { "name": "shadow-sm", "value": { "light": "0 1px 2px rgba(16,24,40,0.06), 0 1px 3px rgba(16,24,40,0.08)", "dark": "0 1px 2px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.03)" }, "usage": "Cards resting on the canvas." },
+      { "name": "shadow-lg", "value": { "light": "0 20px 40px -8px rgba(16,24,40,0.18)", "dark": "0 20px 40px -8px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.05)" }, "usage": "Dialogs and menus floating above the page." }
+    ],
+    "fonts": [
+      { "name": "font-text", "value": "\"Segoe UI Variable Text\", \"Segoe UI\", system-ui, -apple-system, Roboto, sans-serif", "usage": "All UI text." },
+      { "name": "font-mono", "value": "\"Cascadia Mono\", Consolas, ui-monospace, monospace", "usage": "Code, IDs, anything you could paste into a terminal." }
+    ],
+    "type": [
+      { "name": "title", "family": "{font-text}", "size": "24px", "lineHeight": "32px", "weight": 600, "letterSpacing": "-0.3px", "sample": "Account settings", "usage": "Page title, one per view.", "className": "ds-title" },
+      { "name": "body", "family": "{font-text}", "size": "14px", "lineHeight": "20px", "weight": 400, "sample": "Changes are saved when you leave the field.", "usage": "Default text." },
+      { "name": "code", "family": "{font-mono}", "size": "12px", "lineHeight": "18px", "weight": 400, "sample": "npm run build --prod", "usage": "Inline code and IDs." }
+    ],
+    "spacing": [
+      { "name": "space-1", "value": "4px", "usage": "Icon to label." },
+      { "name": "space-2", "value": "8px", "usage": "Between controls in a row." },
+      { "name": "space-4", "value": "16px", "usage": "Card padding." },
+      { "name": "space-6", "value": "24px", "usage": "Between sections." }
+    ],
+    "radius": [
+      { "name": "radius-sm", "value": "6px", "usage": "Badges, small controls." },
+      { "name": "radius-md", "value": "8px", "usage": "Buttons and inputs." },
+      { "name": "radius-lg", "value": "12px", "usage": "Cards and dialogs." },
+      { "name": "radius-full", "value": "999px", "usage": "Pills." }
+    ],
+    "motion": [
+      { "name": "duration-fast", "value": "120ms", "usage": "Hover and press feedback." },
+      { "name": "duration-base", "value": "200ms", "usage": "Panels opening." },
+      { "name": "ease-out", "value": "cubic-bezier(0.2, 0, 0, 1)", "usage": "Everything that enters." }
+    ],
+    "other": [
+      { "title": "Sizes", "tokens": [
+        { "name": "control-h", "value": "32px", "usage": "Height of buttons and inputs." },
+        { "name": "control-h-sm", "value": "26px", "usage": "Small buttons." }
+      ] }
+    ]
+  },
+  "contrast": [
+    { "fg": "ink", "bg": "surface", "min": 4.5 },
+    { "fg": "ink", "bg": "canvas", "min": 4.5 },
+    { "fg": "ink-2", "bg": "surface", "min": 4.5 },
+    { "fg": "on-accent", "bg": "accent", "min": 4.5, "note": "Primary button label." },
+    { "fg": "ok-text", "bg": "ok-soft", "min": 4.5 },
+    { "fg": "bad-text", "bg": "bad-soft", "min": 4.5 },
+    { "fg": "on-bad", "bg": "bad", "min": 4.5 },
+    { "fg": "border-strong", "bg": "surface", "min": 3, "note": "Non-text: control borders (WCAG 1.4.11)." }
+  ],
+  "icons": {
+    "className": "ds-icon",
+    "viewBox": "0 0 24 24",
+    "attrs": { "fill": "none", "stroke": "currentColor", "stroke-width": "1.75", "stroke-linecap": "round", "stroke-linejoin": "round" },
+    "set": {
+      "plus": "<path d=\"M12 5v14M5 12h14\"/>",
+      "check": "<path d=\"m5 12.5 4.5 4.5L19 7.5\"/>",
+      "x": "<path d=\"M6 6l12 12M18 6 6 18\"/>",
+      "alert": "<path d=\"M12 4 2.8 19.5h18.4z\"/><path d=\"M12 10v4M12 17h.01\"/>",
+      "info": "<circle cx=\"12\" cy=\"12\" r=\"8.5\"/><path d=\"M12 11v5M12 8h.01\"/>",
+      "trash": "<path d=\"M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12\"/>",
+      "search": "<circle cx=\"11\" cy=\"11\" r=\"6\"/><path d=\"m20 20-4.5-4.5\"/>"
+    }
+  },
+  "components": [
+    {
+      "id": "button", "group": "Actions", "name": "Button", "status": "Stable",
+      "classes": [
+        { "name": "ds-btn", "use": "Base: secondary button." },
+        { "name": "ds-btn--primary", "use": "The one next step in a view." },
+        { "name": "ds-btn--danger", "use": "Deletes or discards work." },
+        { "name": "ds-btn--ghost", "use": "Low-emphasis: Cancel, toolbar actions." },
+        { "name": "ds-btn--sm", "use": "Dense rows and toolbars." }
+      ],
+      "desc": "Starts an action. One primary button per view: the next step the user is most likely to take.",
+      "examples": [
+        { "title": "Variants", "html": "<div class=\"dsg-row\">\n  <button class=\"ds-btn ds-btn--primary\">{{icon:plus}}New project</button>\n  <button class=\"ds-btn\">Export</button>\n  <button class=\"ds-btn ds-btn--danger\">{{icon:trash}}Delete</button>\n  <button class=\"ds-btn ds-btn--ghost\">Cancel</button>\n</div>" },
+        { "title": "States", "note": "States are shown with state classes so they can be compared side by side.", "html": "<div class=\"dsg-row\">\n  <button class=\"ds-btn ds-btn--primary\">Rest</button>\n  <button class=\"ds-btn ds-btn--primary is-hover\">Hover</button>\n  <button class=\"ds-btn ds-btn--primary is-focus\">Focus</button>\n  <button class=\"ds-btn ds-btn--primary\" disabled>Disabled</button>\n</div>\n<div class=\"dsg-row\">\n  <button class=\"ds-btn ds-btn--sm\">Small</button>\n  <button class=\"ds-btn ds-btn--sm ds-btn--primary\">Small primary</button>\n</div>" }
+      ],
+      "dos": ["Name the action with a verb and its object: \"New project\", \"Delete file\"."],
+      "donts": ["Two primary buttons side by side.", "A danger button without a confirmation step."],
+      "a11y": ["Use a real <code>&lt;button&gt;</code>; the focus ring must stay visible (3:1 against the page)."]
+    },
+    {
+      "id": "badge", "group": "Feedback", "name": "Badge", "status": "Stable",
+      "classes": ["ds-badge", "ds-badge--ok", "ds-badge--bad"],
+      "desc": "A short status label next to the thing it describes.",
+      "examples": [
+        { "title": "Tones", "html": "<div class=\"dsg-row\">\n  <span class=\"ds-badge\">Draft</span>\n  <span class=\"ds-badge ds-badge--ok\">{{icon:check}}Passed</span>\n  <span class=\"ds-badge ds-badge--bad\">{{icon:x}}Failed</span>\n</div>" }
+      ],
+      "dos": ["One or two words."],
+      "donts": ["Colour as the only signal: pair the tone with a word or icon."]
+    },
+    {
+      "id": "alert", "group": "Feedback", "name": "Alert", "status": "Beta",
+      "classes": ["ds-alert", "ds-alert--ok", "ds-alert--bad", "ds-alert__title"],
+      "desc": "An inline message about the content around it.",
+      "examples": [
+        { "title": "Tones", "html": "<div class=\"dsg-stack\">\n  <div class=\"ds-alert\" role=\"status\">{{icon:info}}<div><p class=\"ds-alert__title\">Sync paused</p>Changes are kept locally until you reconnect.</div></div>\n  <div class=\"ds-alert ds-alert--bad\" role=\"alert\">{{icon:alert}}<div><p class=\"ds-alert__title\">Upload failed</p>The file is larger than 20 MB.</div></div>\n</div>" }
+      ],
+      "dos": ["Say what happened and what to do next."],
+      "donts": ["Alerts for things that need no action."]
+    },
+    {
+      "id": "field", "group": "Inputs", "name": "Text field", "status": "Stable",
+      "classes": ["ds-field", "ds-field__label", "ds-input", "ds-field__hint", "is-invalid"],
+      "desc": "A labelled single-line input with an optional hint or error.",
+      "examples": [
+        { "title": "States", "html": "<div class=\"dsg-grid\">\n  <label class=\"ds-field\"><span class=\"ds-field__label\">Project name</span><input class=\"ds-input\" value=\"Atlas\"><span class=\"ds-field__hint\">Shown in the sidebar.</span></label>\n  <label class=\"ds-field is-invalid\"><span class=\"ds-field__label\">Slug</span><input class=\"ds-input\" value=\"Atlas Web\" aria-invalid=\"true\"><span class=\"ds-field__hint\">Use lowercase letters and dashes.</span></label>\n</div>" }
+      ],
+      "dos": ["Keep the label visible; placeholders are examples, not labels."],
+      "donts": ["Validate while the user is still typing the first time."]
+    },
+    {
+      "id": "card", "group": "Layout", "name": "Card", "status": "Stable",
+      "classes": ["ds-card", "ds-card__title", "ds-card__body", "ds-card__footer"],
+      "desc": "Groups content about one thing on a raised surface.",
+      "examples": [
+        { "title": "With actions", "html": "<div class=\"ds-card\" style=\"max-width:360px\">\n  <h3 class=\"ds-card__title\">Atlas Web</h3>\n  <p class=\"ds-card__body\">Last deployed 2026-11-20 · 3 open issues</p>\n  <div class=\"ds-card__footer\"><button class=\"ds-btn ds-btn--ghost ds-btn--sm\">Settings</button><button class=\"ds-btn ds-btn--primary ds-btn--sm\">Open</button></div>\n</div>" }
+      ],
+      "dos": ["One subject per card."],
+      "donts": ["Cards inside cards."]
+    }
+  ],
+  "screens": [
+    {
+      "id": "projects", "name": "Projects page", "summary": "Card grid with a page title and one primary action.", "status": "Draft",
+      "desc": "How the pieces combine on a real page.",
+      "uses": ["button", "card", "badge", "alert"],
+      "html": "<div style=\"display:grid;gap:var(--space-4);padding:var(--space-6);background:var(--canvas);border:1px solid var(--border);border-radius:var(--radius-lg)\">\n  <div class=\"dsg-row\"><h1 class=\"ds-title\" style=\"margin:0\">Projects</h1><span style=\"flex:1\"></span><button class=\"ds-btn ds-btn--primary\">{{icon:plus}}New project</button></div>\n  <div class=\"ds-alert\" role=\"status\">{{icon:info}}<div><p class=\"ds-alert__title\">Sync paused</p>Changes are kept locally until you reconnect.</div></div>\n  <div class=\"dsg-grid\">\n    <div class=\"ds-card\"><h3 class=\"ds-card__title\">Atlas Web <span class=\"ds-badge ds-badge--ok\">Live</span></h3><p class=\"ds-card__body\">Last deployed 2026-11-20</p></div>\n    <div class=\"ds-card\"><h3 class=\"ds-card__title\">Atlas API <span class=\"ds-badge ds-badge--bad\">Failing</span></h3><p class=\"ds-card__body\">Build 418 failed</p></div>\n    <div class=\"ds-card\"><h3 class=\"ds-card__title\">Docs <span class=\"ds-badge\">Draft</span></h3><p class=\"ds-card__body\">Not published</p></div>\n  </div>\n</div>"
+    }
+  ]
+}
