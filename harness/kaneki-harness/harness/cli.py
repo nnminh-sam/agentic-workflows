@@ -1228,6 +1228,12 @@ def cmd_gate_request(args: argparse.Namespace) -> None:
     out(board.gate_request(Session(args), args.node))
 
 
+def cmd_transcripts(args: argparse.Namespace) -> None:
+    """Agent sessions per node of one ticket, from the agents' own logs; steps only with --node. Read-only."""
+    from . import sessions
+    out(sessions.transcripts(profile_path(args), args.ticket, args.node, max_steps=args.max_steps))
+
+
 def cmd_contract(args: argparse.Namespace) -> None:
     """The contract version the desktop app checks at start-up; needs no profile or ticket and writes nothing."""
     from .contract import contract_info
@@ -1441,6 +1447,12 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--node")
     x.set_defaults(fn=cmd_gate_request)
 
+    x = sub.add_parser("transcripts", parents=[ticketed],
+                       help="agent sessions per node from Claude/Codex/Antigravity logs and dispatch logs (read-only)")
+    x.add_argument("--node", help="one node, with the steps of each session")
+    x.add_argument("--max-steps", type=_non_negative, default=200, help="steps kept per session (first + most recent)")
+    x.set_defaults(fn=cmd_transcripts)
+
     x = sub.add_parser("contract", help="the data contract version the desktop app checks (read-only, no profile)")
     x.set_defaults(fn=cmd_contract)
 
@@ -1468,7 +1480,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 READ_ONLY = {"status", "plan", "validate", "digest", "host", "onboard-scan", "onboard-verify", "onboard-write", "install",
-             "tickets", "status-of", "web", "zed-setup", "contract", "ticket-detail", "gate-request"}
+             "tickets", "status-of", "web", "zed-setup", "contract", "ticket-detail", "gate-request",
+             "transcripts"}
 NO_STATUS_REFRESH = READ_ONLY | {"git"}
 
 
