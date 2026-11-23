@@ -12,6 +12,7 @@ from typing import Any
 
 from .contract import CONTRACT_VERSION
 from .errors import HarnessError
+from .runner import runner_view
 
 HIDDEN_EVENTS = {"state-write"}
 STATUS_FILE = "STATUS.md"
@@ -95,6 +96,7 @@ def summarize(s: Any, events_limit: int = 40, detail: bool = False) -> dict[str,
         "questions": {"path": str(questions), "exists": questions.is_file()},
         "receipts": s.state.get("receipts") or {}, "shipped": s.state.get("shipped") or {},
         "events": shown[max(0, len(shown) - events_limit):], "integrity": problems or None,
+        "runner": runner_view(s.ticket.dir, events),  # autonomy / parked / run lease (harness/runner.py), additive
     }
     if detail:
         for n in nodes:
@@ -556,13 +558,15 @@ def inflight_report(profile: Path, now: float | None = None) -> dict[str, Any]:
         flying = in_flight(s, now)
         units += flying
         wait = waiting(s)
-        if not (flying or lock or wait["on"] == "user"):
-            continue
         events, _ = s.ticket.verify_log()
+        runner = runner_view(d, events)
+        if not (flying or lock or wait["on"] == "user" or runner["parked"] or runner["lease"]):
+            continue
         shown = [e for e in events if e.get("event") not in HIDDEN_EVENTS]
         tickets.append({
             "ticket": d.name, "title": _title(s), "waitingOn": wait["on"], "waitingNode": wait["node"],
             "waitingReason": wait["reason"], "inFlight": len(flying), "lock": lock,
+            "parked": runner["parked"], "lease": runner["lease"],
             "lastEventAt": shown[-1]["at"] if shown else None, "lastEventKind": shown[-1]["event"] if shown else None,
         })
     units.sort(key=lambda u: u["packetAt"])
