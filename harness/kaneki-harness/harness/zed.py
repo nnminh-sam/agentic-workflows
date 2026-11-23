@@ -32,6 +32,8 @@ def tasks(home: Path) -> list[dict[str, Any]]:
         task("validate profile", ["validate"]),
         # interactive: its own terminal tab; the ticket comes from the open file, else a picker (no open file -> ".")
         task("decide gate", ["decide", "--path", "${ZED_FILE:.}"], use_new_terminal=True),
+        # interactive too: walks the reflect proposals waiting for you (apply / reject / skip)
+        task("review learning", ["learn", "review"], use_new_terminal=True),
     ]
 
 

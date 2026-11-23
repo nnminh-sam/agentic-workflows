@@ -97,6 +97,7 @@ def summarize(s: Any, events_limit: int = 40, detail: bool = False) -> dict[str,
         "receipts": s.state.get("receipts") or {}, "shipped": s.state.get("shipped") or {},
         "events": shown[max(0, len(shown) - events_limit):], "integrity": problems or None,
         "runner": runner_view(s.ticket.dir, events),  # autonomy / parked / run lease (harness/runner.py), additive
+        "pendingProposals": _pending_proposals(s),  # reflect proposals nobody applied or rejected yet, additive
     }
     if detail:
         for n in nodes:
@@ -107,6 +108,15 @@ def summarize(s: Any, events_limit: int = 40, detail: bool = False) -> dict[str,
             "loopBacks": _loop_backs(s, events),
         })
     return summary
+
+
+def _pending_proposals(s: Any) -> int:
+    """Proposals in the ticket's proposals.json without a `sdlc learn` decision (harness/learn.py). 0 when unreadable."""
+    from . import learn
+    try:
+        return learn.pending_count(s.pdir, s.ticket.dir)
+    except (OSError, ValueError, HarnessError):
+        return 0
 
 
 def _node_detail(s: Any, node: str, wait: dict[str, Any]) -> dict[str, Any]:
@@ -714,6 +724,9 @@ def render_status_md(summary: dict[str, Any], mismatched_nodes: set[str] | None 
                   + " · `sdlc cost --ticket " + t["ticket"] + "`"]
     if (tdir / "token-usage.md").is_file():
         lines += ["", "**Token usage per node and agent:** [token-usage.md](token-usage.md)"]
+    if t.get("pendingProposals"):
+        lines += ["", f"**Learning:** {t['pendingProposals']} proposal(s) from the reflect node wait for your review: "
+                      "`sdlc learn review` (or the Zed task `kaneki: review learning`); nothing changes until you apply one"]
     if t["questions"]["exists"]:
         lines += ["", f"**Open questions:** [questions.md]({_rel(t['questions']['path'], tdir)})"]
     lines += ["", "## Recent decisions", ""]

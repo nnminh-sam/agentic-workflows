@@ -3,7 +3,7 @@
 Decision D10: learning output needs the user's approval before it changes anything, and the harness never rewrites
 its own graph, gates or driver. The reflect node therefore only PRODUCES proposals (`<ticketDir>/proposals.json`,
 checked against contracts/proposal.schema.json at its gate). Applying them (`sdlc learn apply / revert`), lessons in
-packets and the cross-ticket retro belong to the next track (M4·2 / M4·3), which reads the formats defined here.
+packets and the cross-ticket retro live in harness/learn.py (M4·2 / M4·3), which reads the formats defined here.
 
 Signals are what went wrong on a ticket, read from the hash-chained decision log, the node records and two ticket
 files. Every signal has a stable `id`; each closed reflect gate logs the ids it `covered`, so a later round (a PR review

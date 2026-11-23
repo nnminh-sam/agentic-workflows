@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "sdlc-proposal@1",
   "title": "Learning proposal",
-  "description": "One item of `<ticketDir>/proposals.json` ({\"schemaVersion\": 1, \"ticket\": \"<id>\", \"proposals\": [...]}), written by the reflect node. A proposal changes nothing by itself (decision D10): only the user approves it (`sdlc learn apply --actor user`, next track), which copies it to `.sdlc/learning/` as a lesson (lesson.schema.json). Beyond this schema the reflect gate refuses: an unknown type, scope nodes not in the graph, unknown stacks, absolute or `..` scope paths, evidence that does not resolve (decisions.jsonl line or path:line), and prose (title, body, metric, baseline) that contains commands, tool names, destinations (URL, address, IP, share) or paths outside scope.paths.",
+  "description": "One item of `<ticketDir>/proposals.json` ({\"schemaVersion\": 1, \"ticket\": \"<id>\", \"proposals\": [...]}), written by the reflect node. A proposal changes nothing by itself (decision D10): only the user approves it (`sdlc learn apply --actor user`, or `sdlc learn review` at a terminal), which copies it to `.sdlc/learning/` as a lesson (lesson.schema.json). Beyond this schema the reflect gate refuses: an unknown type, scope nodes not in the graph, unknown stacks, absolute or `..` scope paths, evidence that does not resolve (decisions.jsonl line or path:line), and prose (title, body, metric, baseline) that contains commands, tool names, destinations (URL, address, IP, share) or paths outside scope.paths.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -71,7 +71,7 @@
         "stacks",
         "paths"
       ],
-      "description": "Where it applies; the next track filters lessons into packets by node, stack and path.",
+      "description": "Where it applies; packets carry an applied lesson by node, stack and path.",
       "properties": {
         "nodes": {
           "type": "array",

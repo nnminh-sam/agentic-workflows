@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "sdlc-lesson@1",
   "title": "Approved lesson",
-  "description": "A proposal (proposal.schema.json) the user approved, stored under `.sdlc/learning/` by `sdlc learn apply --actor user` (next track, M4·2/M4·3). Packets include active lessons whose appliesTo matches the node, stack and touched paths; the retro counts hits and retires lessons that had no effect; `sdlc learn revert` retires one by hand. Type `harness` never becomes a lesson: the harness does not rewrite its own graph, gates or driver.",
+  "description": "A proposal (proposal.schema.json) the user approved, stored under `.sdlc/learning/` by `sdlc learn apply --actor user` (M4·2/M4·3) in `.sdlc/learning/lessons.json`. Packets include active `lesson` lessons whose appliesTo matches the node, stack and (when known) authorized paths; a `rule` lesson is also a rule of `.sdlc/learning/rulepack.learned.json`; a `profile` lesson is a suggestion file only. The retro (`sdlc learn retro`) measures each lesson and flags the ones with no effect, it never retires one; `sdlc learn revert` retires one by hand. Type `harness` never becomes a lesson: the harness does not rewrite its own graph, gates or driver.",
   "type": "object",
   "additionalProperties": false,
   "required": [
