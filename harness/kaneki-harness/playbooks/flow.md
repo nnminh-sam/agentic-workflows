@@ -126,11 +126,16 @@ the user approves the exact request (`sdlc ship-request` → approval → `sdlc 
      its predecessor's `PASS`. The controller never fills a missing unit.
    - (If `execution.dispatchMode == "subprocess"`, `sdlc dispatch --ticket <id> --node <n> --unit <u> --facts <file>`
      builds the packet, spawns the external CLI runner, and records the result automatically.)
-4. **Verify, then record.** Confirm the result file exists and check its digest (`sdlc digest`); spot-check
-   the cited `path:line` evidence via `INSPECT_CODE`. Then run `DRIVER_CALL` (unless `sdlc dispatch` already recorded):
-   `$SDLC record --ticket <id> --node <n> --unit <u> --result <file> --model <actual-model> --tokens <n> [--verdict ...]`
-   Always pass `--tokens` when reported by the subagent completion notice so `## Token usage` and
-   `token-usage.md` stay accurate. On reviewer `FAIL`: `record`-class → fix the record and re-record;
+4. **Verify, then record.** Confirm the result file exists and check its digest (`sdlc digest <file>`); run
+   `$SDLC check --ticket <id> --node <n> --unit <u>` (the gate's content checks as a dry run; the unit should have run
+   it already) and send a unit with problems back instead of recording; spot-check the cited `path:line` evidence via
+   `INSPECT_CODE`. Then run `DRIVER_CALL` (unless `sdlc dispatch` already recorded):
+   `$SDLC record --ticket <id> --node <n> --unit <u> --result <file> --model <actual-model> [--tokens <n>] [--verdict ...]`
+   The driver measures what the unit consumed from its own log (`tokens`, split by class, plus USD); `--tokens`, the
+   agent's last-turn context size, is kept only as `contextAtEnd`. Record **every** dispatch: a run you stop, that
+   times out or that you give up on is `$SDLC record ... --model <m> --status abandoned --reason '<why>'` (no result
+   file); its tokens are counted and the next packet is the next round. The gate refuses a node with a unit log that
+   has no record. On reviewer `FAIL`: `record`-class → fix the record and re-record;
    `artifact`-class → build a round-2 packet with `findingsToFix` and invoke `RESUME_UNIT` (or fresh `DISPATCH_UNIT`),
    then run one more reviewer round.
 5. **Doubts.** Classify every doubt as `HIGH` (changes what/where/tests/evidence) or `LOW`. Ask `HIGH` doubts

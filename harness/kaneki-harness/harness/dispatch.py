@@ -247,6 +247,16 @@ def run_dispatch(s: Any, node: str, unit_id: str, *, facts: str | None = None,
     logs_dir.mkdir(parents=True, exist_ok=True)
     log_path = logs_dir / f"{packet['dispatchId']}.dispatch.log"
 
+    def give_up(message: str) -> HarnessError:
+        """A dispatch that produced no usable result is still recorded (status abandoned, with what it spent), so no
+        unit log is left without a record; the next dispatch of the unit is the next round."""
+        if not no_record:
+            try:
+                cli.record_unit(s, node, unit_id, None, exe["model"], status="abandoned", reason=message)
+            except HarnessError:
+                pass
+        return HarnessError(message)
+
     try:
         proc = subprocess.run(argv, cwd=str(s.pdir), capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired as exc:
@@ -254,7 +264,7 @@ def run_dispatch(s: Any, node: str, unit_id: str, *, facts: str | None = None,
             f"$ {shlex.join(argv)}\nTIMEOUT after {timeout}s\n\n--- STDOUT ---\n{exc.stdout or ''}\n\n--- STDERR ---\n{exc.stderr or ''}\n",
             encoding="utf-8",
         )
-        raise HarnessError(f"dispatch {packet['dispatchId']} timed out after {timeout}s; see {log_path}")
+        raise give_up(f"dispatch {packet['dispatchId']} timed out after {timeout}s; see {log_path}")
 
     log_path.write_text(
         f"$ {shlex.join(argv)}\nexit={proc.returncode}\n\n--- STDOUT ---\n{proc.stdout}\n\n--- STDERR ---\n{proc.stderr}\n",
@@ -262,11 +272,11 @@ def run_dispatch(s: Any, node: str, unit_id: str, *, facts: str | None = None,
     )
 
     if proc.returncode != 0:
-        raise HarnessError(f"dispatch {packet['dispatchId']} failed with exit code {proc.returncode}; see {log_path}")
+        raise give_up(f"dispatch {packet['dispatchId']} failed with exit code {proc.returncode}; see {log_path}")
 
     result_path = Path(packet["resultPath"])
     if not result_path.is_file():
-        raise HarnessError(f"G7: dispatch produced no result file at {result_path}; see {log_path}")
+        raise give_up(f"G7: dispatch produced no result file at {result_path}; see {log_path}")
 
     tokens = extract_tokens(proc.stdout, proc.stderr)
     unit_spec = s.unit(node, unit_id)

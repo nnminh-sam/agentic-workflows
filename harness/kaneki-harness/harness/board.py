@@ -700,12 +700,14 @@ def render_status_md(summary: dict[str, Any], mismatched_nodes: set[str] | None 
     t = summary
     tdir = Path(t["ticketDir"])
     mismatched = mismatched_nodes or set()
+    tt = t.get("ticketTokens")  # usage.ticket_tokens: the total token-usage.md and `sdlc status` show too
     lines = [
         f"# {t['ticket']} · {t['kind']} · lane `{t['lane']}`",
         "",
         "> Written by the driver after every change. Do not edit: it is regenerated.",
         "",
-        f"**Progress:** {t['settled']}/{t['traceLength']} nodes · **Next:** {t['next']} · **Tokens:** {t['tokensTotal']}"
+        f"**Progress:** {t['settled']}/{t['traceLength']} nodes · **Next:** {t['next']} · **Tokens:** "
+        + (_total_line(t["ticketTokens"]) if t.get("ticketTokens") else str(t["tokensTotal"]))
         + (f" · **Agent:** {t['host']}" if t.get("host") else "")
         + (f" (also {', '.join(h for h in t['hosts'] if h != t['host'])})" if len(t.get("hosts") or []) > 1 else "")
         + (f" · **Review round:** {t['reviewRound']}" if t["reviewRound"] else ""),
@@ -725,21 +727,23 @@ def render_status_md(summary: dict[str, Any], mismatched_nodes: set[str] | None 
         if n["node"] in mismatched and model_col != "—":
             model_col += " ⚠"
         agent_col = ", ".join(n.get("hosts") or []) or "—"
+        toks = ((tt["nodes"].get(n["node"]) or {}).get("tokens") if tt else n["tokens"]) or ""
         lines.append(f"| {i} | {n['node']}{gen} | {ICON.get(n['status'], '')} {n['status']} | {verdict} | {who} | "
-                     f"{agent_col} | {model_col} | {n['tokens'] or ''} | {arts} |")
+                     f"{agent_col} | {model_col} | {f'{toks:,}' if toks else ''} | {arts} |")
+    if tt and (tt["nodes"].get("") or {}).get("tokens"):
+        lines += ["", f"Controller work not tied to a node (its `sdlc` calls named no `--node`): "
+                      f"{tt['nodes']['']['tokens']:,} tokens"]
     if mismatched:
         lines += ["", "> ⚠️ **Model verification:** one or more current-round units ran on an inherited or unverified host model."]
     if t.get("inFlight"):
         lines += ["", "**In flight** (packet rendered, no result recorded): " + "; ".join(
             f"{r['node']}/{r['unit']} r{r['round']} on {r['host'] or '?'} ({r['model'] or '?'}) since "
             f"`{r['packetAt'][:19].replace('T', ' ')}`" for r in t["inFlight"])]
-    m = t.get("measured")
-    if m:
-        from .cost import usd_label
-        usd = "USD unknown" if m["usd"] is None else f"${m['usd']:,.2f} ({usd_label(m)})"
-        lines += ["", f"**Measured** (agents' own logs, each API message once): {m['tokens']:,} tokens · {usd}"
-                  + f" · reported {m['reportedTokens']:,}" + (f" (x{m['ratio']})" if m.get("ratio") is not None else "")
-                  + " · `sdlc cost --ticket " + t["ticket"] + "`"]
+    if tt and tt["source"] == "measured":
+        from .cost import fmt_split
+        lines += ["", f"**Measured** (agents' own logs, each API message once): {_total_line(tt)} · "
+                      f"units {tt['units']['tokens']:,} · controller {tt['controller']['tokens']:,} · {fmt_split(tt['total'])}"
+                      f" · agents' own `--tokens` {tt['reportedTokens']:,} · `sdlc cost --ticket {t['ticket']}`"]
     b = t.get("budget")
     if b and b.get("level") in ("ok", "warn", "over"):
         from .budget import line
@@ -757,6 +761,11 @@ def render_status_md(summary: dict[str, Any], mismatched_nodes: set[str] | None 
     for e in reversed(t["events"][-12:]):
         lines.append(f"- `{e['at'][:19].replace('T', ' ')}` **{e['event']}** " + _event_text(e))
     return "\n".join(lines) + "\n"
+
+
+def _total_line(tt: dict[str, Any]) -> str:
+    from .usage import total_line
+    return total_line(tt)
 
 
 def _event_text(e: dict[str, Any]) -> str:
@@ -786,8 +795,8 @@ def write_status(s: Any) -> Path:
         if any(u.get("generation") == rec.get("generation") and u.get("modelMismatch") for u in rec.get("units", []))
     }
     summary = summarize(s)
-    from . import cost
-    summary["measured"] = cost.status_field(s.ppath, s.ctx["ticket"])  # cached by log fingerprint; None if unreadable
+    from . import usage
+    summary["ticketTokens"] = usage.ticket_tokens(s.ppath, s.ctx["ticket"], s.order, s.state["nodes"])  # cached by log fingerprint
     path.write_text(render_status_md(summary, mismatched_nodes=mismatched), encoding="utf-8", newline="\n")
     return path
 
