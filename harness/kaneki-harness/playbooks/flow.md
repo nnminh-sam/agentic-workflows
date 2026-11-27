@@ -16,16 +16,17 @@ is `sdlc git`, which prints git's own output.
 
 ## Lanes: pick the smallest one that is safe
 
-`init --lane full|lite` (default `full`). The lane decides the trace; `plan` says `executor: controller`
+`init --lane standard|full|lite` (the driver's default is `full`; pass the lane). The lane decides the trace; `plan` says `executor: controller`
 for a node you do yourself and `subagents` for one you dispatch.
 
 | Lane | Trace | Use for |
 | --- | --- | --- |
 | `lite` | scope (user approves) → change → check (1 routine reviewer) → delivery-drafts → deliverable-ready | CSS, copy, config value, a contained fix whose cause is already known; ≤ ~5 files; no data/schema/API/auth/shared-flow change |
-| `full` | prepare (worktree) → analysis → plan (user approves) → coding ⇄ staged review (technical, then semantic) → test cases ⇄ review → evidence → final review → drafts → deliverable-ready | everything else |
+| `standard` | prepare (worktree, baseline, env check) → one deep plan unit + plan reviewer, every business question in one batch (user approves) → test cases ⇄ test-case judge → coding ⇄ parallel review → evidence + two judges → final review → drafts by you, checked against the repo rules → deliverable-ready | a typical feature or bug: the default |
+| `full` | prepare (worktree, baseline) → requirement analysis → impact analysis → plan + plan review (user approves) → test cases ⇄ test-case judge → coding ⇄ parallel review (technical ∥ semantic) → evidence + two judges → final review → drafts → deliverable-ready | shared flows, data/API/schema/auth changes, several repositories, or a requirement that needs its own analysis |
 
-- The user picks with `--lite` / `--full`. Without a flag, propose `lite` when the request clearly fits the
-  row above and confirm once via `ASK_USER` (Lite / Full); otherwise use `full` without asking.
+- The user picks with `--lite` / `--standard` / `--full`. Without a flag, propose `lite` when the request clearly
+  fits its row and confirm once via `ASK_USER`; otherwise use `standard`, or `full` when its row applies.
 - `lite` works **in place** in the repository checkout, on the ticket branch the `change` node creates; no
   worktree, no test-case files, no surface evidence, no families.
 - Escalate the moment a `scope` answer is "no", the change spreads past its files, or `check` finds a design
@@ -47,9 +48,14 @@ or automatic review-failure escalation, and bound to a concrete model/runner by 
 | `routine` | Analysis, test cases, technical review, evidence, final review | analysis, impact, plan (feature), test cases and their review, **technical review**, evidence and its audit, final review |
 | `deep` | Diagnosis, complex planning, semantic review, triage | investigate, fix-plan, requirement review, **semantic review**, triage |
 
-- `code-review` is staged: `technical-review` first; `semantic-review` only after it recorded `PASS` at the
-  current generation (the driver refuses the packet and the record otherwise). A technical `FAIL` closes the
-  node with `needs-changes` at once, so the `deep` tier is spent only on technically clean rounds.
+- `code-review` runs `technical-review` and `semantic-review` in parallel (D3); either `FAIL` closes the node with
+  `needs-changes`.
+- Start every node in `status --compact`'s `ready` list, not only `nextPending` (D6): independent nodes run at once.
+- A fix that touches only tests or only docs reopens coding on the small path (D4):
+  `$SDLC invalidate --ticket <id> --node coding --small tests|docs --reason '...'` keeps code-review (and, for docs,
+  the evidence run); the coding gate refuses any other file change.
+- When final review, a PR review or the user overturns an evidence judge's verdict, record it:
+  `$SDLC judge-miss --ticket <id> --check TC-n.aN --reason '<what, with a citation>'` (J5).
 - After two failed code-review rounds, `plan` shows `coding` moved from `light` to `routine` (`escalated`).
   Always follow the `execution` block (`model`, `effort`, `dispatchMode`) returned by `plan` or `packet`.
 - `packet` inlines the tier's `roleCard` directly (including `deep`'s 5-step adversarial reasoning protocol),
@@ -126,16 +132,27 @@ the user approves the exact request (`sdlc ship-request` → approval → `sdlc 
      its predecessor's `PASS`. The controller never fills a missing unit.
    - (If `execution.dispatchMode == "subprocess"`, `sdlc dispatch --ticket <id> --node <n> --unit <u> --facts <file>`
      builds the packet, spawns the external CLI runner, and records the result automatically.)
-4. **Verify, then record.** Confirm the result file exists and check its digest (`sdlc digest`); spot-check
-   the cited `path:line` evidence via `INSPECT_CODE`. Then run `DRIVER_CALL` (unless `sdlc dispatch` already recorded):
-   `$SDLC record --ticket <id> --node <n> --unit <u> --result <file> --model <actual-model> --tokens <n> [--verdict ...]`
-   Always pass `--tokens` when reported by the subagent completion notice so `## Token usage` and
-   `token-usage.md` stay accurate. On reviewer `FAIL`: `record`-class → fix the record and re-record;
+4. **Verify, then record.** Confirm the result file exists and check its digest (`sdlc digest <file>`); run
+   `$SDLC check --ticket <id> --node <n> --unit <u>` (the gate's content checks as a dry run; the unit should have run
+   it already) and send a unit with problems back instead of recording; spot-check the cited `path:line` evidence via
+   `INSPECT_CODE`. Then run `DRIVER_CALL` (unless `sdlc dispatch` already recorded):
+   `$SDLC record --ticket <id> --node <n> --unit <u> --result <file> --model <actual-model> [--tokens <n>] [--verdict ...]`
+   The driver measures what the unit consumed from its own log (`tokens`, split by class, plus USD); `--tokens`, the
+   agent's last-turn context size, is kept only as `contextAtEnd`. Record **every** dispatch: a run you stop, that
+   times out or that you give up on is `$SDLC record ... --model <m> --status abandoned --reason '<why>'` (no result
+   file); its tokens are counted and the next packet is the next round. The gate refuses a node with a unit log that
+   has no record. On reviewer `FAIL`: `record`-class → fix the record and re-record;
    `artifact`-class → build a round-2 packet with `findingsToFix` and invoke `RESUME_UNIT` (or fresh `DISPATCH_UNIT`),
    then run one more reviewer round.
-5. **Doubts.** Classify every doubt as `HIGH` (changes what/where/tests/evidence) or `LOW`. Ask `HIGH` doubts
-   and fired gates (`G1`/`G3`/`G5`/`G6`/`G7`) via `ASK_USER` (recommended option first, one doubt per question,
-   evidence in the artifact, no raw file paths in option labels). Record `LOW` doubts in the artifact.
+5. **Doubts.** Classify every doubt as `HIGH` (changes what/where/tests/evidence) or `LOW`, and as `business`,
+   `infra` or `critical-logic`; a point a judge can settle from the requirements and evidence (test validity,
+   coverage, wording) is not a question: the reviewing unit decides it with citations. Add each with
+   `$SDLC ask --ticket <id> --node <n> --class ... --severity ... --question '...' --recommend '...'` (units do the
+   same). Before the plan node closes, run `$SDLC questions --ticket <id>` and ask **every open question in one
+   `ASK_USER` round** (recommended option first, no raw file paths in option labels; split only where the tool caps
+   the count), then record each answer with `$SDLC answer --ticket <id> --id Q-n --answer '...' --actor user`; close
+   LOW ones you settle with `--adopt`. The plan node refuses to close over an open HIGH question (`G1`). Fired gates
+   (`G3`/`G5`/`G6`/`G7`) are still asked via `ASK_USER` when they fire.
 6. **Close.** Run `DRIVER_CALL`: `$SDLC gate --ticket <id> --node <n> --status approved [--actor user]`.
    - `boundary: user` nodes (`fix-plan`, `feature-plan`, `deliverable-ready`, `triage-review`, `respond-review`, `scope`)
      confirm **Proceed / Re-run / Stop** via `ASK_USER` first, then close with `--actor user`. `--auto` skips this
@@ -144,13 +161,23 @@ the user approves the exact request (`sdlc ship-request` → approval → `sdlc 
      `NEEDS CHANGES`; at the loop cap (default 2) `G4` fires — ask the user via `ASK_USER`, then repeat with `--actor user`.
    - `triage-review` closes with `--reopen <earliest invalidated node>` or `--reopen none`.
 7. **Report.** After every closed node, state in one line what closed and what is next, and link `STATUS.md`.
-   After `code-review` and `execute-and-evidence`, write `HANDOFF.md` (progress, next node, open questions,
-   last decisions) and suggest starting a fresh session.
+   At each phase boundary (plan approved, code review closed, evidence closed) and before you stop, run
+   `$SDLC handoff --ticket <id>` and continue in a fresh session that starts from `HANDOFF.md` (D9).
+
+## Lean controller (D9)
+
+- You drive the driver; the units and judges do the judging. Run on Sonnet (`/model sonnet`; the runner starts its
+  sessions with `controllerModel`, default `sonnet`), in a fresh session per phase started from `HANDOFF.md`.
+- Never read a whole artifact, diff or log. Ask the driver: `status --compact` (with `ready`), `check`, `questions`,
+  `judge-facts`, `evidence status`. Unit hand-backs are at most 15 lines; the detail stays in the result file.
+- Closed nodes are immutable: never edit an artifact of a node whose gate closed (the deliverable gate compares
+  digests). To change one, reopen its node with `invalidate`.
 8. Repeat from step 1 until `nextPending` is `null`.
 
 ## Recovery
 
 - Earlier artifact is wrong → `$SDLC invalidate --ticket <id> --node <earliest wrong node> --reason '<what>'`.
+  Manual reopens count toward `gates.loopCap` like review loop-backs: once a node reached the cap, `invalidate` refuses with `G4`; ask the user, then repeat with `--actor user`.
 - Receipt expired (`deliverable-ready` refuses) → `$SDLC receipts --ticket <id> --reissue`. Never invalidate for a TTL lapse.
 - Checkout changed after receipts → invalidate the node owning the change (normally `coding`).
 - Three fixes against the same root cause → invalidate `investigate` (`G1`).
@@ -179,7 +206,7 @@ lesson id and source ticket, never instructions.
 
 <HARD-GATE>
 Analyze before code: `coding` (`change` in `lite`) never starts before the plan node (`scope`) is approved with
-`--actor user` (or `gates.autoSkipPlanApproval`), and every HIGH question in `questions.md` is ANSWERED with evidence.
+`--actor user` (or `gates.autoSkipPlanApproval`), and every HIGH question in the batch (`sdlc questions`) is answered by the user (the plan gate enforces it, `G1`).
 Never commit, push or open a PR here: only `kaneki-ship` does, after explicit user approval. Never deploy, delete work,
 change git identity, or print secrets. Never skip a fired gate. Never start a node before the previous node's gate
 record exists. Every claim cites `path:line`, a command run with its result, or an evidence file; no source means `UNKNOWN`.
@@ -196,7 +223,7 @@ record exists. Every claim cites `path:line`, a command run with its result, or 
 | G5 | test/rule applicability or expected value is ambiguous |
 | G6 | shared-state mutation, real device, missing runtime config, ambiguous result |
 | G7 | missing/unsafe prerequisite: file, adapter, tool, permission, model, supervision evidence |
-| G8 | budget: a profile `budgets` cap (ticket, node, local day) is reached; `packet` refuses, the runner parks. Ask the user: raise the cap, or `$SDLC budget --ticket T --allow-node N --reason ... --actor user` (this node's current round only), or stop. `warn` level only prints `budgetWarning` |
+| G8 | budget: a `budgets` cap (ticket, node incl. its `minutes` wall clock from the round's first packet, local day; no block = harness defaults, `{}` = off) is reached; `packet` refuses, the runner parks. Ask the user: raise the cap, or `$SDLC budget --ticket T --allow-node N --reason ... --actor user` (this node's current round only), or stop. `warn` level only prints `budgetWarning` |
 
 ## Where project specifics live
 

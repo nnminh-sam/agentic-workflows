@@ -26,7 +26,7 @@ def git(repo: Path, *args: str) -> str:
 class Flow(Base):
     def to(self, t: str, last: str) -> None:
         """Run a bug ticket through every node up to and including `last`."""
-        order = ["prepare", "investigate", "fix-plan", "coding", "code-review", "testcase", "testcase-review",
+        order = ["prepare", "investigate", "fix-plan", "testcase", "testcase-review", "coding", "code-review",
                  "execute-and-evidence", "final-review", "delivery-drafts", "deliverable-ready"]
         for node in order[: order.index(last) + 1]:
             self.complete(t, node, actor="user" if node in ("fix-plan", "deliverable-ready") else "controller")
@@ -160,6 +160,10 @@ class ContentCheckTests(Flow):
         code, pk = run("packet", "--ticket", "C-1", "--node", "fix-plan", "--unit", "worker", *self.p)
         Path(pk["resultPath"]).write_text("ok")
         run("record", "--ticket", "C-1", "--node", "fix-plan", "--unit", "worker", "--result", pk["resultPath"], "--model", "opus", *self.p)
+        code, pk = run("packet", "--ticket", "C-1", "--node", "fix-plan", "--unit", "reviewer", *self.p)  # D2: plan reviewer
+        Path(pk["resultPath"]).write_text("Verdict: PASS")
+        run("record", "--ticket", "C-1", "--node", "fix-plan", "--unit", "reviewer", "--result", pk["resultPath"],
+            "--model", "opus", "--verdict", "PASS", *self.p)
         code, res = run("gate", "--ticket", "C-1", "--node", "fix-plan", "--status", "approved", "--actor", "user", *self.p)
         self.assertEqual(code, 2)
         self.assertIn("missing section `## Test intent`", res["error"])
@@ -183,7 +187,7 @@ class ContentCheckTests(Flow):
 
     def test_broken_citation_fails_a_receipt_node(self) -> None:
         run("init", "--ticket", "C-3", "--kind", "bug", *self.p)
-        self.to("C-3", "fix-plan")
+        self.to("C-3", "testcase-review")
         self.write_artifacts("C-3", "coding")
         impl = self.tdir("C-3") / "implementation.md"
         impl.write_text(impl.read_text(encoding="utf-8") + "\nChanged `main.py:1` and `main.py:99`.\n", encoding="utf-8")

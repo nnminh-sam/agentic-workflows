@@ -13,6 +13,8 @@ per node, invalidations with their cause, lane changes, host switches, tier esca
 their class, non-G0 gate firings, HIGH questions the user answered, accepted PR findings and the node triage
 reopened, citation warnings. Each item has an `id`, a `ref` (`decisions.jsonl#<line>` or `<file>:<line>`) and `new`.
 Open the referenced artifacts in the ticket folder to find the cause; do not re-review the code.
+When an evidence step file needed a helper the project's evidence kit lacks (`.sdlc/adapters/evidence/<project>/kit.json`,
+refused before the run), propose it as a `harness`-type proposal with the helper's steps and where it is tested.
 
 Write in the ticket folder only:
 

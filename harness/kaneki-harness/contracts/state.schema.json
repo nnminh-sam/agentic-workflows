@@ -151,6 +151,11 @@
             "type": "integer",
             "minimum": 0
           },
+          "reopens": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "times this node itself was reopened in the current round (review loop-back or manual invalidate); counts toward gates.loopCap"
+          },
           "verdict": {
             "type": [
               "string",

@@ -334,6 +334,41 @@ class TranscriptsTests(Base):
         self.assertEqual([(c["command"], c["ticket"], c["node"], c["unit"]) for c in b.sdlc],
                          [("packet", self.t, self.node, "worker"), ("record", "T2", "n", None)])
 
+    def test_sdlc_call_parsing_host_launchers(self) -> None:
+        """Controller lines as Claude Code ran them on feature-flags: the host launcher sdlc-claude(.cmd), quoted or
+        not, as a relative or absolute path, after `cd ...;` or `Set-Location ...;`."""
+        lines = [
+            r"cd D:\workspace\HAISE\wp-kaneki; .sdlc\bin\sdlc-claude.cmd gate --ticket feature-flags --node coding --status approved",
+            r".sdlc\bin\sdlc-claude.cmd plan --ticket feature-flags --card",
+            r"Set-Location D:\workspace\HAISE\wp-kaneki; .sdlc\bin\sdlc-claude.cmd packet --ticket feature-flags "
+            r"--node final-review --unit worker --facts .sdlc\tickets\feature-flags\facts-final-review-worker.json",
+            r"cd D:\workspace\HAISE\wp-kaneki; .sdlc\bin\sdlc-claude.cmd invalidate --ticket feature-flags --node coding --reason x",
+            r'& "D:\workspace\HAISE\wp-kaneki\.sdlc\bin\sdlc-claude.cmd" record --ticket feature-flags --node reflect --unit worker',
+            "/d/workspace/HAISE/wp-kaneki/.sdlc/bin/sdlc-claude dispatch --ticket feature-flags --node coding",
+            # read-only commands do not attribute: anyone looking at a ticket runs them, also after it shipped
+            "'.sdlc/bin/sdlc-codex' check --ticket feature-flags --node code-review --unit worker",
+            r".sdlc\bin\sdlc-claude.cmd status --ticket feature-flags --compact",
+            ".sdlc/bin/sdlc cost --ticket feature-flags",
+            # a shell variable is not a node name: the call counts for the ticket, its node is unknown
+            "for n in coding reflect; do .sdlc/bin/sdlc gate --ticket feature-flags --node $n; done",
+            r'foreach ($n in "a","b") { .sdlc\bin\sdlc.cmd record --ticket feature-flags --node $n --unit ${u} }',
+        ]
+        b = S._Builder("claude", self.profile, 20, 120, time.time())
+        for line in lines:
+            b.add("tool", "", TS, {"name": "PowerShell", "input": {"command": line}})
+        self.assertEqual([(c["command"], c["node"], c["unit"]) for c in b.sdlc],
+                         [("gate", "coding", None), ("plan", None, None), ("packet", "final-review", "worker"),
+                          ("invalidate", "coding", None), ("record", "reflect", "worker"), ("dispatch", "coding", None),
+                          ("gate", None, None), ("record", None, None)])
+        self.assertTrue(all(c["ticket"] == "feature-flags" for c in b.sdlc))
+        # the .sdlc folder itself is not a launcher
+        self.assertIsNone(S.SDLC_RE.search(r"Get-Content .sdlc\tickets\feature-flags\plan.md"))
+        # a file edit that only mentions a call is not a call
+        b2 = S._Builder("claude", self.profile, 5, 120, time.time())
+        b2.add("tool", "", TS, {"name": "Edit", "input": {"file_path": "t.py", "old_string": "x", "new_string": lines[0]}})
+        b2.add("tool", "", TS, {"name": "Write", "input": {"file_path": "t.py", "content": lines[1]}})
+        self.assertEqual(b2.sdlc, [])
+
     def test_split_dispatch(self) -> None:
         self.assertEqual(S.split_dispatch("code-review.g2.semantic-review.r3", ["code-review"]),
                          {"node": "code-review", "generation": 2, "unit": "semantic-review", "round": 3})

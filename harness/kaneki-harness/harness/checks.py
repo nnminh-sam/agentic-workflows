@@ -6,6 +6,7 @@ The graph declares per node `checks: {"<artifact>": {"sections": [...], "parsers
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -107,6 +108,12 @@ def check_artifact(text: str, spec: dict[str, Any], ctx: dict[str, Any]) -> list
         elif parser == "proposals":  # proposals.json of the reflect node (contracts/proposal.schema.json)
             from .learning import proposal_problems
             problems += proposal_problems(text, ctx["proposals"]) if ctx.get("proposals") else ["no proposal context"]
+        elif parser == "testcases":  # testcases.json (contracts/testcases.schema.json)
+            from .evidence import testcases_problems
+            problems += testcases_problems(text)
+        elif parser == "evidence":  # evidence.json, against the ticket's testcases.json
+            from .evidence import evidence_problems
+            problems += evidence_problems(text, ctx["ticketDir"]) if ctx.get("ticketDir") else ["no ticket context"]
         elif parser == "reopen":
             m = REOPEN_RE.findall(text)
             if not m:
@@ -118,17 +125,60 @@ def check_artifact(text: str, spec: dict[str, Any], ctx: dict[str, Any]) -> list
     return problems
 
 
-def citations(text: str, roots: list[Path]) -> list[str]:
-    """Port (light) of wms-flow `verify-subject`: every backticked `path:line[-line]` must name an existing file in
-    one of the roots (repository checkouts, the ticket folder) with that many lines."""
+SKIP_DIRS = frozenset({".git", "node_modules", ".next", "dist", "build", "out", ".venv", "venv", "vendor", "__pycache__",
+                       "coverage", ".turbo", ".cache", "target", ".gradle", ".idea"})
+MAX_INDEXED_FILES = 200_000
+
+
+def _file_index(root: Path) -> list[str]:
+    """Every file under `root` as a posix path relative to it, dependency and build folders skipped."""
+    out: list[str] = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
+        rel = Path(dirpath).relative_to(root).as_posix()
+        out += [f if rel == "." else f"{rel}/{f}" for f in filenames]
+        if len(out) > MAX_INDEXED_FILES:
+            break
+    return out
+
+
+def resolve_cited(rel: str, roots: list[Path], search_roots: list[Path] | None = None,
+                  index: dict[str, list[str]] | None = None) -> tuple[Path | None, int]:
+    """(file, matches) for a cited path: relative to one of `roots`; else a bare name or partial path
+    (`flags.ts`, `graph/page.tsx`) that names exactly one file under `search_roots` (matches > 1: ambiguous). Without
+    `search_roots` only the exact relative form resolves."""
+    target = next((r / rel for r in roots if (r / rel).is_file()), None)
+    if target is not None:
+        return target, 1
+    index = {} if index is None else index
+    hits: dict[str, Path] = {}
+    for r in search_roots or []:
+        if not r.is_dir():
+            continue
+        files = index.setdefault(str(r), _file_index(r))
+        for f in files:
+            if f == rel or f.endswith("/" + rel):
+                p = r / f
+                hits[os.path.normcase(str(p.resolve()))] = p
+    if len(hits) == 1:
+        return next(iter(hits.values())), 1
+    return None, len(hits)
+
+
+def citations(text: str, roots: list[Path], search_roots: list[Path] | None = None) -> list[str]:
+    """Port (light) of wms-flow `verify-subject`: every backticked `path:line[-line]` must name an existing file
+    with that many lines: relative to one of the roots (repository checkouts, the ticket folder, the project), or a
+    bare file name / partial path that is unique under `search_roots` (default: none, exact paths only)."""
     broken = []
+    index: dict[str, list[str]] = {}
     for m in CITATION_RE.finditer(text):
         rel, a, b = m.group(1).replace("\\", "/"), int(m.group(2)), int(m.group(3) or m.group(2))
         if rel.startswith(("http", "www.")):
             continue
-        target = next((r / rel for r in roots if (r / rel).is_file()), None)
+        target, matches = resolve_cited(rel, roots, search_roots, index)
         if target is None:
-            broken.append(f"`{rel}:{m.group(2)}` (file not found)")
+            broken.append(f"`{rel}:{m.group(2)}` " + (f"(ambiguous: {matches} files match; cite the repo-relative path)"
+                                                      if matches > 1 else "(file not found)"))
             continue
         try:
             with target.open("rb") as fh:

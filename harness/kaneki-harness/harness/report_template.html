@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tester Notebook</title>
+<style>
+:root{
+  --bg:#f7f6f3;--surface:#ffffff;--surface-2:#f0eee9;--border:#e2dfd8;--text:#1d1c1a;--muted:#6b675f;--faint:#9a958b;
+  --accent:#3d5afe;--accent-soft:#e8ecff;
+  --pass:#1f8a4c;--pass-soft:#e3f4ea;--partial:#b7791f;--partial-soft:#fbf0dc;--notrun:#6b675f;--notrun-soft:#ecebe7;
+  --fail:#c62828;--fail-soft:#fce4e4;--crit:#8e24aa;--crit-soft:#f3e5f6;
+  --code-bg:#f5f4f0;--hl:#fff4c2;
+  --radius:10px;--shadow:0 1px 2px rgba(0,0,0,.05),0 2px 8px rgba(0,0,0,.04);
+  --mono:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#141413;--surface:#1c1b1a;--surface-2:#252422;--border:#34322f;--text:#ecebe7;--muted:#a8a49b;--faint:#77736b;
+  --accent:#8c9eff;--accent-soft:#232a4d;
+  --pass:#5cc98a;--pass-soft:#16301f;--partial:#e3b25b;--partial-soft:#352a14;--notrun:#a8a49b;--notrun-soft:#2a2927;
+  --fail:#ff7b72;--fail-soft:#3a1d1c;--crit:#d48ee6;--crit-soft:#33203a;--code-bg:#181817;--hl:#3b3517;
+  --shadow:none;}}
+:root[data-theme="dark"]{
+  --bg:#141413;--surface:#1c1b1a;--surface-2:#252422;--border:#34322f;--text:#ecebe7;--muted:#a8a49b;--faint:#77736b;
+  --accent:#8c9eff;--accent-soft:#232a4d;
+  --pass:#5cc98a;--pass-soft:#16301f;--partial:#e3b25b;--partial-soft:#352a14;--notrun:#a8a49b;--notrun-soft:#2a2927;
+  --fail:#ff7b72;--fail-soft:#3a1d1c;--crit:#d48ee6;--crit-soft:#33203a;--code-bg:#181817;--hl:#3b3517;--shadow:none;}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:72px}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 var(--sans);-webkit-font-smoothing:antialiased}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+code,.mono{font-family:var(--mono);font-size:.88em}
+.topbar{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;padding:10px 20px}
+.topbar .brand{font-weight:650;letter-spacing:-.01em;white-space:nowrap}
+.topbar .brand small{color:var(--muted);font-weight:500;margin-left:6px}
+.topbar .spacer{flex:1}
+.progress{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);white-space:nowrap}
+.bar{width:120px;height:6px;border-radius:3px;background:var(--surface-2);overflow:hidden}
+.bar>span{display:block;height:100%;background:var(--accent);transition:width .2s}
+button{font:inherit;cursor:pointer}
+.btn{border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:8px;padding:6px 12px;font-size:13px}
+.btn:hover{border-color:var(--faint)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.icon-btn{border:1px solid var(--border);background:var(--surface);color:var(--muted);border-radius:8px;width:32px;height:32px;display:grid;place-items:center}
+.layout{display:grid;grid-template-columns:232px minmax(0,1fr);max-width:1320px;margin:0 auto}
+nav.toc{position:sticky;top:53px;height:calc(100vh - 53px);overflow:auto;padding:20px 12px 40px 20px;border-right:1px solid var(--border);font-size:13.5px}
+nav.toc a{display:block;color:var(--muted);padding:4px 8px;border-radius:6px}
+nav.toc a:hover{background:var(--surface-2);color:var(--text);text-decoration:none}
+nav.toc .sub{padding-left:18px;font-size:12.5px}
+nav.toc .grp{margin:14px 8px 4px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint)}
+main{padding:24px 32px 80px;min-width:0}
+section{margin-bottom:44px}
+h1{font-size:26px;line-height:1.25;letter-spacing:-.02em;margin:0 0 6px}
+h2{font-size:19px;letter-spacing:-.01em;margin:0 0 4px}
+h2+.lede{color:var(--muted);margin:0 0 16px;font-size:14px}
+.meta{color:var(--muted);font-size:13px;display:flex;flex-wrap:wrap;gap:6px 16px;margin-bottom:16px}
+.banner{border:1px dashed var(--border);background:var(--surface);border-radius:var(--radius);padding:10px 14px;font-size:13px;color:var(--muted);margin-bottom:20px}
+.banner b{color:var(--text)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow)}
+.verdict{padding:20px 22px;display:grid;gap:18px}
+.verdict .headline{font-size:20px;font-weight:650;letter-spacing:-.01em}
+.verdict .gap{color:var(--muted);font-size:14px;margin-top:4px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.stat{background:var(--surface-2);border-radius:8px;padding:12px 14px}
+.stat .n{font-size:24px;font-weight:650;font-variant-numeric:tabular-nums;line-height:1.1}
+.stat .l{font-size:12px;color:var(--muted);margin-top:2px}
+.stack{display:flex;height:10px;border-radius:5px;overflow:hidden;background:var(--surface-2)}
+.stack span{display:block;height:100%}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--muted);margin-top:8px}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.chip{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:1px 9px;font-size:12px;font-weight:560;white-space:nowrap;border:1px solid transparent}
+.v-pass{background:var(--pass-soft);color:var(--pass)}.v-partial{background:var(--partial-soft);color:var(--partial)}
+.v-not-run{background:var(--notrun-soft);color:var(--notrun)}.v-fail{background:var(--fail-soft);color:var(--fail)}
+.r-critical{background:var(--crit-soft);color:var(--crit)}.r-normal,.r-low,.lvl{background:transparent;color:var(--muted);border-color:var(--border)}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;font-weight:600;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;padding:10px 12px;border-bottom:1px solid var(--border)}
+td{padding:12px;border-bottom:1px solid var(--border);vertical-align:top}
+tr:last-child td{border-bottom:none}
+.ac-id{font-weight:650;white-space:nowrap}
+.ac-text{max-width:460px}
+.small{font-size:12.5px;color:var(--muted)}
+.mini-stack{display:flex;height:6px;border-radius:3px;overflow:hidden;width:120px;background:var(--surface-2);margin-top:6px}
+.decide{display:flex;gap:4px;flex-wrap:wrap}
+.decide button{border:1px solid var(--border);background:var(--surface);color:var(--muted);border-radius:7px;padding:3px 9px;font-size:12.5px}
+.decide button:hover{color:var(--text);border-color:var(--faint)}
+.decide button[aria-pressed="true"].d-accept{background:var(--pass-soft);color:var(--pass);border-color:var(--pass)}
+.decide button[aria-pressed="true"].d-question{background:var(--partial-soft);color:var(--partial);border-color:var(--partial)}
+.decide button[aria-pressed="true"].d-reject{background:var(--fail-soft);color:var(--fail);border-color:var(--fail)}
+.note{width:100%;margin-top:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);border-radius:7px;padding:6px 8px;font:13px var(--sans);resize:vertical;min-height:32px;display:none}
+.note.show{display:block}
+.eyes{display:grid;gap:10px}
+.eye{padding:14px 16px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 16px;align-items:start}
+.eye .kind{font-size:11px;text-transform:uppercase;letter-spacing:.06em;font-weight:650}
+.eye .t{font-weight:580;margin:2px 0}
+.eye .d{font-size:13.5px;color:var(--muted)}
+.eye .refs{font-size:12.5px;margin-top:4px}
+.eye .refs a{margin-right:6px}
+.eye .note{grid-column:1/-1}
+.k-fail{color:var(--fail)}.k-uncovered{color:var(--crit)}.k-partial{color:var(--partial)}.k-risk{color:var(--notrun)}.k-judgement,.k-doubt{color:var(--accent)}.k-decision{color:var(--pass)}
+.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px;position:sticky;top:53px;z-index:5;background:var(--bg);padding:8px 0}
+.filters select,.filters input[type=search]{border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:8px;padding:6px 10px;font:13px var(--sans)}
+.filters input[type=search]{flex:1;min-width:160px}
+.filters .count{font-size:13px;color:var(--muted);margin-left:auto}
+details.case{margin-bottom:8px}
+details.case>summary{list-style:none;cursor:pointer;padding:11px 14px;display:grid;grid-template-columns:64px minmax(0,1fr) auto;gap:10px;align-items:center}
+details.case>summary::-webkit-details-marker{display:none}
+details.case>summary .id{font-family:var(--mono);font-size:13px;font-weight:650}
+details.case>summary .ttl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+details.case>summary .chips{display:flex;gap:6px;align-items:center}
+details.case[open]>summary{border-bottom:1px solid var(--border)}
+details.case[open]>summary .ttl{white-space:normal}
+.case-body{padding:16px 18px;display:grid;gap:16px}
+.kv{display:grid;grid-template-columns:130px minmax(0,1fr);gap:6px 14px;font-size:14px}
+.kv dt{color:var(--muted);font-size:12.5px;padding-top:2px}
+.kv dd{margin:0}
+.asserts{margin:0;padding:0;list-style:none;display:grid;gap:6px}
+.asserts li{display:grid;grid-template-columns:22px minmax(0,1fr);gap:8px;font-size:14px;padding:8px 10px;border-radius:8px;background:var(--surface-2)}
+.asserts .mark{font-weight:700;text-align:center}
+.result{border-left:3px solid var(--border);padding:6px 12px;font-size:14px}
+.result.v-pass{border-color:var(--pass);background:transparent;color:inherit}.result.v-partial{border-color:var(--partial);background:transparent;color:inherit}
+.result.v-fail{border-color:var(--fail);background:transparent;color:inherit}.result.v-not-run{border-color:var(--notrun);background:transparent;color:inherit}
+.result .lab{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+.ev h4{margin:0 0 8px;font-size:13px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+.excerpt{border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:10px}
+.excerpt .hd{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:6px 10px;background:var(--surface-2);font-size:12.5px;flex-wrap:wrap}
+.excerpt .hd .p{font-family:var(--mono);font-size:12px;word-break:break-all}
+.excerpt .ok{color:var(--pass);font-family:var(--mono);font-size:12px}
+.excerpt .nolog{color:var(--faint);font-size:12px}
+.code{margin:0;background:var(--code-bg);overflow:auto;max-height:360px;font:12.5px/1.5 var(--mono)}
+.code table{font:inherit;border-collapse:collapse;width:auto;min-width:100%}
+.code td{border:none;padding:0 10px;white-space:pre;vertical-align:top}
+.code td.ln{color:var(--faint);text-align:right;user-select:none;padding-right:8px;border-right:1px solid var(--border)}
+.code tr.assert td:not(.ln){background:var(--hl)}
+.hist{display:flex;gap:10px;flex-wrap:wrap}
+.hist figure{margin:0;width:200px}
+.hist img{width:200px;border-radius:6px;border:1px solid var(--border);display:block}
+.hist figcaption{font-size:11.5px;color:var(--muted);margin-top:4px;word-break:break-all}
+.tag-hist{display:inline-block;font-size:11px;background:var(--partial-soft);color:var(--partial);border-radius:4px;padding:1px 6px;margin-left:6px}
+.repro{font-family:var(--mono);font-size:12px;background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;overflow:auto;white-space:pre}
+.delta{font-size:12.5px;color:var(--accent)}
+.empty{color:var(--faint);font-size:13.5px;font-style:italic}
+.cov td.path{font-family:var(--mono);font-size:12.5px;word-break:break-all}
+.cov .none{color:var(--crit);font-weight:600}
+.cov .plus{color:var(--pass);font-variant-numeric:tabular-nums}
+.list{margin:0;padding-left:18px}.list li{margin-bottom:8px}
+.hidden{display:none!important}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:8px 14px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.show{opacity:1}
+.ready{padding:14px 16px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.ready .msg{flex:1;min-width:200px;font-size:14px}
+@media (max-width:900px){.layout{grid-template-columns:1fr}nav.toc{display:none}main{padding:16px}
+  .topbar{padding:8px 16px}.bar{width:70px}.kv{grid-template-columns:1fr}.eye{grid-template-columns:1fr}
+  details.case>summary{grid-template-columns:56px minmax(0,1fr)}details.case>summary .chips{grid-column:1/-1}.topbar .brand small{display:none}}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="brand">Tester Notebook<small id="tb-ticket"></small></div>
+  <div class="spacer"></div>
+  <span class="small" title="This page is a read-only view of the ticket's test artifacts">read-only view</span>
+  <button class="icon-btn" id="theme" title="Toggle light/dark" aria-label="Toggle theme">◐</button>
+</div>
+<div class="layout">
+  <nav class="toc" id="toc"></nav>
+  <main id="main"></main>
+</div>
+<div class="toast" id="toast"></div>
+<script>const DATA = /*__DATA__*/null;</script>
+<script>
+(function(){
+"use strict";
+const D = DATA;
+const $ = (s, r=document) => r.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const VERDICTS = ["pass","partial","not-run","fail"];
+const VLABEL = {"pass":"Pass","partial":"Partly proven","not-run":"Not run","fail":"Fail"};
+const VCOLOR = {"pass":"var(--pass)","partial":"var(--partial)","not-run":"var(--notrun)","fail":"var(--fail)"};
+const LEVELS = ["static","build","unit","component","handler","live"];
+const LLABEL = {static:"static read",build:"build/typecheck",unit:"unit test",component:"component test",handler:"handler/action call",live:"live surface"};
+const byId = Object.fromEntries(D.cases.map(c => [c.id, c]));
+
+/* ---------- view only: no review state, no decisions (the judges decide; this page only looks back) ---------- */
+const review = {};
+const save = () => {};
+
+/* ---------- derived ---------- */
+function acStats(ac){
+  const cs = D.cases.filter(c => c.ac.includes(ac.id));
+  const n = Object.fromEntries(VERDICTS.map(v => [v, cs.filter(c => c.verdict === v).length]));
+  const passLv = cs.filter(c => c.verdict === "pass").map(c => LEVELS.indexOf(c.level));
+  const top = passLv.length ? LEVELS[Math.max(...passLv)] : null;
+  const live = cs.filter(c => c.level === "live");
+  const status = n.fail ? "fail" : (cs.length && n.pass === cs.length ? "pass" : (n.pass ? "partial" : "not-run"));
+  return {cs, n, top, live, status};
+}
+const AC_STATUS = {"pass":"Proven","partial":"Partly proven","not-run":"Not proven","fail":"Failing"};
+
+function eyesItems(){
+  const items = [];
+  D.cases.filter(c => c.verdict === "fail").forEach(c => items.push({id:`fail:${c.id}`, kind:"fail", cls:"determinable", label:"Failing case",
+    title:`${c.id} ${c.title}`, detail:c.resultText, refs:[c.id]}));
+  D.changed.filter(f => !f.isTest && !f.cases.length).forEach(f => items.push({id:`uncovered:${f.path}`, kind:"uncovered", cls:"determinable",
+    label:"Changed code, no case", title:f.path, detail:`+${f.added} / −${f.removed} lines changed, and no test cited by any case imports or cites this file (rule EVD-E).`, refs:[]}));
+  D.cases.filter(c => c.verdict === "partial" && c.risk === "critical").forEach(c => items.push({id:`partial:${c.id}`, kind:"partial", cls:"judgeable",
+    label:"Critical case, partly proven", title:`${c.id} ${c.title}`, detail:c.resultText, refs:[c.id]}));
+  D.unproven.forEach((u,i) => items.push({id:`risk:${i}`, kind:"risk", cls:"infra", label:"Not proven live",
+    title:u.text.split(/[.(]/)[0], detail:u.text, refs:u.cases}));
+  D.judgements.forEach((j,i) => items.push({id:`judgement:${i}`, kind:"judgement", cls:"judgeable", label:"Auditor judgement call",
+    title:j.split(":")[0], detail:j, refs:(j.match(/TC-\d+/g)||[]).filter(x=>byId[x])}));
+  D.doubts.forEach((d,i) => items.push({id:`doubt:${i}`, kind:"doubt", cls:"judgeable", label:"Open doubt from final review",
+    title:d.replace(/^LOW:\s*/,"").split(/[;(]/)[0], detail:d, refs:(d.match(/TC-\d+/g)||[]).filter(x=>byId[x])}));
+  D.decisions.forEach((d,i) => items.push({id:`decision:${i}`, kind:"decision", cls:"record", label:"Decision taken during the run",
+    title:d.split(/[.(;]/)[0], detail:d, refs:(d.match(/TC-\d+/g)||[]).filter(x=>byId[x])}));
+  return items;
+}
+const EYES = eyesItems();
+
+/* ---------- small renderers ---------- */
+const chipV = v => `<span class="chip v-${v}">${VLABEL[v]}</span>`;
+const chipL = l => `<span class="chip lvl" title="How it was proven">${esc(LLABEL[l]||l)}</span>`;
+const chipR = r => r === "critical" ? `<span class="chip r-critical" title="Risk tier (inferred in this backfill)">critical</span>` : "";
+function stackBar(n, total, cls="stack"){
+  return `<div class="${cls}">` + VERDICTS.map(v => n[v] ? `<span style="width:${100*n[v]/total}%;background:${VCOLOR[v]}" title="${VLABEL[v]}: ${n[v]}"></span>` : "").join("") + `</div>`;
+}
+const CLASS = {determinable:["Determinable","driver decides","var(--accent)"], judgeable:["Judgeable","evidence judge decides, with citations","var(--pass)"],
+  infra:["Escalate · infra","asked to you","var(--fail)"], business:["Escalate · business","asked to you","var(--fail)"], record:["Recorded decision","kept for look-back","var(--muted)"]};
+function classTag(cls){ const c = CLASS[cls]; return c ? `<span class="chip" style="border-color:${c[2]};color:${c[2]}" title="${esc(c[1])}">${esc(c[0])}</span><div class="small" style="margin-top:4px">${esc(c[1])}</div>` : ""; }
+function decideBox(id, labels){
+  if (true) return "";
+  const r = review[id] || {};
+  const L = labels || {accept:"Accept", question:"Question", reject:"Reject"};
+  return `<div class="decide" data-item="${esc(id)}">` +
+    ["accept","question","reject"].map(k => `<button class="d-${k}" data-d="${k}" aria-pressed="${r.d===k}">${L[k]}</button>`).join("") +
+    `</div><textarea class="note${r.d && r.d!=="accept" || r.note ? " show":""}" data-note="${esc(id)}" placeholder="Why? (goes into the review file and back to the node that owns the fix)">${esc(r.note||"")}</textarea>`;
+}
+function codeBlock(e){
+  const rows = e.lines.map((t,i) => {
+    const isA = /\bassert\.|expect\(/.test(t);
+    return `<tr class="${isA?"assert":""}"><td class="ln">${e.start+i}</td><td>${esc(t)}</td></tr>`;
+  }).join("");
+  const log = e.kind === "test" ? (e.log ? `<span class="ok" title="Line ${e.log.line} of ${esc(D.sources.log)}">✔ ${esc(e.log.text)} · log:${e.log.line}</span>` : `<span class="nolog">no 'ok' line found in the run log</span>`) : "";
+  return `<div class="excerpt"><div class="hd"><span class="p">${esc(e.path)}:${e.start}</span>${log}</div><div class="code"><table>${rows}</table></div></div>`;
+}
+
+/* ---------- page ---------- */
+function render(){
+  $("#tb-ticket").textContent = `${D.ticket} · ${D.head}`;
+  const tot = D.cases.length;
+  const n = Object.fromEntries(VERDICTS.map(v => [v, D.cases.filter(c => c.verdict === v).length]));
+  const acS = D.acs.map(a => ({a, s:acStats(a)}));
+  const proven = acS.filter(x => x.s.status === "pass").length;
+  const partly = acS.filter(x => x.s.status === "partial").length;
+  const failing = acS.filter(x => x.s.status === "fail").length;
+  const liveRun = D.cases.filter(c => c.level === "live" && c.verdict === "pass").length;
+  const liveAll = D.cases.filter(c => c.level === "live").length;
+  const uncovered = D.changed.filter(f => !f.isTest && !f.cases.length);
+  const gap = liveRun === 0 && liveAll ? `Nothing was proven on a running app: ${liveAll} live cases were not run, so every “partly proven” criterion rests on unit and handler tests only.` : "";
+
+  let h = "";
+  h += `<section id="overview">
+    <h1>${esc(D.title)}</h1>
+    <div class="meta"><span>Ticket <b>${esc(D.ticket)}</b></span><span>Change <code>${esc(D.base)}..${esc(D.head)}</code></span><span>Generated ${esc(D.generatedAt)}</span><span>${tot} test cases · ${D.acs.length} acceptance criteria</span></div>
+    <div class="banner"><b>Read-only view of the ticket's test artifacts</b>, for looking back. It is not a gate: in the new flow the driver and the evidence judge decide, and only business, infra or critical-logic questions without a citation reach you. This copy was backfilled from markdown artifacts, so each case has one status (assertions inherit it), and risk tiers are inferred from the test-case section.</div>
+    <div class="card verdict">
+      <div><div class="headline">${proven} of ${D.acs.length} acceptance criteria proven · ${partly} partly · ${failing} failing</div>
+      ${gap ? `<div class="gap">Biggest gap: ${esc(gap)}</div>` : ""}</div>
+      <div>${stackBar(n, tot)}<div class="legend">${VERDICTS.map(v => `<span><i style="background:${VCOLOR[v]}"></i>${VLABEL[v]} ${n[v]}</span>`).join("")}</div></div>
+      <div class="stats">
+        <div class="stat"><div class="n">${n.pass}</div><div class="l">cases fully proven</div></div>
+        <div class="stat"><div class="n">${n.partial}</div><div class="l">ran, but part of the expected result unchecked</div></div>
+        <div class="stat"><div class="n">${liveRun}/${liveAll}</div><div class="l">live cases run</div></div>
+        <div class="stat"><div class="n">${uncovered.length}</div><div class="l">changed source files no case proves</div></div>
+        <div class="stat"><div class="n">${EYES.filter(e=>e.cls==="infra"||e.cls==="business").length}</div><div class="l">would be escalated to you (of ${EYES.length} findings)</div></div>
+      </div>
+    </div>
+  </section>`;
+
+  h += `<section id="acs"><h2>Acceptance criteria</h2><p class="lede">The ticket's own criteria. Each row shows the cases behind it and the strongest way any of them was proven.</p>
+    <div class="card" style="overflow-x:auto"><table><thead><tr><th>Criterion</th><th>Status</th><th>Proof</th></tr></thead><tbody>` +
+    acS.map(({a,s}) => `<tr id="${a.id}"><td><div class="ac-id">${a.id}</div><div class="ac-text">${esc(a.text)}</div><div class="small">${a.reqs.map(esc).join(", ")}</div></td>
+      <td>${chipV(s.status).replace(VLABEL[s.status], AC_STATUS[s.status])}${stackBar(s.n, s.cs.length||1, "mini-stack")}
+        <div class="small" style="margin-top:4px"><a href="#cases" data-filter-ac="${a.id}">${s.cs.length} cases</a> · ${s.n.pass} pass · ${s.n.partial} partly · ${s.n["not-run"]} not run</div></td>
+      <td class="small">${s.top ? `Strongest: <b style="color:var(--text)">${esc(LLABEL[s.top])}</b>` : "No passing case"}<br>${s.live.length ? `Live: ${s.live.filter(c=>c.verdict==="pass").length} of ${s.live.length} run` : "No live cases"}</td></tr>`).join("") +
+    `</tbody></table></div></section>`;
+
+  const kinds = [...new Set(EYES.map(e => e.kind))];
+  const byCls = Object.keys(CLASS).map(k => `${CLASS[k][0]} ${EYES.filter(e => e.cls === k).length}`).join(" · ");
+  h += `<section id="eyes"><h2>Findings and who settles them</h2><p class="lede">Everything not mechanically proven, tagged with the class that decides it in the new flow (${esc(byCls)}). Only the "Escalate" items would reach you.</p><div class="eyes">` +
+    EYES.map(e => `<div class="card eye" id="eye-${esc(e.id)}"><div><div class="kind k-${e.kind}">${esc(e.label)}</div><div class="t">${esc(e.title)}</div><div class="d">${esc(e.detail)}</div>
+      ${e.refs.length ? `<div class="refs">${e.refs.map(r => `<a href="#case-${r}" data-open="${r}">${r}</a>`).join("")}</div>` : ""}</div>
+      <div style="min-width:170px">${classTag(e.cls)}</div></div>`).join("") +
+    `</div></section>`;
+
+  h += `<section id="cases"><h2>Cases</h2><p class="lede">Each card answers what is checked, why it matters, what was expected, what was observed, and the exact code and log line that prove it. Lines highlighted in the code are the assertions.</p>
+    <div class="filters">
+      <select id="f-ac"><option value="">All criteria</option>${D.acs.map(a => `<option value="${a.id}">${a.id}</option>`).join("")}</select>
+      <select id="f-v"><option value="">All results</option>${VERDICTS.map(v => `<option value="${v}">${VLABEL[v]}</option>`).join("")}</select>
+      <select id="f-l"><option value="">All proof levels</option>${LEVELS.map(l => `<option value="${l}">${LLABEL[l]}</option>`).join("")}</select>
+      <select id="f-r"><option value="">All risk</option><option value="critical">Critical</option><option value="normal">Normal</option><option value="low">Low</option></select>
+      <input type="search" id="f-q" placeholder="Search cases, code, files…">
+      <span class="count" id="f-count"></span>
+    </div><div id="case-list">` + D.cases.map(caseCard).join("") + `</div></section>`;
+
+  h += `<section id="coverage"><h2>Change coverage</h2><p class="lede">Every file in the change, and the cases whose cited tests import it or whose evidence cites it. "No case" means no cited test imports or cites that file, so nothing in the evidence points at that change.</p>
+    <div class="card cov" style="overflow-x:auto"><table><thead><tr><th>File</th><th>Lines</th><th>Proven by</th></tr></thead><tbody>` +
+    [...D.changed].sort((a,b) => (a.isTest - b.isTest) || (a.cases.length - b.cases.length)).map(f => `<tr><td class="path">${esc(f.path)}${f.isTest ? ` <span class="small">(test)</span>` : ""}</td><td class="plus">+${f.added} −${f.removed}</td>
+      <td>${f.isTest ? `<span class="small">test file</span>` : f.cases.length ? f.cases.map(id => `<a href="#case-${id}" data-open="${id}">${id}</a>`).join(" ") : `<span class="none">no case</span>`}</td></tr>`).join("") +
+    `</tbody></table></div></section>`;
+
+  const deltas = D.cases.filter(c => c.delta);
+  h += `<section id="changed"><h2>Changed since the first evidence run</h2><p class="lede">Cases whose result changed between the first run report and the current one. In the full version this compares against the version you last reviewed.</p>` +
+    (deltas.length ? `<div class="card" style="overflow-x:auto"><table><thead><tr><th>Case</th><th>Before</th><th>Now</th></tr></thead><tbody>` +
+      deltas.map(c => `<tr><td><a href="#case-${c.id}" data-open="${c.id}">${c.id}</a> ${esc(c.title)}</td><td>${chipV(c.delta.from)}</td><td>${chipV(c.delta.to)}</td></tr>`).join("") + `</tbody></table></div>` : `<p class="empty">No changes.</p>`) + `</section>`;
+
+  h += `<section id="unproven"><h2>Not proven, and why</h2><p class="lede">What the evidence does not cover. If you accept the code, you accept these as untested.</p><div class="card" style="padding:16px 18px"><ul class="list">` +
+    D.unproven.map(u => `<li>${esc(u.text)}</li>`).join("") + `</ul></div></section>`;
+
+  h += `<section id="runs"><h2>Runs</h2><p class="lede">Commands run in the ticket worktree for this evidence.</p><div class="card" style="overflow-x:auto"><table><thead><tr><th>Command</th><th>Result</th><th>Log</th></tr></thead><tbody>` +
+    D.runs.map(r => `<tr><td class="mono">${esc(r.command)}</td><td>${esc(r.result)}</td><td class="mono small">${esc(r.log)}</td></tr>`).join("") +
+    `</tbody></table></div><p class="small" style="margin-top:10px">Sources: ${Object.values(D.sources).map(esc).join(" · ")}</p></section>`;
+
+  $("#main").innerHTML = h;
+
+  $("#toc").innerHTML = `<div class="grp">Review</div><a href="#overview">Overview</a><a href="#acs">Acceptance criteria</a>` +
+    D.acs.map(a => `<a class="sub" href="#${a.id}">${a.id} ${esc(a.text.slice(0,28))}…</a>`).join("") +
+    `<a href="#eyes">Findings <span class="small">(${EYES.length})</span></a>` +
+    kinds.map(k => `<a class="sub" href="#eye-${esc(EYES.find(e=>e.kind===k).id)}">${esc(EYES.find(e=>e.kind===k).label.split(" —")[0])}</a>`).join("") +
+    `<div class="grp">Evidence</div><a href="#cases">Cases <span class="small">(${tot})</span></a><a href="#coverage">Change coverage</a><a href="#changed">Changed since first run</a><a href="#unproven">Not proven</a><a href="#runs">Runs</a>`;
+  bind(); applyFilters(); updateProgress();
+}
+
+function caseCard(c){
+  const acs = c.ac.map(id => D.acs.find(a => a.id === id)).filter(Boolean);
+  const mark = c.verdict === "pass" ? `<span class="mark" style="color:var(--pass)">✔</span>` : c.verdict === "fail" ? `<span class="mark" style="color:var(--fail)">✘</span>` : c.verdict === "partial" ? `<span class="mark" style="color:var(--partial)">◐</span>` : `<span class="mark" style="color:var(--notrun)">–</span>`;
+  const ev = c.evidence.length ? c.evidence.map(codeBlock).join("") : `<p class="empty">No executed check is cited for this case.</p>`;
+  const hist = c.history.filter(p => p.endsWith(".png"));
+  const histOther = c.history.filter(p => !p.endsWith(".png"));
+  const search = [c.id, c.title, c.expected, c.resultText, c.auditNote, c.sectionName, ...c.evidence.map(e => e.path + " " + (e.title||""))].join(" ").toLowerCase();
+  return `<details class="card case" id="case-${c.id}" data-ac="${c.ac.join(" ")}" data-v="${c.verdict}" data-l="${c.level}" data-r="${c.risk}" data-q="${esc(search)}">
+    <summary><span class="id">${c.id}</span><span class="ttl">${esc(c.title)}</span><span class="chips">${chipR(c.risk)}${chipL(c.level)}${chipV(c.verdict)}</span></summary>
+    <div class="case-body">
+      ${c.malformed ? `<div class="banner" style="margin:0;border-color:var(--partial);color:var(--partial)">${esc(c.malformed)}</div>` : ""}
+      <dl class="kv">
+        <dt>Why it matters</dt><dd>${acs.map(a => `<b>${a.id}</b> ${esc(a.text)}`).join("<br>") || `<span class="empty">not linked to a criterion</span>`}<div class="small">${c.reqs.map(esc).join(", ")} · ${esc(c.sectionName)}</div></dd>
+        <dt>Surface</dt><dd>${esc(c.surface)}</dd>
+        <dt>Given</dt><dd>${esc(c.pre)}</dd>
+        <dt>When</dt><dd>${esc(c.steps)}</dd>
+      </dl>
+      <div><div class="small" style="margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em;font-weight:600">Expected · each line is one check</div>
+        <ul class="asserts">${c.assertions.map(a => `<li>${mark}<span>${esc(a)}</span></li>`).join("")}</ul></div>
+      <div class="result v-${c.verdict}"><div class="lab">Observed · ${esc(c.statusRaw)} · ${esc(c.method)}</div>${esc(c.resultText)}
+        ${c.auditNote ? `<div style="margin-top:6px"><span class="small">Auditor:</span> ${esc(c.auditNote)}</div>` : ""}
+        ${c.delta ? `<div class="delta">Changed: was ${VLABEL[c.delta.from]} (${esc(c.delta.fromText)}) in the first run.</div>` : ""}</div>
+      <div class="ev"><h4>Evidence</h4>${ev}
+        ${hist.length || histOther.length ? `<h4 style="margin-top:12px">Live-run captures <span class="tag-hist">unreviewed history — not evidence</span></h4>
+          <div class="hist">${hist.map(p => `<figure><a href="${esc(p)}" target="_blank" rel="noopener"><img loading="lazy" src="${esc(p)}" alt="${esc(p)}"></a><figcaption>${esc(p)}</figcaption></figure>`).join("")}</div>
+          ${histOther.length ? `<div class="small" style="margin-top:6px">${histOther.map(p => `<a href="${esc(p)}" target="_blank" rel="noopener">${esc(p.split("/").pop())}</a>`).join(" · ")}</div>` : ""}` : ""}
+      </div>
+      ${c.reproduce ? `<div><h4 class="small" style="margin:0 0 6px;text-transform:uppercase;letter-spacing:.05em">Reproduce (in the worktree)</h4><div class="repro">${esc(c.reproduce)}</div></div>` : ""}
+    </div></details>`;
+}
+
+/* ---------- behaviour ---------- */
+function applyFilters(){
+  const ac = $("#f-ac").value, v = $("#f-v").value, l = $("#f-l").value, r = $("#f-r").value, q = $("#f-q").value.trim().toLowerCase();
+  let shown = 0;
+  document.querySelectorAll("details.case").forEach(el => {
+    const ok = (!ac || el.dataset.ac.split(" ").includes(ac)) && (!v || el.dataset.v === v) && (!l || el.dataset.l === l) && (!r || el.dataset.r === r) && (!q || el.dataset.q.includes(q));
+    el.classList.toggle("hidden", !ok); if (ok) shown++;
+  });
+  $("#f-count").textContent = `${shown} of ${D.cases.length}`;
+}
+function openCase(id){
+  ["#f-ac","#f-v","#f-l","#f-r"].forEach(s => $(s).value = ""); $("#f-q").value = ""; applyFilters();
+  const el = document.getElementById("case-"+id); if (el){ el.open = true; el.scrollIntoView({behavior:"smooth", block:"start"}); }
+}
+function bind(){
+  ["#f-ac","#f-v","#f-l","#f-r"].forEach(s => $(s).addEventListener("change", applyFilters));
+  $("#f-q").addEventListener("input", applyFilters);
+  document.addEventListener("click", e => {
+    const o = e.target.closest("[data-open]"); if (o){ e.preventDefault(); openCase(o.dataset.open); return; }
+    const fa = e.target.closest("[data-filter-ac]"); if (fa){ e.preventDefault(); ["#f-v","#f-l","#f-r"].forEach(s => $(s).value=""); $("#f-q").value=""; $("#f-ac").value = fa.dataset.filterAc; applyFilters(); $("#cases").scrollIntoView({behavior:"smooth"}); return; }
+    const b = e.target.closest(".decide button"); if (b){
+      const box = b.parentElement, id = box.dataset.item, d = b.dataset.d;
+      const cur = review[id] || {};
+      review[id] = {...cur, d: cur.d === d ? undefined : d, at: new Date().toISOString()};
+      if (!review[id].d && !review[id].note) delete review[id];
+      box.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(review[id]?.d === x.dataset.d)));
+      const note = box.nextElementSibling; if (note) { note.classList.toggle("show", !!(review[id]?.d && review[id].d !== "accept") || !!review[id]?.note); if (d !== "accept" && review[id]?.d) note.focus(); }
+      save();
+    }
+  });
+  document.addEventListener("input", e => {
+    const t = e.target.closest("[data-note]"); if (!t) return;
+    const id = t.dataset.note; review[id] = {...(review[id]||{}), note: t.value, at: new Date().toISOString()}; save();
+  });
+}
+function allItems(){ return [...D.acs.map(a => "ac:"+a.id), ...EYES.map(e => "eye:"+e.id)]; }
+function updateProgress(){
+  if (!$("#prog-txt")) return;
+  const items = allItems(), done = items.filter(i => review[i]?.d).length;
+  $("#prog-txt").textContent = `${done}/${items.length} decided`;
+  $("#prog-bar").style.width = `${100*done/items.length}%`;
+  const rej = items.filter(i => review[i]?.d === "reject").length, q = items.filter(i => review[i]?.d === "question").length;
+  const el = $("#ready"); if (!el) return;
+  let msg, cls = "";
+  if (rej) { msg = `<b style="color:var(--fail)">Not accepted.</b> ${rej} item(s) rejected. Export the review; each rejection goes back to the node that owns the fix.`; }
+  else if (q) { msg = `<b style="color:var(--partial)">Questions open.</b> ${q} item(s) need an answer before the code can be accepted.`; }
+  else if (done === items.length) { msg = `<b style="color:var(--pass)">Ready to accept.</b> Every criterion and judgement item is decided with no rejections. Export the review to record the acceptance gate.`; }
+  else { msg = `<b>${items.length - done} decision(s) left</b> before you can accept: every acceptance criterion and every needs-your-eyes item.`; }
+  el.innerHTML = `<div class="msg">${msg}</div><button class="btn" id="jump-next">Next undecided</button>`;
+  $("#jump-next").onclick = () => { const n = items.find(i => !review[i]?.d); if (!n) return; const el2 = n.startsWith("ac:") ? document.getElementById(n.slice(3)) : document.getElementById("eye-"+n.slice(4)); el2?.scrollIntoView({behavior:"smooth", block:"center"}); };
+}
+$("#export")?.addEventListener("click", () => {
+  const items = allItems().map(id => ({id, decision: review[id]?.d || null, note: review[id]?.note || null, at: review[id]?.at || null}));
+  const out = {schemaVersion:1, kind:"evidence-review", ticket:D.ticket, base:D.base, head:D.head, exportedAt:new Date().toISOString(),
+    summary:{decided:items.filter(i=>i.decision).length, total:items.length, rejected:items.filter(i=>i.decision==="reject").length, questions:items.filter(i=>i.decision==="question").length}, items};
+  const blob = new Blob([JSON.stringify(out, null, 2)], {type:"application/json"});
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "evidence-review.json"; a.click(); URL.revokeObjectURL(a.href);
+  toast("Saved evidence-review.json");
+});
+function toast(t){ const el = $("#toast"); el.textContent = t; el.classList.add("show"); setTimeout(() => el.classList.remove("show"), 1800); }
+const THEME_KEY = "tester-notebook:theme";
+try { const t = localStorage.getItem(THEME_KEY); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+$("#theme").addEventListener("click", () => {
+  const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  document.documentElement.dataset.theme = dark ? "light" : "dark";
+  try { localStorage.setItem(THEME_KEY, document.documentElement.dataset.theme); } catch (e) {}
+});
+render();
+if (location.hash.startsWith("#case-")) openCase(location.hash.slice(6));
+})();
+</script>
+</body>
+</html>

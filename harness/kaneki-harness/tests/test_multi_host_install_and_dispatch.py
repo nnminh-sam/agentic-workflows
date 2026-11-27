@@ -183,6 +183,11 @@ class DispatchTests(Base):
                          "--host", "codex", "--command", cmd_no_file, *self.p)
         self.assertEqual(code, 2, err2)
         self.assertIn("G7:", err2["error"])
+        # both failed dispatches are recorded as abandoned rounds r1 and r2 (no unit log without a record)
+        units = json.loads((self.tdir("DS-1") / "state.json").read_text(encoding="utf-8"))["nodes"]["investigate"]["units"]
+        self.assertEqual([(u["status"], u["dispatchId"].rsplit(".", 1)[1]) for u in units],
+                         [("abandoned", "r1"), ("abandoned", "r2")])
+        self.assertIn("exit code 3", units[0]["reason"])
 
 
 if __name__ == "__main__":

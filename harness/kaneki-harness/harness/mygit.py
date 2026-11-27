@@ -63,6 +63,24 @@ def check_message(root: Path, message: str) -> list[str]:
     return [ln.strip() for ln in text.splitlines() if ln.strip()] or [f"check_message.py exited {res.returncode}"]
 
 
+def check_pr(root: Path, title: str, body: str) -> list[str]:
+    """my-git's PR rules on a draft title and body (GH005 title, GH008 required sections, GH009 no AI attribution);
+    the base/head rule (BR005) is ship's, not the draft's. [] when it passes."""
+    with tempfile.TemporaryDirectory(prefix="kaneki-pr-") as d:
+        f = Path(d) / "body.md"
+        f.write_text(body.rstrip() + "\n", encoding="utf-8")
+        res = subprocess.run([sys.executable, str(root / "scripts" / "check_pr.py"), "--title", title or "(no title)",
+                              "--body-file", str(f)],
+                             capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
+    if res.returncode == 0:
+        return []
+    lines = [ln.strip() for ln in (res.stdout + res.stderr).splitlines() if ln.strip()]
+    rules = [ln for ln in lines if ln.startswith(("DENY", "ASK"))]
+    if rules:
+        return [ln for ln in rules if "[BR005]" not in ln]  # a draft has no base/head: that rule is ship's
+    return lines or [f"check_pr.py exited {res.returncode}"]
+
+
 # --- install ---------------------------------------------------------------------------------------------------
 
 def _read(path: Path) -> dict[str, Any]:
@@ -85,6 +103,26 @@ def _same(a: str | None, b: Path) -> bool:
         return Path(a).resolve() == b.resolve()
     except OSError:
         return False
+
+
+def readiness(home: Path, project: Path) -> list[str]:
+    """B5: what would stop kaneki-ship with the my-git backend, checked before delivery (feature-flags shipped only
+    after the user installed my-git by hand). [] when ready: the plugin source is found and Claude Code has it
+    registered and enabled for this project (project settings, local settings or user settings)."""
+    root = find_root(home)
+    if root is None:
+        return ["the ship backend is my-git, but the my-git plugin source is not found next to the harness "
+                "(or at $SDLC_MYGIT)"]
+    for f in (project / ".claude" / "settings.local.json", project / ".claude" / "settings.json",
+              Path.home() / ".claude" / "settings.json"):
+        try:
+            data = _read(f)
+        except (OSError, ValueError):
+            continue
+        if _registered_path(data) and (data.get("enabledPlugins") or {}).get(PLUGIN_ID, True) is not False:
+            return []
+    return [f"the ship backend is my-git, but Claude Code does not have {PLUGIN_ID} registered for this project: run "
+            f"`sdlc install --target \"{project}\" --host claude --with-my-git`, then restart Claude Code"]
 
 
 def install(root: Path, project: Path, dry_run: bool = False, user_scope: bool = False) -> dict[str, Any]:

@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "A declarative evidence case (plan E2), run by harness/steps.py",
+  "description": "For a case that does not belong in the repository's tests. Validated before the run (schema, kit helpers, accounts, check ids), so a typo never costs a run and nothing is patched in place. ${P} is the current param, ${baseUrl} the evidence server, ${env.NAME} an env value, ${with.x} a helper argument, ${vars.x} a value captured earlier.",
+  "type": "object",
+  "required": ["case", "expect"],
+  "additionalProperties": false,
+  "properties": {
+    "case": {"type": "string", "pattern": "^TC-\\d+$"},
+    "params": {"type": "array", "minItems": 1, "description": "the case runs once per value; ${P} is the value"},
+    "as": {"type": "string", "description": "a kit account to log in as before the steps"},
+    "setup": {"type": "array", "items": {"type": "object"}},
+    "steps": {"type": "array", "items": {"type": "object"}},
+    "expect": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["check"],
+        "additionalProperties": false,
+        "properties": {
+          "check": {"type": "string", "pattern": "^(TC-\\d+\\.)?a\\d+$"},
+          "status": {"type": "integer"},
+          "textPresent": {"type": "array", "items": {"type": "string"}},
+          "textAbsent": {"type": "array", "items": {"type": "string"}},
+          "json": {"type": "object", "required": ["path"], "properties": {"path": {"type": "string"}, "equals": {}}},
+          "header": {"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}, "equals": {"type": "string"}, "contains": {"type": "string"}}}
+        }
+      }
+    },
+    "teardown": {"type": "array", "items": {"type": "object"}}
+  }
+}

@@ -22,7 +22,7 @@ class TierTests(Base):
     def to_code_review(self, t: str) -> None:
         code, res = run("init", "--ticket", t, "--kind", "bug", *self.p)
         self.assertEqual(code, 0, res)
-        for node in ("prepare", "investigate", "fix-plan", "coding"):
+        for node in ("prepare", "investigate", "fix-plan", "testcase", "testcase-review", "coding"):
             self.complete(t, node, actor="user" if node == "fix-plan" else "controller")
 
     def unit(self, t: str, node: str, unit: str, model: str, verdict: str | None = None) -> tuple[int, dict]:
@@ -65,27 +65,17 @@ class TierTests(Base):
         self.assertEqual(code, 2)
         self.assertIn("models.tiny is not a tier", res["error"])
 
-    def test_semantic_waits_for_technical_pass(self) -> None:
+    def test_reviews_run_in_parallel(self) -> None:
+        """D3: technical and semantic review start together; neither waits for the other."""
         self.to_code_review("S-1")
         code, plan = run("plan", "--ticket", "S-1", *self.p)
         self.assertEqual(plan["node"], "code-review")
         self.assertEqual([(u["id"], u["model"]) for u in plan["units"]],
                          [("technical-review", "sonnet"), ("semantic-review", "opus")])
-        self.assertFalse(plan["units"][1]["ready"])
+        self.assertFalse(any("ready" in u or "after" in u for u in plan["units"]))  # nothing staged
         code, res = self.unit("S-1", "code-review", "semantic-review", "opus", "PASS")
-        self.assertEqual(code, 2)
-        self.assertIn("no record at generation 1", res["error"])
-        # a technical FAIL keeps the deep tier closed: loop back instead
-        code, res = self.unit("S-1", "code-review", "technical-review", "sonnet", "FAIL")
-        self.assertEqual(code, 0, res)
-        code, res = self.unit("S-1", "code-review", "semantic-review", "opus", "PASS")
-        self.assertEqual(code, 2)
-        self.assertIn("close code-review with needs-changes", res["error"])
-        # a technical PASS (a second round) opens it
+        self.assertEqual(code, 0, res)  # before any technical record
         code, res = self.unit("S-1", "code-review", "technical-review", "sonnet", "PASS")
-        code, plan = run("plan", "--ticket", "S-1", *self.p)
-        self.assertTrue(plan["units"][1]["ready"])
-        code, res = self.unit("S-1", "code-review", "semantic-review", "opus", "PASS")
         self.assertEqual(code, 0, res)
         self.write_artifacts("S-1", "code-review")
         code, res = run("gate", "--ticket", "S-1", "--node", "code-review", "--status", "approved", *self.p)

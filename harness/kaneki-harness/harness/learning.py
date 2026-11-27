@@ -97,6 +97,14 @@ def collect(s: Any) -> dict[str, Any]:
                 sig["tierEscalations"].append({**base, "node": node, "unit": e.get("unit"), "planned": planned,
                                                "recorded": got, "model": e.get("model")})
     sig["questions"] = answered_high_questions(s.ticket.dir / "questions.md")
+    from . import questions as Q
+    try:
+        late = [q for q in Q.load(s.ticket.dir) if q.get("late")]
+    except Exception:  # noqa: BLE001 — a broken questions.json is the gate's finding, not reflect's
+        late = []
+    sig["questions"] += [{"id": f"q:late:{q['id']}", "ref": f"questions.json:{q['id']}", "late": True,
+                          "text": f"asked after the plan batch ({q['node']}, {q['class']}): {q['question'][:160]}"}
+                         for q in late]
     sig["prFindings"] = accepted_findings(s, events)
     new = 0
     for items in sig.values():
@@ -125,6 +133,8 @@ def planned_tier(s: Any, node: str | None, unit_id: str | None) -> str | None:
     unit = next((u for u in spec.get("units", []) if u["id"] == unit_id), None)
     if unit is None and unit_id == "reviewer" and spec.get("reviewer"):
         unit = {"id": "reviewer", "tier": spec["reviewer"]["tier"]}
+    if unit is None and unit_id == "reviewer-2" and (spec.get("reviewer") or {}).get("second"):
+        unit = {"id": "reviewer-2", "tier": spec["reviewer"]["second"]["tier"]}
     if unit is None:
         return None
     p_node = (s.profile.get("nodeOverrides") or {}).get(node) or {}

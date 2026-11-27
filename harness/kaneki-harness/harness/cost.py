@@ -47,7 +47,8 @@ from typing import Any, Iterable
 
 from . import sessions as S
 
-CACHE_VERSION = 2
+CACHE_VERSION = 6                     # 5: host launchers match SDLC_RE; edit text is not a call; rows per session
+                                      # 6: read-only commands (check) do not attribute; `--node $n` has no node
 HEAD_TEXT = 4000                      # characters kept per leading user message (the packet line is near the start)
 TOKEN_KEYS = ("input", "output", "cacheRead", "cacheWrite")
 PRICE_KEYS = TOKEN_KEYS               # USD per million tokens, one per token class
@@ -159,7 +160,7 @@ def _calls(tool_input: Any, at: float | None, seq: int) -> list[list[Any]]:
         if "sdlc" not in text and "cli" not in text:
             continue
         for m in S.SDLC_RE.finditer(text):
-            opts = {o.group("key"): o.group("val") for o in S.OPT_RE.finditer(m.group("rest"))}
+            opts = S.call_opts(m.group("rest"))
             if opts.get("ticket"):
                 found.append([at, opts["ticket"], opts.get("node"), opts.get("unit"), m.group("cmd"), seq])
     return found
@@ -625,7 +626,7 @@ def _records(srcs: list[tuple[str, Path, Any]], tickets: dict[str, dict[str, Any
                 who = (seg(at, idx) if own else seg(at)) if seg else None
                 kind = "controller"
             r = {"ticket": who[0] if who else None, "node": who[1] if who else None, "kind": kind,
-                 "dispatchId": exact["dispatchId"] if exact else None,
+                 "dispatchId": exact["dispatchId"] if exact else None, "session": path.stem,
                  "agent": agent, "model": model, "at": at if at is not None else s.get("mtimeNs", 0) / 1e9,
                  "input": i, "output": o, "cacheRead": cr, "cacheWrite": cw, "usd": None, "src": "unknown", "msgs": 1}
             if agent == "dispatch" and s.get("reportedUSD") is not None:
@@ -642,7 +643,8 @@ def _records(srcs: list[tuple[str, Path, Any]], tickets: dict[str, dict[str, Any
             who = (exact["ticket"], exact["node"]) if exact else seg(None)
             if who:
                 recs.append({"ticket": who[0], "node": who[1], "kind": "unit" if exact else "controller",
-                             "dispatchId": exact["dispatchId"] if exact else None, "agent": agent, "model": None,
+                             "dispatchId": exact["dispatchId"] if exact else None, "session": path.stem,
+                             "agent": agent, "model": None,
                              "at": s.get("mtimeNs", 0) / 1e9, "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0,
                              "usd": None, "src": "unknown", "msgs": 0, "unknownSteps": s["unknownSteps"]})
     # Claude Code's reported cost, spread over each family's messages of the same model
@@ -690,15 +692,20 @@ def _tokens(r: dict[str, Any]) -> int:
 
 
 def _rows(recs: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Records grouped by (ticket, node, kind, dispatchId, agent, model, src, local day): the cached form."""
+    """Records grouped by (ticket, node, kind, dispatchId, session, agent, model, src, local day): the cached form.
+    `session` is the log's file stem (a Claude subagent: agent-<id>), so the attempts of one dispatch stay apart;
+    `first` / `last` are the epoch times of the group's first and last message."""
     groups: dict[tuple[Any, ...], dict[str, Any]] = {}
     for r in recs:
-        key = (r["ticket"], r["node"], r["kind"], r["dispatchId"], r["agent"], r["model"], r["src"], _local_day(r["at"]))
+        key = (r["ticket"], r["node"], r["kind"], r["dispatchId"], r.get("session"), r["agent"], r["model"], r["src"],
+               _local_day(r["at"]))
         g = groups.get(key)
         if g is None:
-            g = groups[key] = {"ticket": key[0], "node": key[1], "kind": key[2], "dispatchId": key[3], "agent": key[4],
-                               "model": key[5], "src": key[6], "day": key[7], "msgs": 0, "usd": None,
-                               "unknownSteps": 0, **{k: 0 for k in TOKEN_KEYS}}
+            g = groups[key] = {"ticket": key[0], "node": key[1], "kind": key[2], "dispatchId": key[3], "session": key[4],
+                               "agent": key[5], "model": key[6], "src": key[7], "day": key[8], "msgs": 0, "usd": None,
+                               "unknownSteps": 0, "first": r["at"], "last": r["at"], **{k: 0 for k in TOKEN_KEYS}}
+        g["first"] = min(g["first"], r["at"])
+        g["last"] = max(g["last"], r["at"])
         for k in TOKEN_KEYS:
             g[k] += r.get(k) or 0
         g["msgs"] += r.get("msgs") or 0
@@ -731,13 +738,22 @@ def rows(profile_path: Path, ticket: str | None = None) -> dict[str, Any]:
     return res
 
 
+def reported_tokens(u: dict[str, Any]) -> int | None:
+    """What a unit record says the agent reported with `sdlc record --tokens`: `contextAtEnd` (records since the driver
+    measures), else `tokens` of an older record without a measurement."""
+    if "contextAtEnd" in u:
+        return u["contextAtEnd"]
+    return None if u.get("tokensSource") == "measured" else u.get("tokens")
+
+
 def _reported(state: dict[str, Any]) -> dict[str, Any]:
-    """Self-reported tokens (`sdlc record --tokens`), per node over all generations: usage.py's lower bound."""
+    """Self-reported tokens (`sdlc record --tokens`), per node over all generations. That number is the agent's last-turn
+    context size, not what it consumed: it is kept only for comparison with the measured numbers."""
     out: dict[str, Any] = {}
     for node, rec in (state.get("nodes") or {}).items():
-        units = (rec.get("units") or []) if isinstance(rec, dict) else []
-        out[node] = {"tokens": sum(u.get("tokens") or 0 for u in units if isinstance(u, dict)),
-                     "rounds": len(units), "unreported": sum(1 for u in units if isinstance(u, dict) and u.get("tokens") is None)}
+        units = [u for u in ((rec.get("units") or []) if isinstance(rec, dict) else []) if isinstance(u, dict)]
+        out[node] = {"tokens": sum(reported_tokens(u) or 0 for u in units),
+                     "rounds": len(units), "unreported": sum(1 for u in units if reported_tokens(u) is None)}
     return out
 
 
@@ -885,6 +901,73 @@ def measured(profile_path: Path, ticket: str | None = None, node: str | None = N
     d = parse_day(day) if isinstance(day, str) else day
     return _total(r for r in data["rows"] if (ticket is None or r["ticket"] == ticket)
                   and (node is None or r["node"] == node) and _in_window(r, d, d))
+
+
+def dispatch_usage(profile_path: Path, ticket: str, dispatch_id: str) -> dict[str, Any] | None:
+    """What one dispatch (one packet: `<node>.g<gen>.<unit>.r<round>`) consumed, from the unit logs that carry its
+    packet line (or its dispatch log): the total per token class plus USD, and one entry per attempt (agent session),
+    oldest first. A packet handed to two sessions (a run abandoned, then dispatched again) has two attempts. None when
+    no log of this dispatch was found (an agent whose logs are not readable here)."""
+    data = rows(profile_path, ticket)
+    mine = [r for r in data["rows"] if r["ticket"] == ticket and r["dispatchId"] == dispatch_id
+            and r["kind"] in ("unit", "dispatch")]
+    if not mine:
+        return None
+    by_session: dict[str, list[dict[str, Any]]] = {}
+    for r in mine:
+        by_session.setdefault(str(r.get("session") or r["dispatchId"]), []).append(r)
+    attempts = []
+    for sess, rws in by_session.items():
+        tot = _total(rws)
+        attempts.append({"session": sess, "first": min(r["first"] for r in rws), "last": max(r["last"] for r in rws),
+                         "tokens": tot["tokens"], "usd": tot["usd"], "messages": tot["messages"],
+                         "models": sorted({str(r["model"]) for r in rws if r["model"]})})
+    attempts.sort(key=lambda a: a["first"])
+    return {"dispatchId": dispatch_id, **classes(_total(mine)), "attempts": attempts}
+
+
+def classes(total: dict[str, Any]) -> dict[str, Any]:
+    """The one shape every view shows: fresh input, cache write, cache read and output tokens, their sum, and USD."""
+    return {"input": total["input"], "cacheWrite": total["cacheWrite"], "cacheRead": total["cacheRead"],
+            "output": total["output"], "tokens": total["tokens"], "usd": total["usd"], "sources": total["sources"],
+            "unpricedTokens": total["unpricedTokens"], "messages": total["messages"]}
+
+
+def ticket_totals(profile_path: Path, ticket: str) -> dict[str, Any] | None:
+    """The single ticket total that STATUS.md, token-usage.md and `sdlc status` show: measured from the logs (units,
+    controller and side calls), per node and per model, each split by token class plus USD. Node "" holds usage
+    outside any node. None when the logs cannot be read (a view never fails on it)."""
+    try:
+        data = rows(profile_path, ticket)
+    except Exception:  # noqa: BLE001 — a status view never fails on a cost read
+        return None
+    mine = [r for r in data["rows"] if r["ticket"] == ticket]
+
+    def unit_part(rws: Iterable[dict[str, Any]]) -> dict[str, Any]:
+        return classes(_total(r for r in rws if r["kind"] in ("unit", "dispatch")))
+
+    def ctl_part(rws: Iterable[dict[str, Any]]) -> dict[str, Any]:
+        return classes(_total(r for r in rws if r["kind"] == "controller"))
+
+    nodes: dict[str, Any] = {}
+    for n in sorted({r["node"] or "" for r in mine}):
+        part = [r for r in mine if (r["node"] or "") == n]
+        nodes[n] = {**classes(_total(part)), "units": unit_part(part), "controller": ctl_part(part)}
+    return {"total": classes(_total(mine)), "units": unit_part(mine), "controller": ctl_part(mine), "nodes": nodes,
+            "byModel": [{"agent": m["agent"], "model": m["model"], **classes(m)} for m in _by(mine, ("agent", "model"))],
+            "reportedTokens": sum(v.get("tokens", 0) for v in (data["reported"].get(ticket) or {}).values())}
+
+
+def fmt_split(c: dict[str, Any]) -> str:
+    """`fresh 1,234 · cache write 5,678 · cache read 9,012 · output 345` for a `classes()` dict."""
+    return (f"fresh {c['input']:,} · cache write {c['cacheWrite']:,} · cache read {c['cacheRead']:,} · "
+            f"output {c['output']:,}")
+
+
+def fmt_total(c: dict[str, Any]) -> str:
+    """`113,735,785 tokens · $38.68 (reported)` for a `classes()` dict."""
+    usd = "USD unknown" if c["usd"] is None else f"${c['usd']:,.2f} ({usd_label(c)})"
+    return f"{c['tokens']:,} tokens · {usd}"
 
 
 def status_field(profile_path: Path, ticket: str) -> dict[str, Any] | None:

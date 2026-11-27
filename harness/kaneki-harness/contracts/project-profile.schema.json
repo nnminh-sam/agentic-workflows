@@ -342,7 +342,10 @@
           "default": 24
         },
         "shipBackend": {
-          "enum": ["native-git", "my-git"],
+          "enum": [
+            "native-git",
+            "my-git"
+          ],
           "description": "How `sdlc ship` executes commit/push/PR: `native-git` (default, agent-agnostic: commits via gitid, pushes, opens PR via gh/glab or manual) or `my-git` (Claude Code plugin: stages files and hands off to /my-git:commit, /my-git:push, /my-git:pr)."
         },
         "config": {
@@ -409,6 +412,105 @@
             "type": "string"
           },
           "description": "Shared resources whose mutation needs G6."
+        },
+        "evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "The harness-owned evidence environment (sdlc env check|up|status|down|exec, harness/env.py). Agents never start servers or open database connections themselves.",
+          "properties": {
+            "repo": {
+              "type": "string",
+              "description": "Repository whose worktree runs the app (default: the first)."
+            },
+            "envFile": {
+              "type": "string",
+              "description": "Reusable env file with the fixed test account (relative to the project folder). Never printed."
+            },
+            "database": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "container"
+              ],
+              "properties": {
+                "container": {
+                  "type": "string"
+                },
+                "user": {
+                  "type": "string"
+                },
+                "docker": {
+                  "type": "string",
+                  "description": "docker command (default docker)."
+                },
+                "maxConnections": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Floor for max_connections; env up raises it (one container restart)."
+                },
+                "name": {
+                  "type": "string",
+                  "description": "Per-ticket database name; {ticket} is the ticket id as a safe slug."
+                },
+                "urlVars": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Env vars whose connection URL gets the ticket database."
+                }
+              }
+            },
+            "migrate": {
+              "type": "string"
+            },
+            "seed": {
+              "type": "string"
+            },
+            "server": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "command": {
+                  "type": "string"
+                },
+                "port": {
+                  "type": "integer"
+                },
+                "health": {
+                  "type": "string"
+                },
+                "readyTimeoutSeconds": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "env": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "baseline": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "sdlc baseline (prepare): install, then lint / unit tests / build on each checkout as the ticket found it.",
+          "properties": {
+            "install": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "Install command per repository id (else the stack adapter's commands.install)."
+            },
+            "timeoutSeconds": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
         }
       }
     },
@@ -482,7 +584,7 @@
     "budgets": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Optional spend caps checked by gate G8 (`sdlc packet`, the runner) and shown by `sdlc budget`. No block = no budget checks. Usage is measured from the agents' own logs (harness/cost.py).",
+      "description": "Spend and time caps checked by gate G8 (`sdlc packet`, the runner) and shown by `sdlc budget`. No block = the harness defaults (harness/budget.py DEFAULTS); an empty block `{}` = no budget checks. A block replaces the defaults as a whole. Usage is measured from the agents' own logs (harness/cost.py).",
       "properties": {
         "ticket": {
           "type": "object",
@@ -517,6 +619,11 @@
                 "type": "integer",
                 "minimum": 0,
                 "description": "Cap in measured tokens (input + output + cache read + cache write)."
+              },
+              "minutes": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": "Wall-clock cap in minutes for the node's current round, from its first packet (startedAt). Over it, new packets are refused (G8), the runner stops the session and sdlc dispatch caps its timeout."
               }
             }
           }

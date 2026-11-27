@@ -57,7 +57,8 @@ def summarize(s: Any, events_limit: int = 40, detail: bool = False) -> dict[str,
         for name in s.artifacts(node) + spec.get("optionalArtifacts", []):
             path = s.ticket.dir / name
             arts.append({"name": name, "path": str(path), "exists": path.is_file()})
-        planned = [u["id"] for u in spec.get("units", [])] + (["reviewer"] if spec.get("reviewer") else [])
+        planned = [u["id"] for u in spec.get("units", [])] + (["reviewer"] if spec.get("reviewer") else []) + (
+            ["reviewer-2"] if (spec.get("reviewer") or {}).get("second") else [])
         nodes.append({
             "node": node, "layer": spec["layer"], "purpose": spec["purpose"], "status": rec["status"],
             "generation": rec["generation"], "verdict": rec["verdict"], "attempts": rec["attempts"],
@@ -87,6 +88,7 @@ def summarize(s: Any, events_limit: int = 40, detail: bool = False) -> dict[str,
         "updatedAt": events[-1]["at"] if events else s.state.get("createdAt"),
         "settled": sum(1 for n in s.order if settled(s.state, n)), "traceLength": len(s.order),
         "nextPending": nxt, "next": next_hint(s, nxt) + (DECIDE_HINT if wait["on"] == "user" else ""),
+        "ready": _ready(s),
         "tokensTotal": tokens_total,
         "waitingOn": wait["on"], "waitingNode": wait["node"], "waitingReason": wait["reason"],
         "lastEventAt": shown[-1]["at"] if shown else None, "lastEventKind": shown[-1]["event"] if shown else None,
@@ -120,12 +122,17 @@ def _pending_proposals(s: Any) -> int:
         return 0
 
 
+def _ready(s: Any) -> list[str]:
+    from .state import ready_nodes
+    return ready_nodes(s.graph, s.order, s.state)
+
+
 def budget_view(s: Any, node: str | None, events: list[dict[str, Any]] | None = None) -> dict[str, Any] | None:
     """The `budget` field of a summary: the G8 check of the next pending node (None without a budgets block).
     Read-only; usage comes from cost.py's cache."""
-    if s.profile.get("budgets") is None:
-        return None
     from . import budget as B
+    if not B.enabled(s.profile):
+        return None
     try:
         if events is None:
             events, _ = s.ticket.verify_log()
@@ -134,7 +141,7 @@ def budget_view(s: Any, node: str | None, events: list[dict[str, Any]] | None = 
     except (HarnessError, OSError, ValueError) as exc:
         return {"level": "unknown", "error": str(exc)}
     return {k: res.get(k) for k in ("level", "allowed", "action", "node", "day", "over", "reasons", "usage", "caps",
-                                    "warnAt", "override")}
+                                    "warnAt", "override", "source", "deadline")}
 
 
 def _node_detail(s: Any, node: str, wait: dict[str, Any]) -> dict[str, Any]:
@@ -245,7 +252,8 @@ def _next_hint(s: Any, node: str | None) -> str:
         return "done: ship with /kaneki-ship" if not s.state.get("shipped") else "shipped"
     spec = s.spec(node)
     rec = s.state["nodes"][node]
-    planned = [u["id"] for u in spec.get("units", [])] + (["reviewer"] if spec.get("reviewer") else [])
+    planned = [u["id"] for u in spec.get("units", [])] + (["reviewer"] if spec.get("reviewer") else []) + (
+            ["reviewer-2"] if (spec.get("reviewer") or {}).get("second") else [])
     done = {u["unit"] for u in rec["units"] if u["generation"] == rec["generation"] and u["status"] == "ok"}
     if planned and set(planned) <= done or (not planned and rec["status"] == "in_progress"):
         return f"{node}: work recorded, waiting for " + ("your approval" if spec["boundary"] == "user" else "the gate")
@@ -309,7 +317,8 @@ def waiting(s: Any, node: str | None = None, problems: list[str] | None = None) 
 
     if rec["verdict"] == "rejected":
         return {"on": "user", "node": n, "reason": "rejected-open"}
-    if loops_back and last_verdict in FAILING_VERDICTS and rec["attempts"] + 1 >= cap:
+    target_reopens = int((s.state["nodes"].get(spec.get("loopBackTo") or "") or {}).get("reopens", 0))
+    if loops_back and last_verdict in FAILING_VERDICTS and max(rec["attempts"], target_reopens) + 1 >= cap:
         return {"on": "user", "node": n, "reason": "loop-cap"}
 
     if planned:
@@ -417,7 +426,7 @@ def _gate_evidence(s: Any, node: str, reviewer: dict[str, Any] | None, inputs: l
 
 def _gate_choices(s: Any, node: str, spec: dict[str, Any], bare: dict[str, Any], memo: dict[str, Any]) -> list[dict[str, Any]]:
     """approve, needs-changes (only with `loopBackTo`), reject, stop and reopen, each with its `sdlc gate` argv."""
-    from .cli import readiness_views, stale_preview, superseded_preview
+    from .cli import loop_rounds, readiness_views, stale_preview, superseded_preview
     from .state import settled
 
     def argv(status: str, *extra: str) -> list[str]:
@@ -459,7 +468,10 @@ def _gate_choices(s: Any, node: str, spec: dict[str, Any], bare: dict[str, Any],
     choices.append(choice("stop", "Stop", fields, argv("stopped")))
     choices.append(choice("reopen", "Reopen an earlier node", fields, argv("rejected"), needsNote=True, needsReason=True,
                           followUp=[["invalidate", "--ticket", s.ctx["ticket"], "--node", "<node>", "--reason", "<required>"]],
-                          reopenTargets=[{"node": n, "staleNodes": stale_preview(s, n)} for n in settled_before]))
+                          reopenTargets=[{"node": n, "staleNodes": stale_preview(s, n),
+                                          # D5: past the loop cap only the user may reopen (invalidate --actor user)
+                                          "needsUser": loop_rounds(s, n) >= s.profile.get("gates", {}).get("loopCap", 2)}
+                                         for n in settled_before]))
     return choices
 
 
@@ -700,12 +712,14 @@ def render_status_md(summary: dict[str, Any], mismatched_nodes: set[str] | None 
     t = summary
     tdir = Path(t["ticketDir"])
     mismatched = mismatched_nodes or set()
+    tt = t.get("ticketTokens")  # usage.ticket_tokens: the total token-usage.md and `sdlc status` show too
     lines = [
         f"# {t['ticket']} · {t['kind']} · lane `{t['lane']}`",
         "",
         "> Written by the driver after every change. Do not edit: it is regenerated.",
         "",
-        f"**Progress:** {t['settled']}/{t['traceLength']} nodes · **Next:** {t['next']} · **Tokens:** {t['tokensTotal']}"
+        f"**Progress:** {t['settled']}/{t['traceLength']} nodes · **Next:** {t['next']} · **Tokens:** "
+        + (_total_line(t["ticketTokens"]) if t.get("ticketTokens") else str(t["tokensTotal"]))
         + (f" · **Agent:** {t['host']}" if t.get("host") else "")
         + (f" (also {', '.join(h for h in t['hosts'] if h != t['host'])})" if len(t.get("hosts") or []) > 1 else "")
         + (f" · **Review round:** {t['reviewRound']}" if t["reviewRound"] else ""),
@@ -725,21 +739,23 @@ def render_status_md(summary: dict[str, Any], mismatched_nodes: set[str] | None 
         if n["node"] in mismatched and model_col != "—":
             model_col += " ⚠"
         agent_col = ", ".join(n.get("hosts") or []) or "—"
+        toks = ((tt["nodes"].get(n["node"]) or {}).get("tokens") if tt else n["tokens"]) or ""
         lines.append(f"| {i} | {n['node']}{gen} | {ICON.get(n['status'], '')} {n['status']} | {verdict} | {who} | "
-                     f"{agent_col} | {model_col} | {n['tokens'] or ''} | {arts} |")
+                     f"{agent_col} | {model_col} | {f'{toks:,}' if toks else ''} | {arts} |")
+    if tt and (tt["nodes"].get("") or {}).get("tokens"):
+        lines += ["", f"Controller work not tied to a node (its `sdlc` calls named no `--node`): "
+                      f"{tt['nodes']['']['tokens']:,} tokens"]
     if mismatched:
         lines += ["", "> ⚠️ **Model verification:** one or more current-round units ran on an inherited or unverified host model."]
     if t.get("inFlight"):
         lines += ["", "**In flight** (packet rendered, no result recorded): " + "; ".join(
             f"{r['node']}/{r['unit']} r{r['round']} on {r['host'] or '?'} ({r['model'] or '?'}) since "
             f"`{r['packetAt'][:19].replace('T', ' ')}`" for r in t["inFlight"])]
-    m = t.get("measured")
-    if m:
-        from .cost import usd_label
-        usd = "USD unknown" if m["usd"] is None else f"${m['usd']:,.2f} ({usd_label(m)})"
-        lines += ["", f"**Measured** (agents' own logs, each API message once): {m['tokens']:,} tokens · {usd}"
-                  + f" · reported {m['reportedTokens']:,}" + (f" (x{m['ratio']})" if m.get("ratio") is not None else "")
-                  + " · `sdlc cost --ticket " + t["ticket"] + "`"]
+    if tt and tt["source"] == "measured":
+        from .cost import fmt_split
+        lines += ["", f"**Measured** (agents' own logs, each API message once): {_total_line(tt)} · "
+                      f"units {tt['units']['tokens']:,} · controller {tt['controller']['tokens']:,} · {fmt_split(tt['total'])}"
+                      f" · agents' own `--tokens` {tt['reportedTokens']:,} · `sdlc cost --ticket {t['ticket']}`"]
     b = t.get("budget")
     if b and b.get("level") in ("ok", "warn", "over"):
         from .budget import line
@@ -757,6 +773,11 @@ def render_status_md(summary: dict[str, Any], mismatched_nodes: set[str] | None 
     for e in reversed(t["events"][-12:]):
         lines.append(f"- `{e['at'][:19].replace('T', ' ')}` **{e['event']}** " + _event_text(e))
     return "\n".join(lines) + "\n"
+
+
+def _total_line(tt: dict[str, Any]) -> str:
+    from .usage import total_line
+    return total_line(tt)
 
 
 def _event_text(e: dict[str, Any]) -> str:
@@ -786,8 +807,8 @@ def write_status(s: Any) -> Path:
         if any(u.get("generation") == rec.get("generation") and u.get("modelMismatch") for u in rec.get("units", []))
     }
     summary = summarize(s)
-    from . import cost
-    summary["measured"] = cost.status_field(s.ppath, s.ctx["ticket"])  # cached by log fingerprint; None if unreadable
+    from . import usage
+    summary["ticketTokens"] = usage.ticket_tokens(s.ppath, s.ctx["ticket"], s.order, s.state["nodes"])  # cached by log fingerprint
     path.write_text(render_status_md(summary, mismatched_nodes=mismatched), encoding="utf-8", newline="\n")
     return path
 

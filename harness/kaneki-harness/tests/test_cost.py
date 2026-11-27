@@ -369,6 +369,101 @@ class StatusFieldTests(CostBase):
         self.assertEqual(res["contractVersion"], 1)
 
 
+class RecordMeasureTests(CostBase):
+    """A2 / A3 / A5: `record` measures the unit from its own log; one total in every view; every dispatch recorded."""
+
+    def second_packet(self) -> dict:
+        code, pk = run("packet", "--ticket", self.t, "--node", self.node, "--unit", self.unit, *self.p)
+        self.assertEqual(code, 0, pk)
+        self.assertTrue(pk["dispatchId"].endswith(".r2"), pk["dispatchId"])
+        return pk
+
+    def unit_log(self, name: str, pk: dict, mid: str, u: dict, hour: int) -> None:
+        line = f"Read the packet at {pk['path']} (sha256 {pk['packetDigest']}) and execute it."
+        write_jsonl(self.proj / "ctl" / "subagents" / f"agent-{name}.jsonl", [
+            self.user("ctl", line, local_ts(D1, hour)),
+            self.asst("ctl", mid, "claude-sonnet-5-5", u, local_ts(D1, hour, 1))])
+
+    def state(self) -> dict:
+        return json.loads((self.tdir(self.t) / "state.json").read_text(encoding="utf-8"))
+
+    def test_record_measures_the_unit_and_keeps_the_report_as_context(self) -> None:
+        pk = self.second_packet()
+        self.unit_log("try1", pk, "e1", usage(1, 10, 1000, 100), 9)   # abandoned, then the same packet again
+        self.unit_log("try2", pk, "e2", usage(2, 20, 2000, 200), 10)
+        Path(pk["resultPath"]).write_text("status: ok\n")
+        code, rec = run("record", "--ticket", self.t, "--node", self.node, "--unit", self.unit, "--result",
+                        pk["resultPath"], "--model", pk["model"], "--tokens", "777", *self.p)
+        self.assertEqual(code, 0, rec)
+        e = rec["recorded"]
+        self.assertEqual(e["dispatchId"], pk["dispatchId"])
+        self.assertEqual((e["tokensSource"], e["contextAtEnd"]), ("measured", 777))
+        self.assertEqual(e["tokens"], 1111 + 2222)
+        self.assertEqual({k: e["tokensMeasured"][k] for k in ("input", "output", "cacheRead", "cacheWrite", "sessions")},
+                         {"input": 3, "output": 30, "cacheRead": 3000, "cacheWrite": 300, "sessions": 2})
+        self.assertEqual([(a["session"], a["tokens"]) for a in e["abandonedAttempts"]], [("agent-try1", 1111)])
+        # the first record had no log when it was made: it keeps the agent's number, marked as reported
+        first = self.state()["nodes"][self.node]["units"][0]
+        self.assertEqual((first["tokens"], first["tokensSource"], first["contextAtEnd"]), (100, "reported", 100))
+        rep = self.report()
+        self.assertEqual(rep["reported"]["tokens"], 100 + 777, "reported = the agents' own --tokens")
+        usage_md = (self.tdir(self.t) / "token-usage.md").read_text(encoding="utf-8")
+        self.assertIn("## Abandoned dispatches", usage_md)
+        self.assertIn("the same packet was dispatched again", usage_md)
+
+    def test_abandoned_dispatch_is_recorded_and_the_gate_wants_every_log_recorded(self) -> None:
+        pk = self.second_packet()
+        self.unit_log("lost", pk, "z1", usage(5, 50, 500, 0), 9)
+        code, res = run("gate", "--ticket", self.t, "--node", self.node, "--status", "approved", *self.p)
+        self.assertNotEqual(code, 0)
+        self.assertIn("unit logs with no record", res["error"])
+        self.assertIn(pk["dispatchId"], res["error"])
+        code, res = run("record", "--ticket", self.t, "--node", self.node, "--unit", self.unit, "--model", pk["model"],
+                        "--status", "abandoned", *self.p)
+        self.assertEqual(code, 2)
+        self.assertIn("--reason", res["error"])
+        code, rec = run("record", "--ticket", self.t, "--node", self.node, "--unit", self.unit, "--model", pk["model"],
+                        "--status", "abandoned", "--reason", "evidence run stuck on the DB", *self.p)
+        self.assertEqual(code, 0, rec)
+        e = rec["recorded"]
+        self.assertEqual((e["status"], e["result"], e["tokens"], e["reason"]),
+                         ("abandoned", None, 555, "evidence run stuck on the DB"))
+        self.assertNotIn("abandonedAttempts", e)
+        code, res = run("gate", "--ticket", self.t, "--node", self.node, "--status", "approved", *self.p)
+        self.assertNotIn("unit logs with no record", json.dumps(res))
+        code, pk3 = run("packet", "--ticket", self.t, "--node", self.node, "--unit", self.unit, *self.p)
+        self.assertTrue(pk3["dispatchId"].endswith(".r3"), "the next dispatch is the next round")
+        code, res = run("record", "--ticket", self.t, "--node", self.node, "--unit", self.unit, "--model", pk["model"],
+                        *self.p)
+        self.assertEqual(code, 2)
+        self.assertIn("--result is required", res["error"])
+
+    def test_one_total_in_status_md_token_usage_and_status(self) -> None:
+        self.controller_with_subagent()
+        code, res = run("lang", "--ticket", self.t, "--set", "delivery=en", "--reason", "test", *self.p)
+        self.assertEqual(code, 0, res)  # refreshes STATUS.md
+        pk = self.second_packet()
+        Path(pk["resultPath"]).write_text("status: ok\n")
+        code, rec = run("record", "--ticket", self.t, "--node", self.node, "--unit", self.unit, "--result",
+                        pk["resultPath"], "--model", pk["model"], *self.p)  # rewrites token-usage.md
+        self.assertEqual(code, 0, rec)
+        code, st = run("status", "--ticket", self.t, "--compact", *self.p)
+        self.assertEqual(code, 0, st)
+        total = self.report()["total"]["tokens"]
+        self.assertEqual(total, 705)
+        self.assertEqual((st["tokensTotal"], st["tokens"]["source"], st["tokens"]["total"]), (705, "measured", 705))
+        self.assertEqual(st["tokens"]["units"] + st["tokens"]["controller"], 705)
+        self.assertEqual(sum(st["tokens"][k] for k in ("input", "cacheWrite", "cacheRead", "output")), 705)
+        usage_md = (self.tdir(self.t) / "token-usage.md").read_text(encoding="utf-8")
+        self.assertIn("**Ticket total:** 705 tokens", usage_md)
+        self.assertIn("fresh 6 · cache write 40 · cache read 600 · output 59", usage_md)
+        code, _ = run("lang", "--ticket", self.t, "--set", "delivery=en", "--reason", "again", *self.p)
+        status_md = (self.tdir(self.t) / "STATUS.md").read_text(encoding="utf-8")
+        self.assertIn("**Tokens:** 705 tokens", status_md)
+        code, full = run("status", "--ticket", self.t, *self.p)
+        self.assertEqual(sum(n["tokens"] for n in full["nodes"]), 705)
+
+
 class CostApiTests(CostBase):
     def setUp(self) -> None:
         super().setUp()
