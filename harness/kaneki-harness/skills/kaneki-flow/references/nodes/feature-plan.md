@@ -2,6 +2,12 @@
 
 **Goal:** a design and task plan the user approves.
 
+**Standard lane** (no requirement-analysis or impact-analysis node in the trace, D8): you are the one plan unit.
+Read the ticket and the code yourself and start `plan.md` with `## Requirements` (each `R-n` with its source
+`file:line`, conflicts and gaps) and `## Impact` (callers, data, shared flows touched, each cited). Put every
+question the ticket cannot settle into the batch now (`sdlc ask`); the controller asks them in one round before the
+user approves the plan.
+
 `plan.md` sections: `## Design` (components, data model changes, interfaces/contracts, sequence),
 `## Tasks` (ordered, each with files and acceptance), `## Condition → negative case` (as in fix-plan),
 `## Data access & side effects`, `## Alternatives` (G3 if material), `## Test intent`,

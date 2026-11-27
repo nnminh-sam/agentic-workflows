@@ -76,7 +76,7 @@ Open from M2:
 
 Open from M3: the report was checked by tests and a JS syntax check, not opened in a browser against a real ticket (feature-flags has no testcases.json; the prototype backfill stays for it).
 
-**M4 implemented (2026-11-27, uncommitted on the same branch). Judge pair: Opus + Sonnet (user).**
+**M4 committed (`5006f69`, 2026-11-27, not pushed). Judge pair: Opus + Sonnet (user).**
 
 | Task | Result |
 |---|---|
@@ -91,6 +91,15 @@ Open from M3: the report was checked by tests and a JS syntax check, not opened 
 | D6 | `state.ready_nodes`; `ready` in `status --compact` and the board summary; flow.md starts every ready node |
 
 Not done in M4: the runner (`harness/runner.py`) still starts one node per pass; D6 gives it and the controller the ready list. The test-case judge keeps its markdown verdict (its determinable checks are the `testcases` parser).
+
+**M5 implemented (2026-11-27, uncommitted on the same branch). Controller: Sonnet, fresh per phase (user). Pilot ticket: the user names it later.**
+
+| Task | Result |
+|---|---|
+| D8 | Lane `standard` (graph `lanes.standard`: `skip` requirement-analysis and impact-analysis, keeps the family slots; `inline` delivery-drafts and read-review). The deep feature-plan unit writes `## Requirements` and `## Impact` itself; `init --lane standard`. flow.md: standard is the default choice, full for shared flows / data / API / schema / several repos |
+| D9 | `sdlc handoff` (`harness/handoff.py`): HANDOFF.md from driver data only (settled, ready, waiting, open questions, last decisions, budget, env) for a fresh controller per phase. Runner sessions start with `--model <controllerModel>` (default `sonnet`) and accept any node in `ready`. Unit hand-backs at most 15 lines (packet template). Closed nodes are immutable: artifact digests stored at each approve; the deliverable gate (`checksReceipts`) refuses changed artifacts of closed nodes |
+
+Pilot (not run): `sdlc init --ticket <id> --kind feature --lane standard`, controller on Sonnet, then compare with the plan's "How we will know it worked" table: wall clock ≤ 3 h (decisions.jsonl), max generation ≤ 2 (state.json), measured tokens ≤ 45 M (`sdlc cost`), questions business + infra only and ≤ 30 m waiting, 0 evidence script lines, 0 abandoned runs, 0 G7 refusals after hand-backs, every PASS check with an observed value (evidence.json). Before it: `sdlc install --target . --host claude` in wp-kaneki and `sdlc env up` (restarts my-kaneki-postgres-1 once to raise max_connections).
 
 ## Milestone M1 (done; kept for reference)
 
@@ -117,7 +126,7 @@ Then M2 → M5 as listed in the plan's "Work plan" section: A4, B3–B5, E1–E5
 
 1. ~~Evidence database for my-kaneki~~ **Answered 2026-11-27: raise `max_connections`.** `sdlc env up` configures the local `my-kaneki-postgres-1` container with a higher `max_connections` (the Neon proxy exhausted 20) and a per-ticket throwaway DB; no pooler; live checks stay on.
 2. ~~Judge model pair (M4)~~ **Answered 2026-11-27: Opus + Sonnet** (deep tier + routine tier; independent models, lower cost than two Opus).
-3. Run the controller on Sonnet (D9, M5)?
+3. ~~Controller on Sonnet (D9)~~ **Answered 2026-11-27: Sonnet, a fresh session per phase** (HANDOFF.md); the pilot ticket is named by the user later.
 4. Not checked yet: can `harness/runner.py` (`run`/`tick`) dispatch units headlessly?
 
 ## Working notes

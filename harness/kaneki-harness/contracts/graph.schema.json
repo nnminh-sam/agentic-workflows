@@ -355,6 +355,13 @@
           "inPlace": {
             "type": "boolean",
             "description": "Work in the repository checkout on a branch; no worktree."
+          },
+          "skip": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "nodes of the main order this lane leaves out (slots and families stay)"
           }
         }
       }

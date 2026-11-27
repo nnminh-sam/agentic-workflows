@@ -258,8 +258,8 @@ def cmd_init(args: argparse.Namespace) -> None:
         raise HarnessError(f"ticket already initialised at {ticket.dir}; use status (never re-init to recover)")
     ctx = build_context(profile, args.ticket, args.kind, args.repo, args.family, args.surface)
     ctx["lane"] = args.lane
-    if args.lane != G.DEFAULT_LANE and ctx["families"]:
-        raise HarnessError(f"lane {args.lane} has no extension slots; families {ctx['families']} need --lane full")
+    if G.check_lane(G.load_graph(HOME, profile, path.parent), args.lane).get("order") and ctx["families"]:
+        raise HarnessError(f"lane {args.lane} has no extension slots; families {ctx['families']} need --lane standard or full")
     override = parse_lang_settings(args.lang)
     if override:
         ctx["locale"] = override
@@ -317,7 +317,7 @@ def cmd_lane(args: argparse.Namespace) -> None:
     old = G.lane_of(s.ctx)
     if old == args.set:
         raise HarnessError(f"ticket is already on lane {old}")
-    if args.set != G.DEFAULT_LANE and s.ctx["families"]:
+    if s.graph["lanes"][args.set].get("order") and s.ctx["families"]:
         raise HarnessError(f"lane {args.set} has no extension slots; this ticket uses families {s.ctx['families']}")
     s.ctx["lane"] = args.set
     s.order = G.trace(s.graph, s.ctx)
@@ -327,7 +327,7 @@ def cmd_lane(args: argparse.Namespace) -> None:
     s.ticket.log({"event": "lane", "lane": args.set, "from": old, "reason": args.reason})
     out({"ok": True, "lane": args.set, "from": old, "trace": s.order, "nextPending": next_pending(s.state, s.order),
          "note": "repositories stay bound to their current checkout; prepare keeps it (sdlc worktree --path <repo>)"
-                 if old != G.DEFAULT_LANE else None})
+                 if s.graph["lanes"].get(old, {}).get("inPlace") else None})
 
 
 def cmd_status(args: argparse.Namespace) -> None:
@@ -1085,6 +1085,8 @@ def cmd_gate(args: argparse.Namespace) -> None:
     elif args.status == "approved":
         if "citationWarnings" in notes:
             result["citationWarnings"] = notes["citationWarnings"]
+        rec["artifactDigests"] = {a: sha256_file(s.ticket.dir / a) for a in s.artifacts(node)
+                                  if (s.ticket.dir / a).is_file()}  # closed nodes are immutable (closed_edits)
         if (spec.get("reviewer") or {}).get("second"):  # J5: approved verdicts feed the calibration log
             from . import judge as J
             result["judgeVerdicts"] = J.record_verdicts(s)
@@ -1177,6 +1179,8 @@ def artifact_problems(s: "Session", node: str, status: str, reopen: str | None) 
     if "baseline.json" in s.artifacts(node):
         out += baseline_problems(s)
     out += small_path_problems(s, node)
+    if spec.get("checksReceipts"):
+        out += closed_edits(s)
     return out
 
 
@@ -1684,6 +1688,31 @@ def cmd_judge_miss(args: argparse.Namespace) -> None:
     res = J.record_miss(s, args.check, args.reason.strip(), args.actor)
     s.ticket.log({"event": "judge-miss", "check": args.check, "reason": args.reason.strip(), "actor": args.actor})
     out({"ok": True, **res})
+
+
+def cmd_handoff(args: argparse.Namespace) -> None:
+    """`sdlc handoff`: HANDOFF.md, the page a fresh controller session starts from (D9)."""
+    from . import handoff as HO
+    out(HO.write(Session(args)))
+
+
+def closed_edits(s: "Session") -> list[str]:
+    """Closed nodes are immutable for the controller: an artifact changed after its node's gate closed (feature-flags:
+    an AI trailer appended to drafts/commit-msg.md after delivery-drafts closed) must go through a reopen."""
+    out = []
+    for n in s.order:
+        rec = s.state["nodes"].get(n) or {}
+        if rec.get("status") != "done":
+            continue
+        for name, digest in (rec.get("artifactDigests") or {}).items():
+            path = s.ticket.dir / name
+            now_d = sha256_file(path) if path.is_file() else "missing"
+            if now_d != digest:
+                out.append(f"{n}/{name}")
+    if out:
+        return [f"artifacts of closed nodes changed after their gate: {out}. Reopen the node that owns each "
+                "(`sdlc invalidate --node <node> --reason ...`) instead of editing it"]
+    return []
 
 
 def cmd_report(args: argparse.Namespace) -> None:
@@ -2242,7 +2271,8 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--surface", action="append", help="extra surface beyond the repositories' defaults")
     x.add_argument("--force", action="store_true")
     x.add_argument("--lang", action="append", help="explicit per-ticket language, e.g. delivery=ja (only when the user asked)")
-    x.add_argument("--lane", default="full", help="full (every node, worktree) or lite (small change: scope, change in place, quick review, drafts)")
+    x.add_argument("--lane", default="full", help="standard (typical feature or bug: one plan unit, judges, drafts by the controller), "
+                   "full (every node: requirement and impact analysis too) or lite (small change in place)")
     x.set_defaults(fn=cmd_init)
 
     x = sub.add_parser("lane", parents=[ticketed], help="show the ticket's lane, or move it (lite -> full) with --set and --reason")
@@ -2355,6 +2385,9 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--reason", required=True)
     x.add_argument("--actor", default="controller", choices=["controller", "user"])
     x.set_defaults(fn=cmd_judge_miss)
+
+    x = sub.add_parser("handoff", parents=[ticketed], help="HANDOFF.md: the page a fresh controller session starts from")
+    x.set_defaults(fn=cmd_handoff)
 
     x = sub.add_parser("report", parents=[ticketed], help="the read-only tester notebook (tester-notebook.html) from "
                                                            "testcases.json and evidence.json")

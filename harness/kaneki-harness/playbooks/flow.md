@@ -16,16 +16,17 @@ is `sdlc git`, which prints git's own output.
 
 ## Lanes: pick the smallest one that is safe
 
-`init --lane full|lite` (default `full`). The lane decides the trace; `plan` says `executor: controller`
+`init --lane standard|full|lite` (the driver's default is `full`; pass the lane). The lane decides the trace; `plan` says `executor: controller`
 for a node you do yourself and `subagents` for one you dispatch.
 
 | Lane | Trace | Use for |
 | --- | --- | --- |
 | `lite` | scope (user approves) → change → check (1 routine reviewer) → delivery-drafts → deliverable-ready | CSS, copy, config value, a contained fix whose cause is already known; ≤ ~5 files; no data/schema/API/auth/shared-flow change |
-| `full` | prepare (worktree, baseline) → analysis → plan + plan review (user approves) → test cases ⇄ test-case judge → coding ⇄ parallel review (technical ∥ semantic) → evidence + two judges → final review → drafts → deliverable-ready | everything else |
+| `standard` | prepare (worktree, baseline, env check) → one deep plan unit + plan reviewer, every business question in one batch (user approves) → test cases ⇄ test-case judge → coding ⇄ parallel review → evidence + two judges → final review → drafts by you, checked against the repo rules → deliverable-ready | a typical feature or bug: the default |
+| `full` | prepare (worktree, baseline) → requirement analysis → impact analysis → plan + plan review (user approves) → test cases ⇄ test-case judge → coding ⇄ parallel review (technical ∥ semantic) → evidence + two judges → final review → drafts → deliverable-ready | shared flows, data/API/schema/auth changes, several repositories, or a requirement that needs its own analysis |
 
-- The user picks with `--lite` / `--full`. Without a flag, propose `lite` when the request clearly fits the
-  row above and confirm once via `ASK_USER` (Lite / Full); otherwise use `full` without asking.
+- The user picks with `--lite` / `--standard` / `--full`. Without a flag, propose `lite` when the request clearly
+  fits its row and confirm once via `ASK_USER`; otherwise use `standard`, or `full` when its row applies.
 - `lite` works **in place** in the repository checkout, on the ticket branch the `change` node creates; no
   worktree, no test-case files, no surface evidence, no families.
 - Escalate the moment a `scope` answer is "no", the change spreads past its files, or `check` finds a design
@@ -160,8 +161,17 @@ the user approves the exact request (`sdlc ship-request` → approval → `sdlc 
      `NEEDS CHANGES`; at the loop cap (default 2) `G4` fires — ask the user via `ASK_USER`, then repeat with `--actor user`.
    - `triage-review` closes with `--reopen <earliest invalidated node>` or `--reopen none`.
 7. **Report.** After every closed node, state in one line what closed and what is next, and link `STATUS.md`.
-   After `code-review` and `execute-and-evidence`, write `HANDOFF.md` (progress, next node, open questions,
-   last decisions) and suggest starting a fresh session.
+   At each phase boundary (plan approved, code review closed, evidence closed) and before you stop, run
+   `$SDLC handoff --ticket <id>` and continue in a fresh session that starts from `HANDOFF.md` (D9).
+
+## Lean controller (D9)
+
+- You drive the driver; the units and judges do the judging. Run on Sonnet (`/model sonnet`; the runner starts its
+  sessions with `controllerModel`, default `sonnet`), in a fresh session per phase started from `HANDOFF.md`.
+- Never read a whole artifact, diff or log. Ask the driver: `status --compact` (with `ready`), `check`, `questions`,
+  `judge-facts`, `evidence status`. Unit hand-backs are at most 15 lines; the detail stays in the result file.
+- Closed nodes are immutable: never edit an artifact of a node whose gate closed (the deliverable gate compares
+  digests). To change one, reopen its node with `invalidate`.
 8. Repeat from step 1 until `nextPending` is `null`.
 
 ## Recovery

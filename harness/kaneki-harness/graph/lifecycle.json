@@ -68,6 +68,17 @@
         "read-review"
       ],
       "inPlace": true
+    },
+    "standard": {
+      "description": "The default path for a typical feature or bug (plan D8): prepare (env + baseline) -> one deep plan unit with a deep plan reviewer (requirements and impact inside the plan; every business question in one batch) -> test cases + test-case judge -> coding -> technical and semantic review in parallel -> evidence + two judges -> final review -> drafts written by the controller and checked against the repository rules -> deliverable-ready. Use full for shared flows, data/API/schema changes or several repositories; lite for a copy or style tweak.",
+      "skip": [
+        "requirement-analysis",
+        "impact-analysis"
+      ],
+      "inline": [
+        "delivery-drafts",
+        "read-review"
+      ]
     }
   },
   "nodes": {

@@ -55,6 +55,7 @@ DEFAULTS: dict[str, Any] = {
     "backoffMinutes": 60,       # usage-limit back-off when the error names no retry time
     "leaseStaleSeconds": 900,   # a lease whose heartbeat is older than this has a dead runner
     "claudeArgs": None,         # extra `claude --bg` arguments; None (unset) = DEFAULT_CLAUDE_ARGS, [] = none
+    "controllerModel": "sonnet",  # D9: the model of each fresh controller session (`--model`); None = Claude's default
     "codexTier": "routine",     # tier of the host binding a Codex controller session runs on
     "notifyCommand": None,      # argv with {title} {message} {ticket} {kind}; [] disables; None = notify-hook
     "notifyHook": None,         # notify.py path (default ~/.claude/hooks/notify-hook/notify.py when present)
@@ -67,7 +68,7 @@ DEFAULT_CLAUDE_ARGS = ["--permission-mode", "auto"]
 
 CLAUDE_PROMPT = (
     "Use the kaneki-flow skill for ticket {ticket}. Run exactly one node: {node}. "
-    "First run the driver status command for the ticket and check that nextPending is {node}; if it is not, stop and "
+    "Read the ticket's HANDOFF.md (`sdlc handoff` writes it) instead of earlier artifacts. First run the driver status command for the ticket and check that {node} is in its `ready` list; if it is not, stop and "
     "say so. Do the {node} node as the skill describes, close its gate with the driver, then stop: do not start the "
     "next node. If the node needs a decision from the user (an ASK_USER question, a user-boundary gate, G4 or any "
     "other fired gate), ask it in this session and wait for the answer; cross a user gate with --actor user only "
@@ -75,7 +76,7 @@ CLAUDE_PROMPT = (
 )
 CODEX_PROMPT = (
     "Use the kaneki-flow skill for ticket {ticket}. Run exactly one node: {node}. "
-    "First run the driver status command for the ticket and check that nextPending is {node}; if it is not, stop and "
+    "Read the ticket's HANDOFF.md (`sdlc handoff` writes it) instead of earlier artifacts. First run the driver status command for the ticket and check that {node} is in its `ready` list; if it is not, stop and "
     "say so. Do the {node} node as the skill describes, close its gate with the driver, then stop: do not start the "
     "next node. If the node needs a decision from the user (an ASK_USER question, a user-boundary gate, G4 or any "
     "other fired gate), write the question to the ticket's questions file as the skill says and stop without "
@@ -365,6 +366,9 @@ class ClaudeCLI:
     def start(self, name: str, prompt: str, cwd: Path, env: dict[str, str]) -> tuple[str | None, str]:
         configured = self.cfg.get("claudeArgs")
         extra = [str(a) for a in (DEFAULT_CLAUDE_ARGS if configured is None else configured)]
+        model = self.cfg.get("controllerModel", DEFAULTS.get("controllerModel"))
+        if model and "--model" not in extra:  # D9: a lean controller; judgement stays with the Opus units and judges
+            extra += ["--model", str(model)]
         proc = self._run(["--bg", "-n", name, *extra, prompt], timeout=120, cwd=str(cwd), env=env)
         text = (proc.stdout or "") + "\n" + (proc.stderr or "")
         sid = None

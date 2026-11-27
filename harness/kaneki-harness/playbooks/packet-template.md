@@ -74,7 +74,7 @@ Assume a context window of about **{{contextWindow}} tokens**, and spend it on j
 Write the full result to the result file. Then run the gate's checks as a dry run and fix every problem they list before you reply (a hand-back that fails them is refused):
 `sdlc check --ticket {{ticket}} --node {{node}} --unit {{unit}}` (run as the Driver section says; `"ok": true` means the content checks pass).
 
-Then reply in ≤ 150 words: status, result file path, its
+Then reply in at most 15 lines and 150 words (the controller reads nothing else; the detail is in the result file): status, result file path, its
 sha256 (`sdlc digest <file>`, run as the Driver section says), one line per blocking item.
 
 - Worker result: status · claims (OBSERVED/DERIVED/ASSUMED) · evidence pointers · artifact paths ·
