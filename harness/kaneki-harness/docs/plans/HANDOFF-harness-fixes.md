@@ -42,6 +42,26 @@ Repo state: branch `develop/feat/kz-cost-accuracy` (from `origin/develop/base` 9
 
 Not done in M1: the project copies under `wp-kaneki/.claude/` (agents, node cards) are refreshed only by `sdlc install`, which the user runs. The full test suite takes ~10 min.
 
+M1 is committed (`786554b`, not pushed).
+
+**M2 implemented (2026-11-27, uncommitted on the same branch):**
+
+| Task | Result |
+|---|---|
+| D5 | Node records carry `reopens` (review loop-backs and manual `invalidate` of that node; reset per PR review round). G4 uses max(review attempts, reopens of the loop-back target); `invalidate` past the cap needs `--actor user`; gate-request reopen targets carry `needsUser`, `sdlc decide` adds `--actor user` |
+| A4 | `budget.DEFAULTS` apply when a profile has no `budgets` block (ticket 60 M tokens; node 15 M / 120 min; evidence 20 M / 60 min); `{}` turns budgets off. Node caps take `minutes` (wall clock from the round's first packet, `startedAt` in state); packet refuses past it (G8), the packet names the deadline, the runner stops, `dispatch` caps its timeout |
+| D7 | `harness/questions.py`: `sdlc ask` (class business / infra / critical-logic; `judgeable` refused), `sdlc questions` (one batch), `sdlc answer` (user; LOW `--adopt` by controller). Plan nodes refuse to close over an open HIGH question (G1); business questions after the plan are `late` and reach reflect. `questions.md` is generated |
+| B5 | delivery-drafts gate + `sdlc check`: commit message, PR body (my-git `check_pr.py`: GH005/GH008/GH009) and my-git registration (`mygit.readiness`). final-review refuses untracked files its review does not name |
+| E3 | `harness/env.py`: `sdlc env check|up|status|down|exec` from profile `environment.evidence` (DB floor via ALTER SYSTEM + one restart, per-ticket DB, migrate, background server + health wait, seed, `env.json` without secrets). wp-kaneki profile has the block (max_connections floor 100, DB `kaneki_{ticket}`, port 3100) and the web `baseUrl` now points at `http://localhost:3100` (was production). Profile backup: none in the repo; the previous file was copied to the session scratchpad |
+| B4 | Preflight = `sdlc env check` (run by prepare); breaker = the runner's infra rule below |
+| B3 | `sdlc baseline` → `baseline.json` (install, lint, unit tests, build on the found checkout); prepare's artifacts include it; the gate refuses a failed install |
+| E4 | `harness/evidence.py`: `sdlc evidence run|status` (smoke first, resume, infra retried 2× with back-off, breaker after 2 infra cases in a row, step error fixed once, product FAIL never retried, stop at the node's time cap) |
+
+Open from M2:
+- `sdlc env up` was not run on the real machine: it restarts `my-kaneki-postgres-1` to raise max_connections 20 → 100 (the user runs it, or approves it).
+- The my-git guard reads `git -C "$R"` literally (ship detour 38462dbc:813). The fix (expand variables assigned on the same command line in `plugins/my-git/scripts/gitguard/commands.py`) was blocked by auto mode as a change to a safety control: the user decides.
+- Project copies need `sdlc install --target . --host claude` again (node cards, packet template).
+
 ## Milestone M1 (done; kept for reference)
 
 | Task | Change | Where | Verify |

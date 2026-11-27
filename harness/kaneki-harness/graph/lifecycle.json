@@ -73,7 +73,7 @@
   "nodes": {
     "prepare": {
       "layer": "analysis",
-      "purpose": "Fetch the ticket through the tracker adapter, resolve repositories, stacks and surfaces from the profile, create the worktree, run the environment doctor.",
+      "purpose": "Fetch the ticket through the tracker adapter, resolve repositories, stacks and surfaces from the profile, create the worktree, run the environment doctor, record the install / lint / test / build baseline (sdlc baseline) and the evidence environment preflight (sdlc env check).",
       "requires": [],
       "produces": [
         "context",
@@ -94,7 +94,8 @@
       ],
       "artifacts": [
         "ticket.md",
-        "environment.md"
+        "environment.md",
+        "baseline.json"
       ],
       "card": "references/nodes/prepare.md",
       "checks": {

@@ -240,7 +240,7 @@ def budget_allows(ctx: dict[str, Any]) -> tuple[bool, str | None]:
 
     `ctx`: profile (Path), ticket, node, host, runId, phase, startedAt (epoch, running only). Returns
     `(allowed, reason)`. A refusal at start parks the ticket (reason `budget`); a refusal while running stops the
-    session and parks. No `budgets` block = always allowed. A user `budget-override` of the node's current
+    session and parks. An empty `budgets` block = always allowed; no block = the built-in defaults. A user `budget-override` of the node's current
     generation lets it start and keep running. Usage comes from cost.py's cache, so this is cheap on every poll."""
     from . import budget
     from .profile import load_profile
@@ -248,7 +248,7 @@ def budget_allows(ctx: dict[str, Any]) -> tuple[bool, str | None]:
         prof = load_profile(Path(ctx["profile"]))
     except HarnessError as exc:
         return True, f"budget not checked: {exc}"
-    if prof.get("budgets") is None:
+    if not budget.enabled(prof):  # an empty budgets block; no block = the built-in defaults
         return True, None
     res = budget.check(ctx["profile"], ctx["ticket"], ctx.get("node"), prof=prof)
     if res["allowed"]:

@@ -5,7 +5,7 @@
 1. Inventory every requirement source (ticket, specs, designs, existing behaviour) with its authority:
    primary / supporting / historical.
 2. Extract requirements as `R-n | statement | source:location | acceptance criterion`.
-3. List conflicts and gaps: `C-n | sources in conflict | options | recommendation`. HIGH ones go to `questions.md`.
+3. List conflicts and gaps: `C-n | sources in conflict | options | recommendation`. Each one the sources cannot settle goes into the ticket's one batch with `sdlc ask --ticket <id> --node requirement-analysis --class business --severity HIGH|LOW --question '...' --recommend '...'` (`questions.md` is generated; do not edit it). Ask everything the plan needs now: questions after the plan is approved are flagged as late.
 4. State the non-goals explicitly.
 
 Output `requirements.md`. **G1** if a primary source is unavailable or a conflict is unresolved.

@@ -123,9 +123,9 @@ def _pending_proposals(s: Any) -> int:
 def budget_view(s: Any, node: str | None, events: list[dict[str, Any]] | None = None) -> dict[str, Any] | None:
     """The `budget` field of a summary: the G8 check of the next pending node (None without a budgets block).
     Read-only; usage comes from cost.py's cache."""
-    if s.profile.get("budgets") is None:
-        return None
     from . import budget as B
+    if not B.enabled(s.profile):
+        return None
     try:
         if events is None:
             events, _ = s.ticket.verify_log()
@@ -134,7 +134,7 @@ def budget_view(s: Any, node: str | None, events: list[dict[str, Any]] | None = 
     except (HarnessError, OSError, ValueError) as exc:
         return {"level": "unknown", "error": str(exc)}
     return {k: res.get(k) for k in ("level", "allowed", "action", "node", "day", "over", "reasons", "usage", "caps",
-                                    "warnAt", "override")}
+                                    "warnAt", "override", "source", "deadline")}
 
 
 def _node_detail(s: Any, node: str, wait: dict[str, Any]) -> dict[str, Any]:
@@ -309,7 +309,8 @@ def waiting(s: Any, node: str | None = None, problems: list[str] | None = None) 
 
     if rec["verdict"] == "rejected":
         return {"on": "user", "node": n, "reason": "rejected-open"}
-    if loops_back and last_verdict in FAILING_VERDICTS and rec["attempts"] + 1 >= cap:
+    target_reopens = int((s.state["nodes"].get(spec.get("loopBackTo") or "") or {}).get("reopens", 0))
+    if loops_back and last_verdict in FAILING_VERDICTS and max(rec["attempts"], target_reopens) + 1 >= cap:
         return {"on": "user", "node": n, "reason": "loop-cap"}
 
     if planned:
@@ -417,7 +418,7 @@ def _gate_evidence(s: Any, node: str, reviewer: dict[str, Any] | None, inputs: l
 
 def _gate_choices(s: Any, node: str, spec: dict[str, Any], bare: dict[str, Any], memo: dict[str, Any]) -> list[dict[str, Any]]:
     """approve, needs-changes (only with `loopBackTo`), reject, stop and reopen, each with its `sdlc gate` argv."""
-    from .cli import readiness_views, stale_preview, superseded_preview
+    from .cli import loop_rounds, readiness_views, stale_preview, superseded_preview
     from .state import settled
 
     def argv(status: str, *extra: str) -> list[str]:
@@ -459,7 +460,10 @@ def _gate_choices(s: Any, node: str, spec: dict[str, Any], bare: dict[str, Any],
     choices.append(choice("stop", "Stop", fields, argv("stopped")))
     choices.append(choice("reopen", "Reopen an earlier node", fields, argv("rejected"), needsNote=True, needsReason=True,
                           followUp=[["invalidate", "--ticket", s.ctx["ticket"], "--node", "<node>", "--reason", "<required>"]],
-                          reopenTargets=[{"node": n, "staleNodes": stale_preview(s, n)} for n in settled_before]))
+                          reopenTargets=[{"node": n, "staleNodes": stale_preview(s, n),
+                                          # D5: past the loop cap only the user may reopen (invalidate --actor user)
+                                          "needsUser": loop_rounds(s, n) >= s.profile.get("gates", {}).get("loopCap", 2)}
+                                         for n in settled_before]))
     return choices
 
 

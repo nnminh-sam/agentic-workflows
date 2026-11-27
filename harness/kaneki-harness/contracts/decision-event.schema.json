@@ -37,7 +37,9 @@
         "park",
         "unpark",
         "autonomy",
-        "budget-override"
+        "budget-override",
+        "question",
+        "answer"
       ]
     },
     "prev": {
@@ -340,6 +342,68 @@
           "reason": {
             "type": "string",
             "minLength": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event": {
+            "const": "question"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "id",
+          "node",
+          "class",
+          "severity"
+        ],
+        "properties": {
+          "class": {
+            "enum": [
+              "business",
+              "infra",
+              "critical-logic"
+            ]
+          },
+          "severity": {
+            "enum": [
+              "HIGH",
+              "LOW"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event": {
+            "const": "answer"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "id",
+          "status",
+          "actor"
+        ],
+        "properties": {
+          "status": {
+            "enum": [
+              "answered",
+              "adopted"
+            ]
+          },
+          "actor": {
+            "enum": [
+              "user",
+              "controller"
+            ]
           }
         }
       }

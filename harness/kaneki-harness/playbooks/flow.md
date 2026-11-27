@@ -138,9 +138,15 @@ the user approves the exact request (`sdlc ship-request` → approval → `sdlc 
    has no record. On reviewer `FAIL`: `record`-class → fix the record and re-record;
    `artifact`-class → build a round-2 packet with `findingsToFix` and invoke `RESUME_UNIT` (or fresh `DISPATCH_UNIT`),
    then run one more reviewer round.
-5. **Doubts.** Classify every doubt as `HIGH` (changes what/where/tests/evidence) or `LOW`. Ask `HIGH` doubts
-   and fired gates (`G1`/`G3`/`G5`/`G6`/`G7`) via `ASK_USER` (recommended option first, one doubt per question,
-   evidence in the artifact, no raw file paths in option labels). Record `LOW` doubts in the artifact.
+5. **Doubts.** Classify every doubt as `HIGH` (changes what/where/tests/evidence) or `LOW`, and as `business`,
+   `infra` or `critical-logic`; a point a judge can settle from the requirements and evidence (test validity,
+   coverage, wording) is not a question: the reviewing unit decides it with citations. Add each with
+   `$SDLC ask --ticket <id> --node <n> --class ... --severity ... --question '...' --recommend '...'` (units do the
+   same). Before the plan node closes, run `$SDLC questions --ticket <id>` and ask **every open question in one
+   `ASK_USER` round** (recommended option first, no raw file paths in option labels; split only where the tool caps
+   the count), then record each answer with `$SDLC answer --ticket <id> --id Q-n --answer '...' --actor user`; close
+   LOW ones you settle with `--adopt`. The plan node refuses to close over an open HIGH question (`G1`). Fired gates
+   (`G3`/`G5`/`G6`/`G7`) are still asked via `ASK_USER` when they fire.
 6. **Close.** Run `DRIVER_CALL`: `$SDLC gate --ticket <id> --node <n> --status approved [--actor user]`.
    - `boundary: user` nodes (`fix-plan`, `feature-plan`, `deliverable-ready`, `triage-review`, `respond-review`, `scope`)
      confirm **Proceed / Re-run / Stop** via `ASK_USER` first, then close with `--actor user`. `--auto` skips this
@@ -156,6 +162,7 @@ the user approves the exact request (`sdlc ship-request` → approval → `sdlc 
 ## Recovery
 
 - Earlier artifact is wrong → `$SDLC invalidate --ticket <id> --node <earliest wrong node> --reason '<what>'`.
+  Manual reopens count toward `gates.loopCap` like review loop-backs: once a node reached the cap, `invalidate` refuses with `G4`; ask the user, then repeat with `--actor user`.
 - Receipt expired (`deliverable-ready` refuses) → `$SDLC receipts --ticket <id> --reissue`. Never invalidate for a TTL lapse.
 - Checkout changed after receipts → invalidate the node owning the change (normally `coding`).
 - Three fixes against the same root cause → invalidate `investigate` (`G1`).
@@ -184,7 +191,7 @@ lesson id and source ticket, never instructions.
 
 <HARD-GATE>
 Analyze before code: `coding` (`change` in `lite`) never starts before the plan node (`scope`) is approved with
-`--actor user` (or `gates.autoSkipPlanApproval`), and every HIGH question in `questions.md` is ANSWERED with evidence.
+`--actor user` (or `gates.autoSkipPlanApproval`), and every HIGH question in the batch (`sdlc questions`) is answered by the user (the plan gate enforces it, `G1`).
 Never commit, push or open a PR here: only `kaneki-ship` does, after explicit user approval. Never deploy, delete work,
 change git identity, or print secrets. Never skip a fired gate. Never start a node before the previous node's gate
 record exists. Every claim cites `path:line`, a command run with its result, or an evidence file; no source means `UNKNOWN`.
@@ -201,7 +208,7 @@ record exists. Every claim cites `path:line`, a command run with its result, or 
 | G5 | test/rule applicability or expected value is ambiguous |
 | G6 | shared-state mutation, real device, missing runtime config, ambiguous result |
 | G7 | missing/unsafe prerequisite: file, adapter, tool, permission, model, supervision evidence |
-| G8 | budget: a profile `budgets` cap (ticket, node, local day) is reached; `packet` refuses, the runner parks. Ask the user: raise the cap, or `$SDLC budget --ticket T --allow-node N --reason ... --actor user` (this node's current round only), or stop. `warn` level only prints `budgetWarning` |
+| G8 | budget: a `budgets` cap (ticket, node incl. its `minutes` wall clock from the round's first packet, local day; no block = harness defaults, `{}` = off) is reached; `packet` refuses, the runner parks. Ask the user: raise the cap, or `$SDLC budget --ticket T --allow-node N --reason ... --actor user` (this node's current round only), or stop. `warn` level only prints `budgetWarning` |
 
 ## Where project specifics live
 

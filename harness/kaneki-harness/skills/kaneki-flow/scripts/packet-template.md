@@ -61,7 +61,7 @@ node, unit ids) into code, test names or customer-facing text.
 ## Context budget
 
 Assume a context window of about **{{contextWindow}} tokens**, and spend it on judgment, not on output.
-
+{{timeBudget}}
 - Send long command output (tests, builds, installs, container and server logs) to a file under
   `{{logsDir}}` and inspect it with search (or the last lines only), never the whole stream:
   `<command> > "{{logsDir}}/<name>.log" 2>&1; echo "exit $?"`.

@@ -96,6 +96,11 @@ def complete_node(ticket: str, node: str) -> None:
             lines.append("Verdict: APPROVED")
         if "reopen" in parsers:
             lines.append("Reopen: none")
+        if art == "drafts/commit-msg.md":  # drafts follow the ship rules (the delivery-drafts gate checks them)
+            lines = ["feat(app): add the change", "", f"Work for {ticket}."]
+        if art == "drafts/pr-body.md":
+            lines = ["## Summary", "x", "## Detailed changes", "x", "## Explanation", "x",
+                     "## Test results (local)", "- unit: pass", "- lint: pass"]
         path = tdir / art
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("\n".join(lines) + "\n", encoding="utf-8")

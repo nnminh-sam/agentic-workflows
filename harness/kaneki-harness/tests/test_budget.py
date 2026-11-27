@@ -69,11 +69,42 @@ class CheckTests(Synthetic, Base):
     def check(self, node: str | None = "change", **kw) -> dict:
         return budget.check(self.profile, "B-1", node, events=[], generation=1, **kw)
 
-    def test_no_budget_block_means_no_checks_and_no_cost_read(self) -> None:
+    def test_empty_budget_block_means_no_checks_and_no_cost_read(self) -> None:
         self.synth([row("B-1", "change", 10 ** 9, 999.0)])
+        self.set_budgets({})
         res = self.check()
         self.assertEqual((res["configured"], res["allowed"], res["level"]), (False, True, "ok"))
         self.assertEqual(self.rows_calls, 0)
+
+    def test_no_budget_block_means_default_caps(self) -> None:
+        """A4: a profile that never set budgets still stops a runaway node."""
+        self.synth([row("B-1", "change", 16_000_000, None)])
+        res = self.check()
+        self.assertEqual((res["configured"], res["source"], res["allowed"], res["over"]), (True, "default", False, ["node"]))
+        self.assertEqual(res["caps"]["node"], budget.DEFAULTS["node"]["default"])
+        self.assertEqual(budget.caps_for(budget.DEFAULTS, "execute-and-evidence")["node"]["minutes"], 60)
+
+    def test_minutes_cap(self) -> None:
+        """A4: the wall clock of the node's round, from its first packet."""
+        self.synth([row("B-1", "execute-and-evidence", 100, None)])
+        self.set_budgets({"node": {"execute-and-evidence": {"minutes": 60}}})
+        t0 = 1_800_000_000.0
+        res = budget.check(self.profile, "B-1", "execute-and-evidence", now=t0 + 30 * 60, events=[], generation=1,
+                           started=t0)
+        self.assertEqual((res["level"], res["usage"]["node"]["minutes"], res["secondsLeft"]), ("ok", 30.0, 1800))
+        res = budget.check(self.profile, "B-1", "execute-and-evidence", now=t0 + 61 * 60, events=[], generation=1,
+                           started=t0)
+        self.assertEqual((res["allowed"], res["over"]), (False, ["node"]))
+        self.assertIn("time cap reached", budget.refusal(res))
+        # no start recorded yet: the clock has not started, nothing to refuse
+        res = budget.check(self.profile, "B-1", "execute-and-evidence", now=t0, events=[], generation=1)
+        self.assertEqual(res["level"], "ok")
+        self.assertIsNone(res.get("deadline"))
+
+    def test_minutes_only_on_node_caps(self) -> None:
+        errs = budget.config_errors({"ticket": {"minutes": 5}, "node": {"default": {"minutes": 0}}})
+        self.assertTrue(any("budgets.ticket.minutes is unknown" in e for e in errs), errs)
+        self.assertTrue(any("budgets.node.default.minutes must be a number > 0" in e for e in errs), errs)
 
     def test_ticket_cap(self) -> None:
         self.synth([row("B-1", "scope", 100, 30.0), row("B-1", "change", 100, 12.0), row("OTHER", "change", 100, 50.0)])
@@ -213,7 +244,8 @@ class PacketGateTests(Synthetic, Base):
 
     def test_no_block_packet_unchanged(self) -> None:
         self.synth([row(self.T, "prepare", 10 ** 9, 999.0)])
-        with mock.patch.object(budget, "check", side_effect=AssertionError("no block: no check")):
+        self.set_budgets({})
+        with mock.patch.object(budget, "check", side_effect=AssertionError("empty block: no check")):
             code, res = self.packet()
         self.assertEqual(code, 0, res)
         self.assertNotIn("budget", res)
@@ -289,8 +321,22 @@ class PacketGateTests(Synthetic, Base):
                         "--scope", "all", *self.p)
         self.assertEqual(code, 0, res)
 
+    def test_packet_starts_the_round_clock_and_names_the_deadline(self) -> None:
+        self.synth([row(self.T, "prepare", 1_000, None)])
+        code, res = self.packet()
+        self.assertEqual(code, 0, res)
+        self.assertEqual(res["budget"]["source"], "default")
+        self.assertEqual(res["budget"]["secondsLeft"], budget.DEFAULTS["node"]["default"]["minutes"] * 60)
+        self.assertIn("Time cap: this node's round ends at", Path(res["path"]).read_text(encoding="utf-8"))
+        st = json.loads((self.tdir(self.T) / "state.json").read_text(encoding="utf-8"))["nodes"]["prepare"]["startedAt"]
+        self.assertEqual(st["generation"], 1)
+        code, res2 = self.packet()  # the clock is not restarted by a second packet of the round
+        st2 = json.loads((self.tdir(self.T) / "state.json").read_text(encoding="utf-8"))["nodes"]["prepare"]["startedAt"]
+        self.assertEqual(st, st2)
+
     def test_sdlc_budget_status_is_read_only(self) -> None:
         self.synth([row(self.T, "prepare", 1_000, 10.0)])
+        self.set_budgets({})
         code, res = run("budget", "--ticket", self.T, *self.p)
         self.assertEqual((code, res["configured"]), (0, False))
         self.set_budgets({"ticket": {"usd": 40, "tokens": 2_000}, "daily": {"usd": 60}})
@@ -306,6 +352,7 @@ class PacketGateTests(Synthetic, Base):
 
     def test_status_md_and_board_fields(self) -> None:
         self.synth([row(self.T, "prepare", 1_000, 35.0)])
+        self.set_budgets({})
         s = Session(argparse.Namespace(profile=str(self.profile), ticket=self.T, host=None))
         self.assertIsNone(board.summarize(s)["budget"])
         self.set_budgets({"ticket": {"usd": 40}})
@@ -376,9 +423,10 @@ class RunnerBudgetTests(Synthetic, RunnerBase):
         self.assertEqual(self.inbox()[-1]["kind"], "budget")
         self.assertFalse(runner.lease_path(self.tdir(t)).exists())
 
-    def test_no_block_allows(self) -> None:
+    def test_empty_block_allows(self) -> None:
         from harness import runner
         self.synth([row("X", "change", 10 ** 9, 999.0)])
+        self.set_budgets({})
         ok, why = runner.budget_allows({"profile": self.profile, "ticket": "X", "node": "change", "host": "claude",
                                         "phase": "start", "runId": None})
         self.assertEqual((ok, why), (True, None))

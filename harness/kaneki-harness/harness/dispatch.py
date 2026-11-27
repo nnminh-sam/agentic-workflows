@@ -230,8 +230,12 @@ def run_dispatch(s: Any, node: str, unit_id: str, *, facts: str | None = None,
         command_override=command,
         runner_override=runner,
     )
+    left = (packet.get("budget") or {}).get("secondsLeft")
+    if left is not None and left < timeout:  # A4: the node's wall-clock cap bounds the dispatch too
+        timeout = max(60, int(left))
     if dry_run:
         return {
+            "timeout": timeout,
             "dryRun": True,
             "dispatchId": packet["dispatchId"],
             "packet": packet,
