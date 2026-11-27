@@ -133,6 +133,8 @@ def planned_tier(s: Any, node: str | None, unit_id: str | None) -> str | None:
     unit = next((u for u in spec.get("units", []) if u["id"] == unit_id), None)
     if unit is None and unit_id == "reviewer" and spec.get("reviewer"):
         unit = {"id": "reviewer", "tier": spec["reviewer"]["tier"]}
+    if unit is None and unit_id == "reviewer-2" and (spec.get("reviewer") or {}).get("second"):
+        unit = {"id": "reviewer-2", "tier": spec["reviewer"]["second"]["tier"]}
     if unit is None:
         return None
     p_node = (s.profile.get("nodeOverrides") or {}).get(node) or {}

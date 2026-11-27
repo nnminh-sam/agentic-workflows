@@ -31,11 +31,11 @@
     "requirement-analysis",
     "impact-analysis",
     "feature-plan",
+    "testcase",
+    "testcase-review",
     "coding",
     "code-review",
     "@slot:after-code-review",
-    "testcase",
-    "testcase-review",
     "execute-and-evidence",
     "@slot:after-evidence",
     "final-review",
@@ -198,6 +198,9 @@
             "design-rules"
           ]
         }
+      },
+      "reviewer": {
+        "tier": "deep"
       }
     },
     "requirement-analysis": {
@@ -290,7 +293,7 @@
         {
           "id": "worker",
           "role": "worker",
-          "tier": "routine"
+          "tier": "deep"
         }
       ],
       "boundary": "user",
@@ -319,6 +322,9 @@
             "design-rules"
           ]
         }
+      },
+      "reviewer": {
+        "tier": "deep"
       }
     },
     "coding": {
@@ -326,7 +332,8 @@
       "purpose": "Implement the approved plan in the ticket worktree; self-check every code-phase rule bound to the touched paths.",
       "requires": [
         "approved-plan",
-        "review-scope"
+        "review-scope",
+        "reviewed-testcases"
       ],
       "produces": [
         "source-change"
@@ -389,11 +396,10 @@
         {
           "id": "semantic-review",
           "role": "worker",
-          "tier": "deep",
-          "after": "technical-review"
+          "tier": "deep"
         }
       ],
-      "pattern": "staged-units-controller-judged",
+      "pattern": "parallel-units-controller-judged",
       "boundary": "controller",
       "gates": [
         "G4"
@@ -452,7 +458,7 @@
     },
     "testcase-review": {
       "layer": "implementation",
-      "purpose": "Coverage of every plan condition and every expected value; NEEDS CHANGES reopens testcase.",
+      "purpose": "Test-case judge: decide, with requirement citations, whether testcases.json tests the plan (expected values, proxies, risk, one observable per check); escalate only business questions.",
       "requires": [
         "testcases"
       ],
@@ -464,7 +470,7 @@
         {
           "id": "worker",
           "role": "worker",
-          "tier": "routine"
+          "tier": "deep"
         }
       ],
       "boundary": "controller",
@@ -508,7 +514,11 @@
         }
       ],
       "reviewer": {
-        "tier": "routine"
+        "tier": "deep",
+        "second": {
+          "tier": "routine",
+          "scope": "critical"
+        }
       },
       "boundary": "controller",
       "gates": [

@@ -39,7 +39,8 @@
         "autonomy",
         "budget-override",
         "question",
-        "answer"
+        "answer",
+        "judge-miss"
       ]
     },
     "prev": {

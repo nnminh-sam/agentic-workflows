@@ -57,7 +57,8 @@ def summarize(s: Any, events_limit: int = 40, detail: bool = False) -> dict[str,
         for name in s.artifacts(node) + spec.get("optionalArtifacts", []):
             path = s.ticket.dir / name
             arts.append({"name": name, "path": str(path), "exists": path.is_file()})
-        planned = [u["id"] for u in spec.get("units", [])] + (["reviewer"] if spec.get("reviewer") else [])
+        planned = [u["id"] for u in spec.get("units", [])] + (["reviewer"] if spec.get("reviewer") else []) + (
+            ["reviewer-2"] if (spec.get("reviewer") or {}).get("second") else [])
         nodes.append({
             "node": node, "layer": spec["layer"], "purpose": spec["purpose"], "status": rec["status"],
             "generation": rec["generation"], "verdict": rec["verdict"], "attempts": rec["attempts"],
@@ -87,6 +88,7 @@ def summarize(s: Any, events_limit: int = 40, detail: bool = False) -> dict[str,
         "updatedAt": events[-1]["at"] if events else s.state.get("createdAt"),
         "settled": sum(1 for n in s.order if settled(s.state, n)), "traceLength": len(s.order),
         "nextPending": nxt, "next": next_hint(s, nxt) + (DECIDE_HINT if wait["on"] == "user" else ""),
+        "ready": _ready(s),
         "tokensTotal": tokens_total,
         "waitingOn": wait["on"], "waitingNode": wait["node"], "waitingReason": wait["reason"],
         "lastEventAt": shown[-1]["at"] if shown else None, "lastEventKind": shown[-1]["event"] if shown else None,
@@ -118,6 +120,11 @@ def _pending_proposals(s: Any) -> int:
         return learn.pending_count(s.pdir, s.ticket.dir)
     except (OSError, ValueError, HarnessError):
         return 0
+
+
+def _ready(s: Any) -> list[str]:
+    from .state import ready_nodes
+    return ready_nodes(s.graph, s.order, s.state)
 
 
 def budget_view(s: Any, node: str | None, events: list[dict[str, Any]] | None = None) -> dict[str, Any] | None:
@@ -245,7 +252,8 @@ def _next_hint(s: Any, node: str | None) -> str:
         return "done: ship with /kaneki-ship" if not s.state.get("shipped") else "shipped"
     spec = s.spec(node)
     rec = s.state["nodes"][node]
-    planned = [u["id"] for u in spec.get("units", [])] + (["reviewer"] if spec.get("reviewer") else [])
+    planned = [u["id"] for u in spec.get("units", [])] + (["reviewer"] if spec.get("reviewer") else []) + (
+            ["reviewer-2"] if (spec.get("reviewer") or {}).get("second") else [])
     done = {u["unit"] for u in rec["units"] if u["generation"] == rec["generation"] and u["status"] == "ok"}
     if planned and set(planned) <= done or (not planned and rec["status"] == "in_progress"):
         return f"{node}: work recorded, waiting for " + ("your approval" if spec["boundary"] == "user" else "the gate")

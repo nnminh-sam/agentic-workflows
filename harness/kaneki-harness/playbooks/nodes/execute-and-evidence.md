@@ -27,4 +27,21 @@ stranger could audit. You run what exists; you never author tests or scripts her
    `--drop-db` when the ticket is done). `sdlc report --ticket <id>` renders the read-only notebook.
 
 **G6** before mutating shared state, before using a real device, or when runtime config is missing.
-The reviewer audits that each PASS has an observed value and a source.
+
+## Judges (units `reviewer` = judge A, deep; `reviewer-2` = judge B, routine, critical checks only)
+
+You never wrote or ran these tests: you decide whether they prove the ticket (J1). Start from the driver's facts:
+`sdlc judge-facts --ticket <id>` writes `evidence/judge-facts.json` (per check: status, observed value, source,
+mutation result, and the EVD rules it breaks). You cannot overrule them: a driver FAIL is FAIL; a check with any
+rule listed cannot be PASS (J2).
+
+Write `evidence-judgement.json` (judge A) or `evidence-judgement-2.json` (judge B), `contracts/judgement.schema.json`:
+per check `verdict` PASS | FAIL | ESCALATE, `confidence` High | Medium | Low, `reason`, and for PASS / FAIL a
+`requirement` and an `evidence` citation, each `{"ref": "file:line", "quote": "<verbatim text at that line>"}`
+(the gate checks the quote is there). FAIL names `routeTo`, the node that owns the fix (coding for a weak test or
+wrong code, testcase for a wrong expected value). Low confidence is ESCALATE, and so is anything you cannot decide from
+the requirements and the evidence: class business / infra / critical-logic, asked with
+`sdlc ask --class <class> --severity HIGH --question '<check id>: ...'`. Judge A also gives a reason, with a citation,
+for each file in the facts' `uncoveredFiles` (EVD-E). Run `sdlc check --ticket <id> --node execute-and-evidence
+--unit <reviewer|reviewer-2>` before you hand back. Where A and B disagree on a critical check, the gate asks the user
+(J4). Approved verdicts go to the calibration log; a later stage that overturns one records `sdlc judge-miss` (J5).

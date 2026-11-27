@@ -1,7 +1,7 @@
 # code-review
 
-**Goal:** an independent verdict on the real diff, paying for the deep tier only on a round that is
-technically clean. Two units run **in sequence**; the controller judges.
+**Goal:** an independent verdict on the real diff. Two units run **in parallel** (D3); each writes its own
+section, neither waits for the other, and the controller judges both.
 
 1. **technical-review** (routine). Over the real diff
    (`sdlc git --ticket <id> --repo <repo> -- diff <base>`, plus untracked files):
@@ -12,18 +12,15 @@ technically clean. Two units run **in sequence**; the controller judges.
    - judge every code-phase rule id in the rules file against the diff hunks: PASS / N/A (reason) /
      FAIL with `path:line`;
    - verdict **PASS** only when everything builds, every test passes and no rule FAILs.
-   Record it with `--verdict PASS|FAIL`. On FAIL the controller closes the node with
-   `--status needs-changes` straight away: the driver refuses a semantic-review packet or record until
-   the technical review PASSed at the current generation.
-2. **semantic-review** (deep), only after technical PASS. Does the diff implement the approved plan
+   Record it with `--verdict PASS|FAIL`.
+2. **semantic-review** (deep), at the same time. Does the diff implement the approved plan
    and only the plan?
    - walk each `Condition → negative case` row through the code with concrete values;
    - look for regressions in the callers named by impact-analysis or investigate;
-   - **attack the weakest claim on the running app**: the technical review's notes say how to start it;
+   - **attack the weakest claim on the running app** (`sdlc env up` / `sdlc env exec`, never your own server);
      try the input most likely to break the change (wrong type, missing field, boundary, framework
      default behaviour such as error wrapping or lifecycle hooks) and quote the actual response;
-   - do not redo the technical review's build, lint and rule table; rely on it unless you see a reason
-     to doubt one line, and then say which.
+   - do not run the build, lint and rule table; the technical review covers them.
    Record it with `--verdict PASS|FAIL`.
 
 Both append to `code-review.md` under their own heading (`## Technical review (generation N)`,

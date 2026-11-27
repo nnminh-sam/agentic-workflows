@@ -124,7 +124,35 @@ class Base(unittest.TestCase):
             path = self.tdir(ticket) / art
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        if node == "execute-and-evidence" and verdict == "APPROVED":
+            self.write_judgements(ticket)
         return plan
+
+    def write_judgements(self, ticket: str) -> None:
+        """What the evidence run and the two judges leave (J1-J5): run.json, a mutation exemption, two judgements
+        citing testcases.json / evidence.json verbatim, a reason for every changed file no case observes."""
+        tdir = self.tdir(ticket)
+        tcs = json.loads((tdir / "testcases.json").read_text(encoding="utf-8"))
+        (tdir / "evidence").mkdir(exist_ok=True)
+        (tdir / "evidence" / "run.json").write_text(json.dumps(
+            {"cases": {c["id"]: {"status": "PASS", "log": ""} for c in tcs["cases"]}}), encoding="utf-8")
+        ev = json.loads((tdir / "evidence.json").read_text(encoding="utf-8"))
+        for row in ev["checks"].values():
+            row["source"] = {"kind": "test", "ref": "testcases.json:1"}
+        (tdir / "evidence.json").write_text(json.dumps(ev), encoding="utf-8")
+        (tdir / "mutations.json").write_text(json.dumps(
+            {k["id"]: {"none": "test fixture"} for c in tcs["cases"] for k in c["checks"]}), encoding="utf-8")
+        code, fx = run("judge-facts", "--ticket", ticket, *self.p)
+        self.assertEqual(code, 0, fx)
+        verdict = {"verdict": "PASS", "confidence": "High", "class": "judgeable", "reason": "observed as required",
+                   "requirement": {"ref": "testcases.json:1", "quote": tcs["criteria"][0]["text"]},
+                   "evidence": {"ref": "evidence.json:1", "quote": '"status": "PASS"'}}
+        checks = [k["id"] for c in tcs["cases"] for k in c["checks"]]
+        for judge, name in (("a", "evidence-judgement.json"), ("b", "evidence-judgement-2.json")):
+            (tdir / name).write_text(json.dumps({
+                "schemaVersion": 1, "ticket": ticket, "judge": judge, "verdicts": {c: verdict for c in checks},
+                **({"uncoveredFiles": {f: "fixture change outside the cases" for f in fx["uncoveredFiles"]}}
+                   if judge == "a" else {})}), encoding="utf-8")
 
     def complete(self, ticket: str, node: str, *, actor: str = "controller", extra: tuple[str, ...] = ()) -> dict:
         """Simulate the controller: write artifacts, record every planned unit, close the node."""
@@ -150,8 +178,9 @@ class TraceTests(Base):
         graph = G.load_graph(HOME, profile, self.tmp)
         bug = G.trace(graph, build_context(profile, "T", "bug", None, None, None))
         feat = G.trace(graph, build_context(profile, "T", "feature", None, None, None))
-        self.assertEqual(bug[:4], ["prepare", "investigate", "fix-plan", "coding"])
-        self.assertEqual(feat[:5], ["prepare", "requirement-analysis", "impact-analysis", "feature-plan", "coding"])
+        self.assertEqual(bug[:6], ["prepare", "investigate", "fix-plan", "testcase", "testcase-review", "coding"])
+        self.assertEqual(feat[:7], ["prepare", "requirement-analysis", "impact-analysis", "feature-plan", "testcase",
+                                    "testcase-review", "coding"])
         self.assertNotIn("read-review", bug)  # after-PR nodes appear only on handback
 
     def test_invalidate_coding_keeps_testcases(self) -> None:
@@ -199,6 +228,8 @@ class DriverTests(Base):
         code, res = run("plan", "--ticket", t, "--node", "fix-plan", *self.p)
         self.assertEqual(res["boundary"], "user")
         self.complete(t, "fix-plan", actor="user")
+        for node in ("testcase", "testcase-review"):  # D1: test cases before coding
+            self.complete(t, node)
 
         (self.repo / "main.py").write_text("print('v2')\n")  # the "fix"
         self.complete(t, "coding")
@@ -211,7 +242,7 @@ class DriverTests(Base):
         self.assertEqual(res["nextPending"], "coding")
         self.complete(t, "coding")
         self.complete(t, "code-review")
-        for node in ("testcase", "testcase-review", "execute-and-evidence"):
+        for node in ("execute-and-evidence",):
             self.complete(t, node)
         res = self.complete(t, "final-review")
         self.assertIn("app", res["receipts"])
@@ -251,7 +282,7 @@ class DriverTests(Base):
         for node in ("prepare", "investigate"):
             self.complete(t, node)
         self.complete(t, "fix-plan", actor="user")
-        for node in ("coding", "code-review", "testcase", "testcase-review", "execute-and-evidence", "final-review", "delivery-drafts"):
+        for node in ("testcase", "testcase-review", "coding", "code-review", "execute-and-evidence", "final-review", "delivery-drafts"):
             self.complete(t, node)
         (self.repo / "main.py").write_text("print('sneaky')\n")
         code, res = run("gate", "--ticket", t, "--node", "deliverable-ready", "--status", "approved", "--actor", "user", *self.p)
@@ -275,6 +306,8 @@ class DriverTests(Base):
         for node in ("prepare", "investigate"):
             self.complete(t, node)
         self.complete(t, "fix-plan", actor="user")
+        for node in ("testcase", "testcase-review"):  # D1: test cases before coding
+            self.complete(t, node)
         self.complete(t, "coding")
         self.write_artifacts(t, "code-review", verdict="NEEDS CHANGES")
         code, _ = run("gate", "--ticket", t, "--node", "code-review", "--status", "needs-changes", *self.p)
@@ -292,7 +325,7 @@ class DriverTests(Base):
         for node in ("prepare", "investigate"):
             self.complete(t, node)
         self.complete(t, "fix-plan", actor="user")
-        for node in ("coding", "code-review", "testcase", "testcase-review", "execute-and-evidence"):
+        for node in ("testcase", "testcase-review", "coding", "code-review", "execute-and-evidence"):
             self.complete(t, node)
         self.write_artifacts(t, "final-review")  # the review lists the change's files ...
         (self.repo / "AGENTS.md").write_text("generated by a dev server\n")  # ... then a tool writes one more
@@ -311,6 +344,8 @@ class DriverTests(Base):
         for node in ("prepare", "investigate"):
             self.complete(t, node)
         self.complete(t, "fix-plan", actor="user")
+        for node in ("testcase", "testcase-review"):  # D1: test cases before coding
+            self.complete(t, node)
         self.complete(t, "coding")
         self.complete(t, "code-review")
         code, res = run("invalidate", "--ticket", t, "--node", "coding", "--reason", "fix docs", *self.p)

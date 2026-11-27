@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path, PureWindowsPath
@@ -24,7 +25,7 @@ from .profile import (LOCALE_KEYS, _abs, artifact_languages, build_context, lang
                       load_profile, parse_lang_settings, resolve_adapters, worktree_path, worktree_root,
                       worktree_root_errors)
 from .state import (Ticket, check_receipts, issue_receipts, missing_prerequisites, new_node_record,
-                    next_pending, now, repo_subject, settled, sha256_file, sha256_text)
+                    next_pending, now, ready_nodes, repo_subject, settled, sha256_file, sha256_text)
 
 HOME = Path(__file__).resolve().parent.parent
 
@@ -130,6 +131,10 @@ class Session:
         units = [dict(u) for u in spec.get("units", [])]
         if spec.get("reviewer"):
             units.append({"id": "reviewer", "role": "reviewer", "tier": spec["reviewer"]["tier"]})
+            second = spec["reviewer"].get("second")
+            if second:  # J4: an independent second judge on another tier
+                units.append({"id": "reviewer-2", "role": "reviewer", "tier": second["tier"],
+                              "scope": second.get("scope", "critical")})
         return units
 
     def unit(self, node: str, unit_id: str) -> dict[str, Any]:
@@ -353,7 +358,8 @@ def cmd_status(args: argparse.Namespace) -> None:
         row["tokens"] = (tt["nodes"].get(row["node"]) or {}).get("tokens", 0)
     res = {"ticket": s.ctx["ticket"], "kind": s.ctx["kind"], "lane": G.lane_of(s.ctx), "reviewRound": s.ctx["reviewRound"],
            "settled": sum(1 for n in s.order if settled(s.state, n)), "traceLength": len(s.order),
-           "nextPending": nxt, "tokensTotal": tt["total"]["tokens"], "tokens": U.compact(tt)}
+           "nextPending": nxt, "ready": ready_nodes(s.graph, s.order, s.state),
+           "tokensTotal": tt["total"]["tokens"], "tokens": U.compact(tt)}
     res["host"], res["hosts"] = board.ticket_hosts(s.state)
     if nxt:
         res["nextMissing"] = missing_prerequisites(s.graph, s.order, s.state, nxt)
@@ -922,9 +928,14 @@ def _readiness_walk(s: "Session", node: str, status: str, reopen: str | None, no
         if lacking:
             yield f"G7: {node} has no ok record for units {lacking} at generation {rec['generation']}", False
         elif spec.get("reviewer"):
-            last_rev = [u for u in current if u["unit"] == "reviewer" and u["status"] != "abandoned"][-1]
-            if last_rev.get("verdict") == "FAIL":
-                yield f"{node}: last reviewer verdict is FAIL ({last_rev.get('failureClass')}); fix and re-review", False
+            for rid in ("reviewer", "reviewer-2") if spec["reviewer"].get("second") else ("reviewer",):
+                last_rev = [u for u in current if u["unit"] == rid and u["status"] != "abandoned"][-1]
+                if last_rev.get("verdict") == "FAIL":
+                    yield f"{node}: last {rid} verdict is FAIL ({last_rev.get('failureClass')}); fix and re-review", False
+            if spec["reviewer"].get("second"):  # J1-J5: the evidence judges, held to the driver's facts
+                from . import judge as J
+                for p in J.gate_problems(s):
+                    yield (p if p.startswith("G1:") else f"G7: {node}: {p}"), False
         if "unrecorded" not in memo:
             memo["unrecorded"] = unrecorded_dispatches(s, node)
         if memo["unrecorded"]:
@@ -1074,6 +1085,9 @@ def cmd_gate(args: argparse.Namespace) -> None:
     elif args.status == "approved":
         if "citationWarnings" in notes:
             result["citationWarnings"] = notes["citationWarnings"]
+        if (spec.get("reviewer") or {}).get("second"):  # J5: approved verdicts feed the calibration log
+            from . import judge as J
+            result["judgeVerdicts"] = J.record_verdicts(s)
         if spec.get("subjectNode"):
             rec["subject"] = {r["id"]: repo_subject(r.get("worktree") or r["path"], s.excludes) for r in s.ctx["repositories"]}
             result["subject"] = rec["subject"]
@@ -1162,6 +1176,7 @@ def artifact_problems(s: "Session", node: str, status: str, reopen: str | None) 
         out += unreviewed_untracked(s, node)
     if "baseline.json" in s.artifacts(node):
         out += baseline_problems(s)
+    out += small_path_problems(s, node)
     return out
 
 
@@ -1293,6 +1308,12 @@ def check_report(s: "Session", node: str, unit_id: str | None = None) -> dict[st
                 from .dispatch import extract_verdict
                 if extract_verdict(result.read_text(encoding="utf-8"))[0] is None:
                     problems.append(f"{result.name}: no `Verdict: PASS | FAIL` (or APPROVED | NEEDS CHANGES) line")
+    if role == "reviewer" and (spec.get("reviewer") or {}).get("second") and unit_id in ("reviewer", "reviewer-2"):
+        from . import judge as J  # an evidence judge checks its own judgement file before it hands back
+        try:
+            problems += J.judgement_problems(s, J.UNIT_JUDGE[unit_id])
+        except HarnessError as exc:
+            problems.append(str(exc))
     if role != "reviewer":  # a reviewer reads the artifacts, the worker leaves them
         names = s.artifacts(node)
         checked += [str(s.ticket.dir / a) for a in names]
@@ -1464,8 +1485,70 @@ def loop_rounds(s: "Session", target: str, attempts: int = 0) -> int:
     return max(attempts, reopens(s, target)) + 1
 
 
-def _invalidate(s: Session, node: str, reason: str, actor: str = "controller") -> list[str]:
+# D4: a fix that touches only tests (or only docs) reopens the source node without the nodes that review source:
+# tests-only keeps code-review; docs-only keeps code-review and the evidence run. The reopened node's gate then checks
+# that nothing else changed since the reopen (small_path_problems).
+SMALL_SKIP = {"tests": ("code-review",), "docs": ("code-review", "execute-and-evidence")}
+SMALL_FILES = {
+    "tests": None,  # judge.TEST_PATH_RE (set below: one definition of a test file)
+    "docs": re.compile(r"(\.(md|mdx|rst|txt|adoc)$|(^|/)docs?/)", re.I),
+}
+
+
+def _small_pattern(kind: str) -> "re.Pattern[str]":
+    from .judge import TEST_PATH_RE
+    return TEST_PATH_RE if kind == "tests" else SMALL_FILES[kind]
+
+
+def change_digests(s: "Session") -> dict[str, dict[str, str]]:
+    """Per repository: every path git reports as changed (tracked or untracked) -> digest of its current content."""
+    from .state import _git, _excluded
+    out: dict[str, dict[str, str]] = {}
+    for r in s.ctx["repositories"]:
+        root = Path(r.get("worktree") or r["path"])
+        prefixes = []
+        for e in s.excludes:
+            try:
+                prefixes.append(Path(e).resolve().relative_to(root.resolve()).as_posix())
+            except ValueError:
+                pass
+        rows: dict[str, str] = {}
+        for line in _git(str(root), "status", "--porcelain", "--untracked-files=all").splitlines():
+            rel = line[3:].strip().strip('"').split(" -> ")[-1]
+            if not rel or _excluded(rel, prefixes):
+                continue
+            f = root / rel
+            rows[rel] = sha256_file(f) if f.is_file() else "deleted"
+        out[r["id"]] = rows
+    return out
+
+
+def small_path_problems(s: "Session", node: str) -> list[str]:
+    rec = s.state["nodes"][node]
+    sp = rec.get("smallPath")
+    if not sp or sp.get("generation") != rec["generation"]:
+        return []
+    now_d, base = change_digests(s), sp.get("baseline") or {}
+    pattern = _small_pattern(sp["kind"])
+    wrong = []
+    for repo, files in now_d.items():
+        before = base.get(repo) or {}
+        for path in sorted(set(files) | set(before)):
+            if files.get(path) != before.get(path) and not pattern.search(path):
+                wrong.append(f"{repo}:{path}")
+    if wrong:
+        return [f"{node} was reopened on the {sp['kind']}-only small path, but non-{sp['kind']} files changed: "
+                f"{wrong[:15]}. Revert them, or reopen fully: `sdlc invalidate --node {node} --reason ...` "
+                "(code review then runs again)"]
+    return []
+
+
+def _invalidate(s: Session, node: str, reason: str, actor: str = "controller", small: str | None = None) -> list[str]:
     stale = stale_preview(s, node)
+    if small:
+        stale = [n for n in stale if n == node or n not in SMALL_SKIP[small]]
+        s.state["nodes"][node]["smallPath"] = {"kind": small, "generation": s.state["nodes"][node]["generation"] + 1,
+                                              "baseline": change_digests(s)}
     for n in stale:
         rec = s.state["nodes"][n]
         if _never_ran(rec):
@@ -1480,7 +1563,8 @@ def _invalidate(s: Session, node: str, reason: str, actor: str = "controller") -
         mark_superseded(s, n, node, rec["generation"])
     if any(s.spec(n).get("issuesReceipts") for n in stale):
         s.state["receipts"] = {}
-    s.ticket.log({"event": "invalidate", "node": node, "stale": stale, "reason": reason, "actor": actor})
+    s.ticket.log({"event": "invalidate", "node": node, "stale": stale, "reason": reason, "actor": actor,
+                  **({"small": small} if small else {})})
     return stale
 
 
@@ -1495,7 +1579,9 @@ def cmd_invalidate(args: argparse.Namespace) -> None:
     if rounds >= cap and args.actor != "user" and not _never_ran(s.state["nodes"][args.node]):
         raise HarnessError(f"G4: reopening {args.node} would be round {rounds} (loop cap {cap}, counting manual "
                            "reopens); ask the user, then repeat with --actor user")
-    stale = _invalidate(s, args.node, args.reason, args.actor)
+    if args.small and args.node != "coding":
+        raise HarnessError("--small is for reopening coding with a tests-only or docs-only fix")
+    stale = _invalidate(s, args.node, args.reason, args.actor, args.small)
     kept = [n for n in s.order if n not in stale]
     s.save()
     out({"stale": stale, "kept": kept, "nextPending": next_pending(s.state, s.order)})
@@ -1573,6 +1659,31 @@ def _evidence_helper(s: "Session", args: argparse.Namespace) -> int:
     out({"ok": True, "repo": repo["id"], "path": str(dest), "written": not same, "import": helper.get("import"),
          "call": helper.get("call")})
     return 0
+
+
+def cmd_judge_facts(args: argparse.Namespace) -> None:
+    """`sdlc judge-facts`: the driver's determinable facts per check (J2), for the evidence judges to start from."""
+    from . import judge as J
+    out(J.write_facts(Session(args)))
+
+
+def cmd_mutate(args: argparse.Namespace) -> int:
+    """`sdlc mutate`: break each critical check's guarded line, run its tests, restore the file (J3)."""
+    from . import judge as J
+    res = J.mutate(Session(args), args.check)
+    out(res)
+    return 0 if res["ok"] else 1
+
+
+def cmd_judge_miss(args: argparse.Namespace) -> None:
+    """`sdlc judge-miss`: a later stage overturned a judge's verdict (J5 calibration)."""
+    from . import judge as J
+    s = Session(args)
+    if not (args.reason or "").strip():
+        raise HarnessError("--reason is required: what overturned the verdict, with a citation")
+    res = J.record_miss(s, args.check, args.reason.strip(), args.actor)
+    s.ticket.log({"event": "judge-miss", "check": args.check, "reason": args.reason.strip(), "actor": args.actor})
+    out({"ok": True, **res})
 
 
 def cmd_report(args: argparse.Namespace) -> None:
@@ -1876,6 +1987,8 @@ def cmd_host(args: argparse.Namespace) -> None:
         tier = next((u["tier"] for u in spec.get("units", []) if u["id"] == unit_id), None)
         if tier is None and unit_id == "reviewer" and spec.get("reviewer"):
             tier = spec["reviewer"]["tier"]
+        if tier is None and unit_id == "reviewer-2" and (spec.get("reviewer") or {}).get("second"):
+            tier = spec["reviewer"]["second"]["tier"]
         if tier is None:
             tier = "routine"
         fake_unit = {"id": unit_id, "tier": tier}
@@ -2204,6 +2317,9 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--reason", required=True)
     x.add_argument("--actor", default="controller", choices=["controller", "user"],
                    help="user: a person decided the reopen (needed past the loop cap, G4)")
+    x.add_argument("--small", choices=["tests", "docs"],
+                   help="D4: a tests-only or docs-only fix of coding: code review (and, for docs, the evidence run) "
+                        "is kept; the coding gate refuses any other file change")
     x.set_defaults(fn=cmd_invalidate)
 
     x = sub.add_parser("env", parents=[ticketed], help="the harness-owned evidence environment: check (preflight), "
@@ -2224,6 +2340,21 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--rerun", nargs="*", default=[], help="case ids to run again (after a step fix)")
     x.add_argument("--repo", help="the repository whose worktree runs the cases (default: environment.evidence.repo)")
     x.set_defaults(fn=cmd_evidence)
+
+    x = sub.add_parser("judge-facts", parents=[ticketed], help="the driver's determinable facts per check for the "
+                                                                "evidence judges (evidence/judge-facts.json)")
+    x.set_defaults(fn=cmd_judge_facts)
+
+    x = sub.add_parser("mutate", parents=[ticketed], help="mutation proof: break each critical check's guarded line "
+                                                           "(mutations.json), run its tests, restore the file")
+    x.add_argument("--check", help="only this check id")
+    x.set_defaults(fn=cmd_mutate)
+
+    x = sub.add_parser("judge-miss", parents=[ticketed], help="record that a later stage overturned a judge's verdict")
+    x.add_argument("--check", required=True)
+    x.add_argument("--reason", required=True)
+    x.add_argument("--actor", default="controller", choices=["controller", "user"])
+    x.set_defaults(fn=cmd_judge_miss)
 
     x = sub.add_parser("report", parents=[ticketed], help="the read-only tester notebook (tester-notebook.html) from "
                                                            "testcases.json and evidence.json")
@@ -2509,7 +2640,7 @@ def build_parser() -> argparse.ArgumentParser:
 READ_ONLY = {"status", "plan", "check", "validate", "digest", "host", "onboard-scan", "onboard-verify", "onboard-write", "install",
              "tickets", "status-of", "web", "zed-setup", "contract", "ticket-detail", "gate-request",
              "transcripts", "cost", "budget", "reflect-signals", "questions",
-             "env", "baseline", "evidence", "report",  # own files only (env.json, baseline.json); no lock while a server starts or tests run
+             "env", "baseline", "evidence", "report", "judge-facts", "mutate",  # own files only (env.json, baseline.json); no lock while a server starts or tests run
              "learn",  # the workspace learning store has its own lock; apply/reject refresh STATUS.md themselves
              "decide"}  # decide takes the lock only for the gate it runs (through main), never while it waits for you
 NO_STATUS_REFRESH = READ_ONLY | {"git"}

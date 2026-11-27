@@ -62,7 +62,7 @@ Open from M2:
 - The my-git guard reads `git -C "$R"` literally (ship detour 38462dbc:813). The fix (expand variables assigned on the same command line in `plugins/my-git/scripts/gitguard/commands.py`) was blocked by auto mode as a change to a safety control: the user decides.
 - Project copies need `sdlc install --target . --host claude` again (node cards, packet template).
 
-**M3 implemented (2026-11-27, uncommitted on the same branch):**
+**M3 committed (`3834dd3`, 2026-11-27, not pushed):**
 
 | Task | Result |
 |---|---|
@@ -75,6 +75,22 @@ Open from M2:
 | runner | `sdlc evidence run` without `--cases` runs testcases.json (step files run in-process, a fresh observation file per attempt) and writes evidence.json; a passing test that never recorded a check leaves it UNOBSERVED |
 
 Open from M3: the report was checked by tests and a JS syntax check, not opened in a browser against a real ticket (feature-flags has no testcases.json; the prototype backfill stays for it).
+
+**M4 implemented (2026-11-27, uncommitted on the same branch). Judge pair: Opus + Sonnet (user).**
+
+| Task | Result |
+|---|---|
+| D1 | Graph order: plan → testcase → testcase-review → coding; coding requires `reviewed-testcases` |
+| D2 | feature-plan worker on deep; feature-plan and fix-plan get a deep `reviewer` (plan review before the user sees it) |
+| D3 | code-review's technical and semantic units run in parallel (no `after`; pattern `parallel-units-controller-judged`) |
+| J1/J4 | execute-and-evidence `reviewer` = judge A (deep, every check) and `reviewer-2` = judge B (routine, critical checks) via `reviewer.second` in the graph; testcase-review is a fresh deep judge |
+| J2 | `harness/judge.py` `facts()` (`sdlc judge-facts`): EVD-A observed, EVD-B observed = expected, EVD-C case ran, EVD-D critical check has a source, EVD-M critical mutation killed, EVD-E changed files observed. `contracts/judgement.schema.json`; verdicts need requirement + evidence citations whose quotes are found verbatim at the cited line; FAIL needs `routeTo`; Low confidence must ESCALATE; ESCALATE must be asked (`sdlc ask`). Gate: both judgements valid, A and B agree on critical checks (else G1 until the user answers a critical-logic question naming the check), FAILs routed, escalations answered |
+| J3 | `sdlc mutate`: per critical check in `mutations.json` (written in coding) break the guarded line, run the case command, restore the file (backup restored first if a previous run died); `evidence/mutations.json` killed / survived / error |
+| J5 | Approved verdicts → `<project>/.sdlc/judge-calibration.jsonl`; `sdlc judge-miss`; miss rate > 5 % over the last 200 verdicts → only High-confidence PASS stands |
+| D4 | `sdlc invalidate --node coding --small tests|docs`: keeps code-review (and, docs, the evidence run); the coding gate refuses changes outside test files (one shared test-file pattern incl. Python/Go/JVM conventions) or docs since the reopen |
+| D6 | `state.ready_nodes`; `ready` in `status --compact` and the board summary; flow.md starts every ready node |
+
+Not done in M4: the runner (`harness/runner.py`) still starts one node per pass; D6 gives it and the controller the ready list. The test-case judge keeps its markdown verdict (its determinable checks are the `testcases` parser).
 
 ## Milestone M1 (done; kept for reference)
 
@@ -100,7 +116,7 @@ Then M2 → M5 as listed in the plan's "Work plan" section: A4, B3–B5, E1–E5
 ## Open questions for the user (ask when the related milestone starts)
 
 1. ~~Evidence database for my-kaneki~~ **Answered 2026-11-27: raise `max_connections`.** `sdlc env up` configures the local `my-kaneki-postgres-1` container with a higher `max_connections` (the Neon proxy exhausted 20) and a per-ticket throwaway DB; no pooler; live checks stay on.
-2. Judge model pair for the two-judge rule (M4).
+2. ~~Judge model pair (M4)~~ **Answered 2026-11-27: Opus + Sonnet** (deep tier + routine tier; independent models, lower cost than two Opus).
 3. Run the controller on Sonnet (D9, M5)?
 4. Not checked yet: can `harness/runner.py` (`run`/`tick`) dispatch units headlessly?
 

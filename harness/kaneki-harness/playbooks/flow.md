@@ -22,7 +22,7 @@ for a node you do yourself and `subagents` for one you dispatch.
 | Lane | Trace | Use for |
 | --- | --- | --- |
 | `lite` | scope (user approves) → change → check (1 routine reviewer) → delivery-drafts → deliverable-ready | CSS, copy, config value, a contained fix whose cause is already known; ≤ ~5 files; no data/schema/API/auth/shared-flow change |
-| `full` | prepare (worktree) → analysis → plan (user approves) → coding ⇄ staged review (technical, then semantic) → test cases ⇄ review → evidence → final review → drafts → deliverable-ready | everything else |
+| `full` | prepare (worktree, baseline) → analysis → plan + plan review (user approves) → test cases ⇄ test-case judge → coding ⇄ parallel review (technical ∥ semantic) → evidence + two judges → final review → drafts → deliverable-ready | everything else |
 
 - The user picks with `--lite` / `--full`. Without a flag, propose `lite` when the request clearly fits the
   row above and confirm once via `ASK_USER` (Lite / Full); otherwise use `full` without asking.
@@ -47,9 +47,14 @@ or automatic review-failure escalation, and bound to a concrete model/runner by 
 | `routine` | Analysis, test cases, technical review, evidence, final review | analysis, impact, plan (feature), test cases and their review, **technical review**, evidence and its audit, final review |
 | `deep` | Diagnosis, complex planning, semantic review, triage | investigate, fix-plan, requirement review, **semantic review**, triage |
 
-- `code-review` is staged: `technical-review` first; `semantic-review` only after it recorded `PASS` at the
-  current generation (the driver refuses the packet and the record otherwise). A technical `FAIL` closes the
-  node with `needs-changes` at once, so the `deep` tier is spent only on technically clean rounds.
+- `code-review` runs `technical-review` and `semantic-review` in parallel (D3); either `FAIL` closes the node with
+  `needs-changes`.
+- Start every node in `status --compact`'s `ready` list, not only `nextPending` (D6): independent nodes run at once.
+- A fix that touches only tests or only docs reopens coding on the small path (D4):
+  `$SDLC invalidate --ticket <id> --node coding --small tests|docs --reason '...'` keeps code-review (and, for docs,
+  the evidence run); the coding gate refuses any other file change.
+- When final review, a PR review or the user overturns an evidence judge's verdict, record it:
+  `$SDLC judge-miss --ticket <id> --check TC-n.aN --reason '<what, with a citation>'` (J5).
 - After two failed code-review rounds, `plan` shows `coding` moved from `light` to `routine` (`escalated`).
   Always follow the `execution` block (`model`, `effort`, `dispatchMode`) returned by `plan` or `packet`.
 - `packet` inlines the tier's `roleCard` directly (including `deep`'s 5-step adversarial reasoning protocol),

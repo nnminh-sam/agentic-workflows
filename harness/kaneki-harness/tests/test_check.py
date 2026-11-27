@@ -58,14 +58,14 @@ class CheckCommandTests(Base):
         self.assertTrue(plan["artifacts"])
 
     def test_reviewer_needs_a_verdict_line(self) -> None:
-        result = self.tdir(self.t) / "results" / "execute-and-evidence.g1.reviewer.r1.md"
+        result = self.tdir(self.t) / "results" / "fix-plan.g1.reviewer.r1.md"  # the plan reviewer (D2)
         result.parent.mkdir(parents=True, exist_ok=True)
         result.write_text("Looks fine.\n", encoding="utf-8")
-        code, res = self.check("execute-and-evidence", "reviewer")
+        code, res = self.check("fix-plan", "reviewer")
         self.assertTrue(any("no `Verdict:" in p for p in res["problems"]), res)
         self.assertFalse(any("artifacts missing" in p for p in res["problems"]), "a reviewer leaves no artifacts")
         result.write_text("Verdict: PASS\n", encoding="utf-8")
-        code, res = self.check("execute-and-evidence", "reviewer")
+        code, res = self.check("fix-plan", "reviewer")
         self.assertEqual((code, res["problems"]), (0, []), res)
 
     def test_verdict_line_of_a_review_artifact(self) -> None:

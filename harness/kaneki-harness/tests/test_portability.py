@@ -44,6 +44,8 @@ class MovedProjectTests(Base):
 
         self.complete(t, "investigate")
         self.complete(t, "fix-plan", actor="user")
+        for node in ("testcase", "testcase-review"):  # D1: test cases before coding
+            self.complete(t, node)
         res = self.complete(t, "coding")  # subject digest needs the repo at its new place
         code, st = run("status", "--ticket", t, "--compact", *self.p)
         self.assertEqual(st["nextPending"], "code-review")

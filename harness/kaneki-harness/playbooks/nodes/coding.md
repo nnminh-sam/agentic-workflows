@@ -14,7 +14,12 @@
    evidence run, so the tests stay ordinary regression tests in CI). Live cases (`surface` web or api) are e2e
    tests next to the unit tests (Playwright test, supertest ...), written here and code-reviewed; the evidence node
    runs them and never writes scripts. A case's `run.command` must select exactly its tests.
-5. Never commit or push (the guard and `sdlc git` refuse it; only kaneki-ship commits). Never edit a test to make it pass unless the plan says the test was wrong.
+5. For every `critical` check of a `repo-test` case, write `mutations.json` in the ticket folder: the line that
+   implements the check, which `sdlc mutate` breaks to prove the test is not vacuous (J3):
+   `{"TC-1.a1": {"file": "src/lib/flags.ts", "line": 41, "find": "if (!enabled) return notFound()", "replace": ""}}`,
+   or `{"TC-1.a1": {"none": "<why no single line implements it>"}}`. Run `sdlc mutate --ticket <id>`: a check whose
+   test still passes with its line broken needs a stronger test before you hand back.
+6. Never commit or push (the guard and `sdlc git` refuse it; only kaneki-ship commits). Never edit a test to make it pass unless the plan says the test was wrong.
 
 **G6** before any write to shared state (shared DB, queue, external service): the controller asks first and
 records a restore value. **G7** if only a read-only checkout is available.

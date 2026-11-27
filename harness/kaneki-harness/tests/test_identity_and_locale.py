@@ -38,6 +38,8 @@ class IdentityTests(Base):
         for node in ("prepare", "investigate"):
             self.complete("ID-1", node)
         self.complete("ID-1", "fix-plan", actor="user")
+        for node in ("testcase", "testcase-review"):  # D1: test cases before coding
+            self.complete("ID-1", node)
 
     def try_close_coding(self) -> tuple[int, dict]:
         self.write_artifacts("ID-1", "coding")
