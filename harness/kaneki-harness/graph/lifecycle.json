@@ -439,13 +439,13 @@
         "test"
       ],
       "artifacts": [
-        "testcases.md"
+        "testcases.json"
       ],
       "card": "references/nodes/testcase.md",
       "checks": {
-        "testcases.md": {
-          "sections": [
-            "## Coverage matrix"
+        "testcases.json": {
+          "parsers": [
+            "testcases"
           ]
         }
       }
@@ -519,9 +519,17 @@
         "evidence"
       ],
       "artifacts": [
-        "run-report.md"
+        "run-report.md",
+        "evidence.json"
       ],
-      "card": "references/nodes/execute-and-evidence.md"
+      "card": "references/nodes/execute-and-evidence.md",
+      "checks": {
+        "evidence.json": {
+          "parsers": [
+            "evidence"
+          ]
+        }
+      }
     },
     "final-review": {
       "layer": "delivery",

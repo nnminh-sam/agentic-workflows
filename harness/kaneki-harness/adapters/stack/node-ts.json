@@ -2,10 +2,25 @@
   "kind": "stack",
   "id": "node-ts",
   "description": "Node.js / TypeScript service or web app.",
-  "allowedSurfaces": ["web", "api", "cli", "batch", "db"],
-  "filePatterns": ["**/*.ts", "**/*.tsx", "**/*.js", "package.json"],
+  "allowedSurfaces": [
+    "web",
+    "api",
+    "cli",
+    "batch",
+    "db"
+  ],
+  "filePatterns": [
+    "**/*.ts",
+    "**/*.tsx",
+    "**/*.js",
+    "package.json"
+  ],
   "commands": {
-    "doctor": ["node --version", "npm --version", "npm ci --dry-run"],
+    "doctor": [
+      "node --version",
+      "npm --version",
+      "npm ci --dry-run"
+    ],
     "format": "npx prettier --check {paths}",
     "lint": "npx eslint {paths}",
     "build": "npm run build --if-present",
@@ -17,5 +32,11 @@
     "No `any` in new code unless the plan justifies it.",
     "Async errors are awaited or explicitly handled."
   ],
-  "rulepack": "stack:node-ts"
+  "rulepack": "stack:node-ts",
+  "evidenceHelper": {
+    "source": "adapters/evidence/node/kaneki-evidence.mjs",
+    "dest": "test/support/kaneki-evidence.mjs",
+    "import": "import { evidence } from \"<relative path>/kaneki-evidence.mjs\";",
+    "call": "evidence(\"TC-12.a1\", { observed: res.status, expected: 404 });"
+  }
 }

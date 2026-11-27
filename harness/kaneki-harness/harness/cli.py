@@ -1147,7 +1147,8 @@ def node_rule_ids(s: "Session", node: str) -> list[str]:
 def artifact_problems(s: "Session", node: str, status: str, reopen: str | None) -> list[str]:
     spec = s.spec(node)
     out = []
-    ctx: dict[str, Any] = {"ruleIds": node_rule_ids(s, node), "status": status, "reopen": reopen}
+    ctx: dict[str, Any] = {"ruleIds": node_rule_ids(s, node), "status": status, "reopen": reopen,
+                           "ticketDir": s.ticket.dir}
     if any("proposals" in (c.get("parsers") or []) for c in (spec.get("checks") or {}).values()):
         ctx["proposals"] = proposal_context(s)
     for name, check in (spec.get("checks") or {}).items():
@@ -1376,6 +1377,7 @@ def node_inputs(s: "Session", node: str) -> list[dict[str, str]]:
 
 
 SUPERSEDED_HEADER = "## SUPERSEDED:"
+DATA_ARTIFACTS = ("testcases.json", "evidence.json", "baseline.json")
 NL = chr(10)
 
 
@@ -1418,6 +1420,12 @@ def mark_superseded(s: "Session", node: str, from_node: str, generation: int) ->
     reason = f"rerun from {from_node} (generation {generation}) invalidated this artifact"
     for name in s.artifacts(node, static=True):
         path = s.ticket.dir / name
+        if name in DATA_ARTIFACTS and path.is_file() and not path.is_symlink():
+            aside = s.ticket.dir / "superseded" / f"{path.stem}.g{generation - 1}{path.suffix}"
+            aside.parent.mkdir(parents=True, exist_ok=True)
+            path.replace(aside)  # data cannot carry a SUPERSEDED line: the rerun writes it again
+            marked.append(name)
+            continue
         if not name.endswith(".md") or path.is_symlink() or not path.is_file():
             continue
         text = path.read_text(encoding="utf-8")
@@ -1524,12 +1532,54 @@ def cmd_evidence(args: argparse.Namespace) -> int:
                "stopped": run.get("stopped"), "escalations": run.get("escalations") or [], "cases": run.get("cases") or {}}
         out(res)
         return 0
-    if not args.cases:
-        raise HarnessError("--cases <file> is required for `evidence run`")
-    cases = EV.load_cases(Path(args.cases))
-    res = EV.execute(s.ticket.dir, cases, EV.env_runner(s, args.repo), rerun=args.rerun, deadline=EV.deadline_of(s))
+    if args.action == "helper":
+        return _evidence_helper(s, args)
+    from . import steps as ST
+    tc = EV.load_testcases(s.ticket.dir)
+    if args.cases:
+        cases = EV.load_cases(Path(args.cases))
+    elif tc is not None:
+        cases = EV.cases_from_testcases(s.ticket.dir, tc, ST.load_kit(ST.kit_path(s)))
+    else:
+        raise HarnessError("no testcases.json in the ticket and no --cases <file>")
+    if cases:
+        res = EV.execute(s.ticket.dir, cases, EV.env_runner(s, args.repo), rerun=args.rerun, deadline=EV.deadline_of(s))
+    else:  # every case manual or out of scope: evidence.json records that
+        res = {"ok": True, "stopped": None, "escalations": [], "summary": {}, "file": None}
+    if tc is not None:
+        data = EV.build_evidence(s.ticket.dir, s.ctx["ticket"], tc)
+        res["checks"] = EV.evidence_summary(data)
+        res["evidenceFile"] = str(s.ticket.dir / "evidence.json")
     out({"ticket": s.ctx["ticket"], **res})
     return 0 if res["ok"] else 1
+
+
+def _evidence_helper(s: "Session", args: argparse.Namespace) -> int:
+    """`sdlc evidence helper --repo R`: copy the stack's evidence() helper into the repository's checkout (C3), once."""
+    import shutil
+    repo = next((r for r in s.ctx["repositories"] if r["id"] == args.repo), None) if args.repo else s.ctx["repositories"][0]
+    if repo is None:
+        raise HarnessError(f"unknown repo {args.repo}")
+    stack = resolve_adapters(HOME, s.pdir, s.profile, s.ctx)["stacks"][repo["id"]]
+    helper = stack.get("evidenceHelper")
+    if not helper:
+        raise HarnessError(f"G7: stack {stack.get('id')} has no evidenceHelper (adapters/stack/*.json)")
+    dest = Path(repo.get("worktree") or repo["path"]) / (args.dest or helper["dest"])
+    src = HOME / helper["source"]
+    same = dest.is_file() and dest.read_bytes() == src.read_bytes()
+    if not same:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(src, dest)
+    out({"ok": True, "repo": repo["id"], "path": str(dest), "written": not same, "import": helper.get("import"),
+         "call": helper.get("call")})
+    return 0
+
+
+def cmd_report(args: argparse.Namespace) -> None:
+    """`sdlc report`: the read-only tester notebook from testcases.json + evidence.json (harness/report.py)."""
+    from . import report as RP
+    s = Session(args)
+    out(RP.write(s, Path(args.out) if args.out else None))
 
 
 def cmd_baseline(args: argparse.Namespace) -> int:
@@ -2167,11 +2217,18 @@ def build_parser() -> argparse.ArgumentParser:
 
     x = sub.add_parser("evidence", parents=[ticketed], help="run evidence cases (smoke first, resumable, failure "
                                                              "classes, breaker) or show the last run")
-    x.add_argument("action", choices=["run", "status"])
-    x.add_argument("--cases", help="run: JSON file {\"cases\": [{\"id\", \"surface\", \"command\", \"smoke\"?}]}")
+    x.add_argument("action", choices=["run", "status", "helper"])
+    x.add_argument("--cases", help="run: JSON file {\"cases\": [{\"id\", \"surface\", \"command\", \"smoke\"?}]} "
+                                   "(default: the ticket's testcases.json)")
+    x.add_argument("--dest", help="helper: where to write it in the checkout (default: the stack adapter's)")
     x.add_argument("--rerun", nargs="*", default=[], help="case ids to run again (after a step fix)")
     x.add_argument("--repo", help="the repository whose worktree runs the cases (default: environment.evidence.repo)")
     x.set_defaults(fn=cmd_evidence)
+
+    x = sub.add_parser("report", parents=[ticketed], help="the read-only tester notebook (tester-notebook.html) from "
+                                                           "testcases.json and evidence.json")
+    x.add_argument("--out", help="write the page here (default: <ticket>/tester-notebook.html)")
+    x.set_defaults(fn=cmd_report)
 
     x = sub.add_parser("baseline", parents=[ticketed], help="install, then lint / unit tests / build on each checkout "
                                                              "as the ticket found it (baseline.json)")
@@ -2452,7 +2509,7 @@ def build_parser() -> argparse.ArgumentParser:
 READ_ONLY = {"status", "plan", "check", "validate", "digest", "host", "onboard-scan", "onboard-verify", "onboard-write", "install",
              "tickets", "status-of", "web", "zed-setup", "contract", "ticket-detail", "gate-request",
              "transcripts", "cost", "budget", "reflect-signals", "questions",
-             "env", "baseline", "evidence",  # own files only (env.json, baseline.json); no lock while a server starts or tests run
+             "env", "baseline", "evidence", "report",  # own files only (env.json, baseline.json); no lock while a server starts or tests run
              "learn",  # the workspace learning store has its own lock; apply/reject refresh STATUS.md themselves
              "decide"}  # decide takes the lock only for the gate it runs (through main), never while it waits for you
 NO_STATUS_REFRESH = READ_ONLY | {"git"}

@@ -108,6 +108,12 @@ def check_artifact(text: str, spec: dict[str, Any], ctx: dict[str, Any]) -> list
         elif parser == "proposals":  # proposals.json of the reflect node (contracts/proposal.schema.json)
             from .learning import proposal_problems
             problems += proposal_problems(text, ctx["proposals"]) if ctx.get("proposals") else ["no proposal context"]
+        elif parser == "testcases":  # testcases.json (contracts/testcases.schema.json)
+            from .evidence import testcases_problems
+            problems += testcases_problems(text)
+        elif parser == "evidence":  # evidence.json, against the ticket's testcases.json
+            from .evidence import evidence_problems
+            problems += evidence_problems(text, ctx["ticketDir"]) if ctx.get("ticketDir") else ["no ticket context"]
         elif parser == "reopen":
             m = REOPEN_RE.findall(text)
             if not m:

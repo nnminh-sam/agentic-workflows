@@ -44,7 +44,7 @@ Not done in M1: the project copies under `wp-kaneki/.claude/` (agents, node card
 
 M1 is committed (`786554b`, not pushed).
 
-**M2 implemented (2026-11-27, uncommitted on the same branch):**
+**M2 committed (`71c3d2c`, 2026-11-27, not pushed):**
 
 | Task | Result |
 |---|---|
@@ -61,6 +61,20 @@ Open from M2:
 - `sdlc env up` was not run on the real machine: it restarts `my-kaneki-postgres-1` to raise max_connections 20 → 100 (the user runs it, or approves it).
 - The my-git guard reads `git -C "$R"` literally (ship detour 38462dbc:813). The fix (expand variables assigned on the same command line in `plugins/my-git/scripts/gitguard/commands.py`) was blocked by auto mode as a change to a safety control: the user decides.
 - Project copies need `sdlc install --target . --host claude` again (node cards, packet template).
+
+**M3 implemented (2026-11-27, uncommitted on the same branch):**
+
+| Task | Result |
+|---|---|
+| C1 | `contracts/testcases.schema.json` (criteria, cases with risk, checks `TC-n.aN` with `expect`/`value`, `run`: repo-test / steps / manual) and `contracts/evidence.schema.json` (per check: PASS, FAIL, UNOBSERVED, NOT-RUN, MANUAL with observed value and source). Gate parsers `testcases` (schema, ids, every criterion covered, critical cases not manual) and `evidence` (every check present). The testcase node now writes `testcases.json` (no `testcases.md`); execute-and-evidence adds `evidence.json`. Superseded data files move to `superseded/<name>.g<n>.json` |
+| C3 | `adapters/evidence/node/kaneki-evidence.mjs` and `python/kaneki_evidence.py`: `evidence(check, {observed, expected})` appends a JSON line with the calling test line to `$KANEKI_EVIDENCE_FILE` (no-op outside a run). Stack adapters name it in `evidenceHelper`; `sdlc evidence helper --repo R` copies it into the checkout |
+| E1 / C4 | Cards: testcase writes the JSON; coding implements `repo-test` cases as repo tests (e2e for live surfaces) that record checks through `evidence()`; testcase-review reviews the JSON with requirement citations; execute-and-evidence only runs (`sdlc evidence run`), never authors; reflect proposes missing kit helpers |
+| E2 | `harness/steps.py` + `contracts/steps.schema.json`: declarative HTTP-level cases (login as a kit account, http, page goto, kit helpers, capture; expect status / textPresent / textAbsent / json / header; params), validated against schema, kit and testcases.json before the run; browser interactions refused (write an e2e test) |
+| E5 | `contracts/evidence-kit.schema.json`; kit at `.sdlc/adapters/evidence/<project id>/kit.json`. wp-kaneki has a starter kit (accounts A/B and the login from `seed.mjs`); no `flag` helper yet (toggle is a server action on `feature_flags`; add it tested when a case needs it) |
+| C2 | `sdlc report` (`harness/report.py`, `harness/report_template.html`): the tester notebook from testcases.json, evidence.json, run.json, questions.json and the git diff; no review state or decision buttons (only the theme is stored) |
+| runner | `sdlc evidence run` without `--cases` runs testcases.json (step files run in-process, a fresh observation file per attempt) and writes evidence.json; a passing test that never recorded a check leaves it UNOBSERVED |
+
+Open from M3: the report was checked by tests and a JS syntax check, not opened in a browser against a real ticket (feature-flags has no testcases.json; the prototype backfill stays for it).
 
 ## Milestone M1 (done; kept for reference)
 

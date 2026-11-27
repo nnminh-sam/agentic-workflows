@@ -277,7 +277,9 @@
                       "rule-verdicts",
                       "verdict",
                       "reopen",
-                      "proposals"
+                      "proposals",
+                      "testcases",
+                      "evidence"
                     ]
                   }
                 }
@@ -564,7 +566,9 @@
                     "rule-verdicts",
                     "verdict",
                     "reopen",
-                    "proposals"
+                    "proposals",
+                    "testcases",
+                    "evidence"
                   ]
                 }
               }

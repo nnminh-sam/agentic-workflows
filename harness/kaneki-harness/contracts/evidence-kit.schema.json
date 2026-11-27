@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "A project's evidence kit (plan E5): .sdlc/adapters/evidence/<project id>/kit.json",
+  "description": "Reusable, tested step helpers for declarative cases: the accounts of the reusable test env, how to log in, and named helpers such as `flag` (turn a feature on or off). A step file can only use what the kit declares; when a case needs a helper the kit lacks, the run refuses before it starts and reflect proposes adding it.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "accounts": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["emailVar", "passwordVar"],
+        "additionalProperties": false,
+        "properties": {"emailVar": {"type": "string"}, "passwordVar": {"type": "string"}}
+      }
+    },
+    "login": {"type": "array", "items": {"type": "object"}, "description": "steps; ${email} and ${password} are the account's"},
+    "helpers": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "description": {"type": "string"},
+          "params": {"type": "array", "items": {"type": "string"}},
+          "steps": {"type": "array", "items": {"type": "object"}},
+          "command": {"type": "string", "description": "a shell command run in the evidence worktree with the env loaded"},
+          "testedBy": {"type": "string", "description": "where the helper is tested (a case id or a test file)"}
+        }
+      }
+    }
+  }
+}

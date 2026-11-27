@@ -96,6 +96,18 @@ class Base(unittest.TestCase):
                 lines.append(f"Verdict: {verdict}")
             if "reopen" in parsers:
                 lines.append(f"Reopen: {reopen or 'none'}")
+            if "testcases" in parsers:  # testcases.json (C1): one criterion, one critical repo-test case
+                lines = [json.dumps({"schemaVersion": 1, "ticket": ticket,
+                                     "criteria": [{"id": "AC-1", "text": "the change works"}],
+                                     "cases": [{"id": "TC-1", "title": "the change", "surface": "cli", "risk": "critical",
+                                                "criteria": ["AC-1"], "checks": [{"id": "TC-1.a1", "expect": "exit 0"}],
+                                                "inScope": True, "reason": None,
+                                                "run": {"kind": "repo-test", "command": "python -c 0"}}]})]
+            if "evidence" in parsers:  # evidence.json (C1): every check of testcases.json observed
+                tcs = json.loads((self.tdir(ticket) / "testcases.json").read_text(encoding="utf-8"))
+                lines = [json.dumps({"schemaVersion": 1, "ticket": ticket, "at": "2026-11-27T00:00:00+00:00",
+                                     "checks": {k["id"]: {"case": c["id"], "status": "PASS", "observed": 0}
+                                                for c in tcs["cases"] for k in c["checks"]}})]
             if "proposals" in parsers:  # reflect: a valid, empty proposals file
                 lines = [json.dumps({"schemaVersion": 1, "ticket": ticket, "proposals": []})]
             if art == "baseline.json":  # written by `sdlc baseline` (B3)
