@@ -20,6 +20,14 @@ project profile's `locale`). Keep identifiers, file names, status values and quo
 
 {{languages}}
 
+## Driver
+
+The harness driver is not on PATH: a bare `sdlc` fails. Call it with the absolute command for your shell:
+
+{{driver}}
+
+Where this packet, the node card or the role card writes `sdlc <command>`, run that command with the line above in place of `sdlc`.
+
 ## Git
 
 {{git}}
@@ -53,7 +61,7 @@ node, unit ids) into code, test names or customer-facing text.
 ## Context budget
 
 Assume a context window of about **{{contextWindow}} tokens**, and spend it on judgment, not on output.
-
+{{timeBudget}}
 - Send long command output (tests, builds, installs, container and server logs) to a file under
   `{{logsDir}}` and inspect it with search (or the last lines only), never the whole stream:
   `<command> > "{{logsDir}}/<name>.log" 2>&1; echo "exit $?"`.
@@ -63,8 +71,11 @@ Assume a context window of about **{{contextWindow}} tokens**, and spend it on j
 
 ## Return contract
 
-Write the full result to the result file, then reply in ≤ 150 words: status, result file path, its
-sha256 (`sdlc digest --path <file>`), one line per blocking item.
+Write the full result to the result file. Then run the gate's checks as a dry run and fix every problem they list before you reply (a hand-back that fails them is refused):
+`sdlc check --ticket {{ticket}} --node {{node}} --unit {{unit}}` (run as the Driver section says; `"ok": true` means the content checks pass).
+
+Then reply in at most 15 lines and 150 words (the controller reads nothing else; the detail is in the result file): status, result file path, its
+sha256 (`sdlc digest <file>`, run as the Driver section says), one line per blocking item.
 
 - Worker result: status · claims (OBSERVED/DERIVED/ASSUMED) · evidence pointers · artifact paths ·
   checks run with results · open doubts (HIGH/LOW) · weakest link.

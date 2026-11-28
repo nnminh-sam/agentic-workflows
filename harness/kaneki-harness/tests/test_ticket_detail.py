@@ -68,6 +68,8 @@ class TicketDetailTests(Base):
         for node in ("prepare", "investigate"):
             self.complete(t, node)
         self.complete(t, "fix-plan", actor="user")
+        for node in ("testcase", "testcase-review"):  # D1: test cases before coding
+            self.complete(t, node)
         self.complete(t, "coding")
 
     def fail_technical(self, t: str) -> None:

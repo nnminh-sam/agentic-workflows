@@ -10,6 +10,6 @@
 6. List every place the same faulty pattern exists (siblings); they inform the plan's scope.
 
 `investigation.md` ends with `## Confirmed cause` (one paragraph) and `Confidence: High|Medium|Low` plus the
-evidence that sets it. Owner/customer questions go to `questions.md`: `Q-n | question | why it matters | status`.
+evidence that sets it. Owner/customer questions go into the ticket's one batch with `sdlc ask --ticket <id> --node investigate --class business|infra|critical-logic --severity HIGH|LOW --question '...' --recommend '...' [--why '...'] [--option '...']` (never by editing `questions.md`, which is generated). Points you can settle from the requirements and evidence are not questions: decide them with citations.
 
 **G1** if a requirement source is unavailable, the cause is not confirmed by execution, or confidence is below High.

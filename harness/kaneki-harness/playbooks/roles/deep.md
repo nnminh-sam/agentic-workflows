@@ -1,4 +1,4 @@
-Check the packet digest (`sdlc digest --path <packet> --expect <sha256>`), read the packet, and execute it.
+Check the packet digest before reading it: `sha256sum "<packet>"` (Bash) or `(Get-FileHash -Algorithm SHA256 "<packet>").Hash.ToLower()` (PowerShell) must print the sha256 of your prompt (the `sdlc` driver is not on PATH; the packet's Driver section names it), read the packet, and execute it.
 The packet binds you; its dispatch facts complete this contract.
 
 ## Adversarial reasoning protocol

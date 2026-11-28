@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "An evidence judge's verdicts (plan J1-J5): evidence-judgement.json (judge A) / evidence-judgement-2.json (judge B)",
+  "description": "The judge fills only the judgement slots: the driver's facts (judge-facts.json) settle what is determinable and the judge cannot overrule them. PASS and FAIL need a requirement citation and an evidence citation, each a resolvable file:line with a quote found verbatim there. ESCALATE is for business, infra or critical-logic questions only, asked in the batch with sdlc ask.",
+  "type": "object",
+  "required": ["schemaVersion", "ticket", "judge", "verdicts"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "ticket": {"type": "string"},
+    "judge": {"enum": ["a", "b"]},
+    "verdicts": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["verdict", "confidence", "reason"],
+        "additionalProperties": false,
+        "properties": {
+          "verdict": {"enum": ["PASS", "FAIL", "ESCALATE"]},
+          "confidence": {"enum": ["High", "Medium", "Low"]},
+          "class": {"enum": ["judgeable", "business", "infra", "critical-logic"]},
+          "reason": {"type": "string", "minLength": 1},
+          "routeTo": {"type": "string", "description": "FAIL: the node that owns the fix (coding, testcase, execute-and-evidence)"},
+          "requirement": {
+            "type": "object", "required": ["ref", "quote"], "additionalProperties": false,
+            "properties": {"ref": {"type": "string"}, "quote": {"type": "string", "minLength": 3}}
+          },
+          "evidence": {
+            "type": "object", "required": ["ref", "quote"], "additionalProperties": false,
+            "properties": {"ref": {"type": "string"}, "quote": {"type": "string", "minLength": 3}}
+          }
+        }
+      }
+    },
+    "uncoveredFiles": {
+      "type": "object",
+      "description": "EVD-E: per changed source file no case observes, why that is acceptable (with a citation) or FAIL",
+      "additionalProperties": {"type": "string", "minLength": 3}
+    }
+  }
+}

@@ -178,9 +178,11 @@ class BugTicketWalk(GateRequestBase):
         self.assertIn("main.py:99", json.dumps(g["citationWarnings"]))
 
         self.plan_node(t)
+        for node in ("testcase", "testcase-review"):  # D1: test cases before coding
+            self.complete(t, node)
         self.coding_node(t)
         self.review_node(t)
-        for node in ("testcase", "testcase-review", "execute-and-evidence"):
+        for node in ("execute-and-evidence",):
             self.complete(t, node)
         self.final_review(t)
         self.complete(t, "delivery-drafts")
@@ -290,14 +292,19 @@ class BugTicketWalk(GateRequestBase):
         self.assertTrue(nc["allowed"])
         self.assertNotIn("whyNot", nc)
         self.assertFalse(nc["controllerAllowed"])
-        self.assertTrue(nc["controllerWhyNot"].startswith("G4: code-review NEEDS CHANGES after 2 rounds (cap 2)"))
+        self.assertTrue(nc["controllerWhyNot"].startswith("G4: code-review NEEDS CHANGES after 2 rounds (cap 2, counting manual reopens of coding)"))
         self.agree(t, "code-review", nc["controllerWhyNot"], status="needs-changes", actor="controller")
         self.assertEqual((res["attempts"], res["loopCap"]), (1, 2))
 
         # `invalidate` returns what the reopen choice announced; a reopened node must be rewritten (row 9)
         res = self.req(t, "code-review")
         target = next(x for x in self.choice(res, "reopen")["reopenTargets"] if x["node"] == "coding")
+        self.assertTrue(target["needsUser"])  # coding was already reopened once: round 2 is the user's (D5)
         code, inv = run("invalidate", "--ticket", t, "--node", "coding", "--reason", "edge case missed", *self.p)
+        self.assertEqual(code, 2)
+        self.assertIn("G4", inv["error"])
+        code, inv = run("invalidate", "--ticket", t, "--node", "coding", "--reason", "edge case missed",
+                        "--actor", "user", *self.p)
         self.assertEqual(code, 0, inv)
         self.assertEqual(inv["stale"], target["staleNodes"])
         code, pk = run("packet", "--ticket", t, "--node", "coding", "--unit", "worker", *self.p)
@@ -408,6 +415,8 @@ class RuleRows(GateRequestBase):
         for node in ("prepare", "investigate"):
             self.complete(t, node)
         self.complete(t, "fix-plan", actor="user")
+        for node in ("testcase", "testcase-review"):  # D1: test cases before coding
+            self.complete(t, node)
         self.write_artifacts(t, "coding")
         self.record_all(t, "coding")
         self.assertTrue(self.req(t, "coding")["readiness"]["ok"])

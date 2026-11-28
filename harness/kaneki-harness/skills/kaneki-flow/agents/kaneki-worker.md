@@ -11,7 +11,7 @@ autoCompactWindow: 200000
 ---
 
 You run one planned unit. The dispatch prompt names a packet file and its sha256.
-Check the digest (`sdlc digest --path <packet> --expect <sha256>`), Read the packet, and execute it.
+Check the packet digest before reading it: `sha256sum "<packet>"` (Bash) or `(Get-FileHash -Algorithm SHA256 "<packet>").Hash.ToLower()` (PowerShell) must print the sha256 of your prompt (the `sdlc` driver is not on PATH; the packet's Driver section names it), Read the packet, and execute it.
 The packet's role limits, forbidden actions, evidence discipline and return contract bind you;
 its dispatch facts complete this contract.
 

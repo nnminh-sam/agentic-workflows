@@ -154,6 +154,8 @@ class WaitingTests(Base):
         for node in ("prepare", "investigate"):
             self.complete(t, node)
         self.complete(t, "fix-plan", actor="user")
+        for node in ("testcase", "testcase-review"):  # D1: test cases before coding
+            self.complete(t, node)
         self.complete(t, "coding")
         self.write_artifacts(t, "code-review", verdict="NEEDS CHANGES")
         self.record(t, "code-review", "technical-review", "FAIL")
@@ -187,6 +189,7 @@ class WaitingTests(Base):
             self.complete(t, node)
         self.write_artifacts(t, "fix-plan")
         self.record(t, "fix-plan", "worker")
+        self.record(t, "fix-plan", "reviewer", "PASS")  # D2: the plan reviewer
         self.assertEqual(self.wait(t), ("user", "fix-plan", "user-boundary"))
         s = self.session(t)
         s.profile = {**s.profile, "gates": {**s.profile.get("gates", {}), "autoSkipPlanApproval": True}}

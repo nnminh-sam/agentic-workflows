@@ -85,6 +85,64 @@ class LauncherCmdTests(Base):
             self.assertNotIn("`sh ", line)
 
 
+class DriverReachTests(Base):
+    """B1: the forms packets hand out actually run. Feature-flags units failed 40x on a bare `sdlc` (not on PATH) and
+    15x on `<launcher> --profile P <command>` (argparse took --profile only after the command)."""
+
+    install = LauncherCmdTests.install
+
+    def test_global_options_before_the_command(self) -> None:
+        code, res = run("init", "--ticket", "GO-1", "--kind", "bug", *self.p)
+        self.assertEqual(code, 0, res)
+        code, res = run(*self.p, "status", "--ticket", "GO-1", "--compact")
+        self.assertEqual((code, res["ticket"]), (0, "GO-1"), res)
+        code, res = run(f"--profile={self.profile}", "--host", "claude", "plan", "--ticket", "GO-1")
+        self.assertEqual(code, 0, res)
+        code, res = run(*self.p, "digest", str(self.profile))  # digest: positional path, profile accepted
+        self.assertEqual(code, 0, res)
+        self.assertEqual(len(res["sha256"]), 64)
+        code, res = run(*self.p, "contract")  # takes no profile: the option is dropped, not an error
+        self.assertEqual(code, 0, res)
+        code, res = run(*self.p, "learn", "list")  # nested command
+        self.assertEqual(code, 0, res)
+
+    def test_digest_forms(self) -> None:
+        code, a = run("digest", str(self.profile))
+        code2, b = run("digest", "--path", str(self.profile), "--expect", a["sha256"])
+        self.assertEqual((code, code2, a["sha256"]), (0, 0, b["sha256"]))
+        code, res = run("digest", str(self.profile), "--expect", "0" * 64)
+        self.assertEqual(code, 2)
+        self.assertIn("mismatch", res["error"])
+        code, res = run("digest")
+        self.assertEqual(code, 2)
+        self.assertIn("sdlc digest <path>", res["error"])
+
+    def test_packet_driver_section_has_absolute_commands(self) -> None:
+        self.install("claude")
+        code, _ = run("init", "--ticket", "DR-1", "--kind", "bug", *self.p)
+        with mock.patch.dict(os.environ, NO_HOST_ENV, clear=True):
+            code, pk = run("packet", "--ticket", "DR-1", "--node", "prepare", "--unit", "worker", "--host", "claude", *self.p)
+        self.assertEqual(code, 0, pk)
+        text = Path(pk["path"]).read_text(encoding="utf-8")
+        driver = text.split("## Driver", 1)[1].split("## Git", 1)[0]
+        posix = (self.tmp / ".sdlc" / "bin" / "sdlc-claude").resolve().as_posix()
+        self.assertIn(f'`sh "{posix}" --profile "{self.profile.resolve().as_posix()}"`', driver)
+        if IS_WINDOWS:
+            self.assertIn("- PowerShell: `& \"", driver)
+            self.assertIn("sdlc-claude.cmd", driver)
+        self.assertNotIn("sdlc digest --path", text)
+        self.assertNotIn("{{", text)
+
+    @unittest.skipUnless(__import__("shutil").which("sh"), "needs sh")
+    def test_the_sh_form_runs_from_any_directory(self) -> None:
+        self.install("claude")
+        cmd = __import__("harness.cli", fromlist=["posix_launcher_cmd"]).posix_launcher_cmd(self.profile, "claude")
+        proc = subprocess.run(["sh", "-c", f"{cmd} digest \"{self.profile.as_posix()}\""], capture_output=True,
+                              text=True, env=NO_HOST_ENV, cwd=str(HOME), timeout=60, stdin=subprocess.DEVNULL)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("sha256", proc.stdout)
+
+
 class PerHostLauncherRecordTests(Base):
     """Two hosts installed; the workspace binding names claude; units run through `sdlc-codex` then `sdlc-claude`."""
 

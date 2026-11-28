@@ -5,11 +5,17 @@
                 "daily": {"usd": 60, "tokens": 120000000},
                 "warnAt": 0.8, "action": "park"}
 
-Every key is optional; no block means no budget checks (and no cost read). Scopes:
+Every key is optional. No block means the built-in DEFAULTS below (A4: a runaway unit stops even in a profile that
+never set budgets); an explicit empty block `"budgets": {}` turns every check off (and every cost read). A profile block
+replaces the defaults as a whole. Scopes:
 - ticket: everything measured for the ticket (units, dispatches, controller, side calls).
 - node: the node's exact unit sessions plus the controller work attributed to it (cost.py's node attribution).
   `node.default` applies to every node; a node's own entry overrides it key by key.
 - daily: everything measured on this machine's local calendar day, every ticket.
+
+Node caps may also set `minutes`: wall-clock time since the node's current round started (its first packet of the
+generation, `startedAt` in state). Over it, `sdlc packet` refuses with G8, the runner stops the session, `sdlc
+dispatch` caps its timeout to what is left, and the packet tells the unit its deadline.
 
 Usage comes from `cost.measured()` (the agents' own logs, served from cost.py's fingerprint cache), so `check` is
 cheap enough for every runner poll. USD covers only `reported` + `priced` usage; when part of a scope is unpriced
@@ -27,7 +33,7 @@ round) for the scopes that were over when it was recorded.
 from __future__ import annotations
 
 import time
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +41,16 @@ from .errors import HarnessError
 
 SCOPES = ("ticket", "node", "daily")
 CAP_KEYS = ("usd", "tokens")
+NODE_KEYS = (*CAP_KEYS, "minutes")
+# Built-in budgets for a profile without a `budgets` block. feature-flags spent 23.6 M on coding and 32.3 M on evidence
+# over 5 generations (2 abandoned evidence runs, 2 h); the target is <= 45 M per ticket and <= 2 generations per node.
+DEFAULTS: dict[str, Any] = {
+    "ticket": {"tokens": 60_000_000},
+    "node": {"default": {"tokens": 15_000_000, "minutes": 120},
+             "execute-and-evidence": {"tokens": 20_000_000, "minutes": 60}},
+    "warnAt": 0.8,
+    "action": "park",
+}
 DEFAULT_WARN_AT = 0.8
 MEMO_SECONDS = 2.0  # one packet / status / board pass asks the same scope several times; cost.py caches the rest
 
@@ -43,10 +59,25 @@ _memo: dict[tuple[Any, ...], tuple[float, dict[str, Any]]] = {}
 
 # --- profile block -------------------------------------------------------------------------------------------
 
-def _cap_errors(cap: Any, where: str) -> list[str]:
+def effective(prof: dict[str, Any]) -> tuple[dict[str, Any], str]:
+    """(the budgets block that applies, "profile" | "default")."""
+    block = prof.get("budgets")
+    return (DEFAULTS, "default") if block is None else (block, "profile")
+
+
+def enabled(prof: dict[str, Any]) -> bool:
+    """False only for an explicit empty block: no caps, no cost reads."""
+    block, _ = effective(prof)
+    return bool({k: v for k, v in block.items() if k in SCOPES and v})
+
+
+def _cap_errors(cap: Any, where: str, keys: tuple[str, ...] = CAP_KEYS) -> list[str]:
     if not isinstance(cap, dict):
         return [f"{where} must be an object like {{\"usd\": 6, \"tokens\": 15000000}}"]
-    errs = [f"{where}.{k} is unknown (keys: usd, tokens)" for k in cap if k not in CAP_KEYS]
+    errs = [f"{where}.{k} is unknown (keys: {', '.join(keys)})" for k in cap if k not in keys]
+    mins = cap.get("minutes")
+    if mins is not None and (isinstance(mins, bool) or not isinstance(mins, (int, float)) or mins <= 0):
+        errs.append(f"{where}.minutes must be a number > 0")
     usd, tok = cap.get("usd"), cap.get("tokens")
     if usd is not None and (isinstance(usd, bool) or not isinstance(usd, (int, float)) or usd < 0):
         errs.append(f"{where}.usd must be a number >= 0")
@@ -69,7 +100,7 @@ def config_errors(block: Any) -> list[str]:
             errs.append("budgets.node must be an object: {\"default\": {...}, \"<node>\": {...}}")
         else:
             for name, cap in block["node"].items():
-                errs += _cap_errors(cap, f"budgets.node.{name}")
+                errs += _cap_errors(cap, f"budgets.node.{name}", NODE_KEYS)
     warn = block.get("warnAt", DEFAULT_WARN_AT)
     if isinstance(warn, bool) or not isinstance(warn, (int, float)) or not 0 <= warn <= 1:
         errs.append("budgets.warnAt must be a number from 0 to 1")
@@ -81,7 +112,7 @@ def config_errors(block: Any) -> list[str]:
 def caps_for(block: dict[str, Any], node: str | None) -> dict[str, dict[str, Any] | None]:
     """The caps that apply to one node of a ticket: {ticket, node, daily}, each {usd?, tokens?} or None."""
     def clean(cap: Any) -> dict[str, Any] | None:
-        got = {k: cap[k] for k in CAP_KEYS if isinstance(cap, dict) and cap.get(k) is not None}
+        got = {k: cap[k] for k in NODE_KEYS if isinstance(cap, dict) and cap.get(k) is not None}
         return got or None
     nodes = block.get("node") or {}
     merged = {**(nodes.get("default") or {}), **((nodes.get(node) or {}) if node else {})}
@@ -132,17 +163,18 @@ def _scope_verdict(scope: str, use: dict[str, Any], cap: dict[str, Any] | None, 
     level, reasons, ratios = "ok", [], {}
     if not cap:
         return {"level": "ok", "reasons": [], "ratios": {}}
-    for key in CAP_KEYS:
-        if cap.get(key) is None:
+    for key in (*CAP_KEYS, "minutes"):
+        if cap.get(key) is None or (key == "minutes" and use.get("minutes") is None):
             continue
-        used = (use["usd"] or 0.0) if key == "usd" else use["tokens"]
+        used = (use["usd"] or 0.0) if key == "usd" else use[key]
         limit = cap[key]
         ratio = (used / limit) if limit else 1.0  # a zero cap is spent before anything runs
         ratios[key] = round(ratio, 4)
-        shown = (f"{fmt_usd(used)} of {fmt_usd(limit)}" if key == "usd" else f"{used:,} of {limit:,} tokens")
+        shown = {"usd": lambda: f"{fmt_usd(used)} of {fmt_usd(limit)}", "tokens": lambda: f"{used:,} of {limit:,} tokens",
+                 "minutes": lambda: f"{used:,.0f} of {limit:,} minutes since this round started"}[key]()
         if used >= limit:
             level = "over"
-            reasons.append(f"{label}: {shown} ({'USD' if key == 'usd' else 'tokens'} cap reached)")
+            reasons.append(f"{label}: {shown} ({ {'usd': 'USD', 'tokens': 'tokens', 'minutes': 'time'}[key]} cap reached)")
         elif ratio >= warn_at:
             level = "warn" if level == "ok" else level
             reasons.append(f"{label}: {shown} ({int(round(ratio * 100))}% of the cap)")
@@ -182,26 +214,56 @@ def _ticket_events(profile: Path, prof: dict[str, Any], ticket: str, node: str |
     return events, gen
 
 
+def node_started(rec: dict[str, Any] | None) -> float | None:
+    """Epoch seconds when the node's current round started (its first packet of the generation), or None."""
+    st = (rec or {}).get("startedAt") or {}
+    if not isinstance(st, dict) or st.get("generation") != (rec or {}).get("generation") or not st.get("at"):
+        return None
+    try:
+        return datetime.fromisoformat(str(st["at"]).replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+
+
+def _started_from_state(profile: Path, prof: dict[str, Any], ticket: str, node: str) -> float | None:
+    from .state import Ticket
+    root = Path(prof["paths"]["ticketRoot"])
+    root = root if root.is_absolute() else (Path(profile).parent / root).resolve()
+    try:
+        return node_started(((Ticket(root, ticket).load().get("nodes") or {}).get(node)))
+    except (OSError, ValueError, HarnessError):
+        return None
+
+
+def _now_ts(now: Any) -> float:
+    if isinstance(now, datetime):
+        return now.timestamp()
+    if isinstance(now, (int, float)) and not isinstance(now, bool):
+        return float(now)
+    return time.time()
+
+
 def check(profile: Path | str, ticket: str, node: str | None = None, now: Any = None, *,
           prof: dict[str, Any] | None = None, events: list[dict[str, Any]] | None = None,
-          generation: int | None = None) -> dict[str, Any]:
+          generation: int | None = None, started: float | None = None) -> dict[str, Any]:
     """Budget verdict for starting (or continuing) `node` of `ticket`:
 
     {configured, allowed, level ok|warn|over, action, reasons[], over[scopes], usage {ticket, node, daily:
     {usd, tokens, unpricedTokens, partial}}, caps {ticket, node, daily}, warnAt, day, override}.
 
-    `prof` / `events` / `generation` spare a reload when the caller already has them. Never raises on a cost read:
+    `prof` / `events` / `generation` / `started` (epoch of the node's round start) spare a reload when the caller
+    already has them. `source` says whether the caps are the profile's or the built-in DEFAULTS. Never raises on a cost read:
     usage that cannot be measured is a warning, not a refusal."""
     profile = Path(profile)
     if prof is None:
         from .profile import load_profile
         prof = load_profile(profile)
-    block = prof.get("budgets")
+    block, source = effective(prof)
     day = _day(now)
-    base: dict[str, Any] = {"configured": block is not None, "ticket": ticket, "node": node, "day": day.isoformat(),
-                            "allowed": True, "level": "ok", "reasons": [], "over": [], "usage": {}, "caps": {},
-                            "override": None}
-    if block is None:
+    base: dict[str, Any] = {"configured": enabled(prof), "source": source, "ticket": ticket, "node": node,
+                            "day": day.isoformat(), "allowed": True, "level": "ok", "reasons": [], "over": [],
+                            "usage": {}, "caps": {}, "override": None}
+    if not base["configured"]:
         return base
     warn_at = float(block.get("warnAt", DEFAULT_WARN_AT))
     action = block.get("action", "park")
@@ -221,6 +283,14 @@ def check(profile: Path | str, ticket: str, node: str | None = None, now: Any = 
             level = max(level, "warn", key=level_rank.get)
             continue
         base["usage"][scope] = use
+        limit_min = (caps.get("node") or {}).get("minutes") if scope == "node" else None
+        if limit_min:
+            t0 = started if started is not None else _started_from_state(profile, prof, ticket, node)
+            if t0 is not None:
+                use["minutes"] = round(max(0.0, _now_ts(now) - t0) / 60.0, 1)
+                base["deadline"] = datetime.fromtimestamp(t0 + limit_min * 60, timezone.utc).replace(
+                    microsecond=0).isoformat()
+                base["secondsLeft"] = max(0, int(t0 + limit_min * 60 - _now_ts(now)))
         v = _scope_verdict(scope, use, caps.get(scope), warn_at, labels[scope])
         base["reasons"] += v["reasons"]
         if caps.get(scope):
@@ -280,7 +350,10 @@ def line(res: dict[str, Any]) -> str | None:
             bits.append(f"{fmt_usd(use['usd'])}/{fmt_usd(cap['usd'])}" + (" (partial)" if use["partial"] else ""))
         if cap.get("tokens") is not None:
             bits.append(f"{use['tokens']:,}/{cap['tokens']:,} tokens")
+        if cap.get("minutes") is not None and use.get("minutes") is not None:
+            bits.append(f"{use['minutes']:,.0f}/{cap['minutes']:,} min")
         parts.append(f"{scope} " + ", ".join(bits))
     icon = {"ok": "", "warn": "⚠️ ", "over": "⛔ "}[res["level"]]
-    tail = " · override by the user" if res.get("override") else ""
+    tail = (" · override by the user" if res.get("override") else "") + (
+        " · default caps" if res.get("source") == "default" else "")
     return f"**Budget:** {icon}{res['level']}" + (f" · {'; '.join(parts)}" if parts else "") + tail

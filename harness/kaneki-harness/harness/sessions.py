@@ -41,9 +41,21 @@ HEAD_USER_STEPS = 3       # how many leading user messages may carry the packet 
 SLACK_SECONDS = 86400     # logs last modified this long before the ticket started cannot be about it
 
 PACKET_RE = re.compile(r"Read the packet at\s+[`'\"]?(?P<path>[^`'\"\n]+?)[`'\"]?\s+\(sha256\s+`?(?P<digest>[0-9a-fA-F]{64})")
-SDLC_RE = re.compile(r"(?:^|[\s/\\\"'`(&;|])(?:sdlc(?:\.(?:cmd|ps1|bat|sh|py))?|harness[./\\]cli(?:\.py)?)[\"'`]?\s+"
-                     r"(?P<cmd>packet|record|gate|plan|dispatch)\b(?P<rest>[^\n;&|]*)")
+# Every launcher name `sdlc install` writes: sdlc, sdlc-<host> (sdlc-claude, sdlc-codex ...), each with or without a
+# script extension, bare or as a (quoted) path; and `python -m harness.cli` / harness/cli.py.
+# Only commands that change the ticket attribute a session to it: read-only ones (check, status, cost, transcripts,
+# digest) are run by anyone looking at a ticket, including sessions long after it shipped.
+SDLC_RE = re.compile(r"(?:^|[\s/\\\"'`(&;|])(?:sdlc(?:-[A-Za-z0-9_]+)?(?:\.(?:cmd|ps1|bat|sh|py|exe))?"
+                     r"|harness[./\\]cli(?:\.py)?)[\"'`]?\s+"
+                     r"(?P<cmd>packet|record|gate|plan|dispatch|invalidate)\b(?P<rest>[^\n;&|]*)")
 OPT_RE = re.compile(r"--(?P<key>ticket|node|unit)(?:=|\s+)[\"'`]?(?P<val>[^\s\"'`]+)")
+NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
+
+
+def call_opts(rest: str) -> dict[str, str]:
+    """--ticket / --node / --unit of one sdlc call. A value that is not a literal name (a shell variable such as `$n`,
+    `${node}`, `%N%`, `$env:N`, a placeholder `<node>`) is dropped: the real value is unknown."""
+    return {o.group("key"): o.group("val") for o in OPT_RE.finditer(rest) if NAME_RE.fullmatch(o.group("val"))}
 DISPATCH_RE = re.compile(r"^(?P<node>.+)\.g(?P<generation>\d+)\.(?P<unit>[^.]+)\.r(?P<round>\d+)$")
 
 
@@ -64,13 +76,21 @@ def _clip_obj(obj: Any, limit: int = TEXT_LIMIT) -> Any:
     return obj
 
 
+# Tool-input fields that carry file text or prompts, not a command: a file edit that merely mentions
+# `sdlc gate --ticket T` (a test, a doc) is not a call.
+TEXT_KEYS = frozenset({"content", "new_string", "old_string", "file_text", "new_source", "edits", "prompt",
+                       "description", "patch"})
+
+
 def _strings(obj: Any) -> Iterator[str]:
-    """Every string inside a tool input (commands hide in `command`, `cmd`, `CommandLine`, argv lists ...)."""
+    """Every command-like string inside a tool input (commands hide in `command`, `cmd`, `CommandLine`, argv lists ...);
+    file text and prompts (TEXT_KEYS) are skipped."""
     if isinstance(obj, str):
         yield obj
     elif isinstance(obj, dict):
-        for v in obj.values():
-            yield from _strings(v)
+        for k, v in obj.items():
+            if k not in TEXT_KEYS:
+                yield from _strings(v)
     elif isinstance(obj, (list, tuple)):
         if obj and all(isinstance(v, str) for v in obj):
             yield " ".join(obj)  # an argv list: ["sdlc", "gate", "--ticket", "T"]
@@ -186,7 +206,7 @@ class _Builder:
             if "sdlc" not in text and "cli" not in text:
                 continue
             for m in SDLC_RE.finditer(text):
-                opts = {o.group("key"): o.group("val") for o in OPT_RE.finditer(m.group("rest"))}
+                opts = call_opts(m.group("rest"))
                 if opts.get("ticket"):
                     self.sdlc.append({"command": m.group("cmd"), "ticket": opts["ticket"], "node": opts.get("node"),
                                       "unit": opts.get("unit"), "at": at})

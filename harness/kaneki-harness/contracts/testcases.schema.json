@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "testcases.json: the ticket's test cases as data (plan C1)",
+  "description": "Written by the testcase node from the approved plan. Each case names the acceptance criteria it covers, its risk, and the checks (assertions) it makes, each with a concrete expected value. Coding tags the tests that implement a check with its id (TC-n.aN); the evidence run records an observed value per check in evidence.json. Documents (testcases.md, the tester notebook) are rendered from this file.",
+  "type": "object",
+  "required": ["schemaVersion", "ticket", "criteria", "cases"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "ticket": {"type": "string", "minLength": 1},
+    "criteria": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "text"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^[A-Z][A-Z0-9]*-\\d+$"},
+          "text": {"type": "string", "minLength": 1},
+          "requirements": {"type": "array", "items": {"type": "string"}},
+          "source": {"type": "string", "description": "where the criterion comes from (ticket.md:12, requirements.md:40)"}
+        }
+      }
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "surface", "risk", "criteria", "checks", "inScope", "run"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^TC-\\d+$"},
+          "title": {"type": "string", "minLength": 1},
+          "purpose": {"type": "string"},
+          "surface": {"type": "string", "minLength": 1},
+          "risk": {"enum": ["critical", "high", "normal"]},
+          "criteria": {"type": "array", "items": {"type": "string"}},
+          "preconditions": {"type": "array", "items": {"type": "string"}},
+          "steps": {"type": "array", "items": {"type": "string"}},
+          "checks": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["id", "expect"],
+              "additionalProperties": false,
+              "properties": {
+                "id": {"type": "string", "pattern": "^TC-\\d+\\.a\\d+$"},
+                "expect": {"type": "string", "minLength": 1, "description": "the concrete expected value or state"},
+                "value": {"description": "the expected value as data, when it is one (404, false, \"feature_disabled\")"}
+              }
+            }
+          },
+          "inScope": {"type": "boolean"},
+          "reason": {"type": ["string", "null"], "description": "why a case is out of scope, or manual"},
+          "run": {
+            "type": "object",
+            "required": ["kind"],
+            "additionalProperties": false,
+            "properties": {
+              "kind": {"enum": ["repo-test", "steps", "manual"]},
+              "command": {"type": "string", "description": "repo-test: the command that runs this case's tests ({case} is the case id)"},
+              "tests": {"type": "array", "items": {"type": "string"}, "description": "repo-test: the test files / names (path:line) that implement it"},
+              "file": {"type": "string", "description": "steps: the declarative step file (contracts/steps.schema.json), relative to the ticket folder"}
+            },
+            "allOf": [
+              {"if": {"properties": {"kind": {"const": "repo-test"}}}, "then": {"required": ["kind", "command"]}},
+              {"if": {"properties": {"kind": {"const": "steps"}}}, "then": {"required": ["kind", "file"]}}
+            ]
+          }
+        }
+      }
+    },
+    "uncovered": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["item", "reason"],
+        "additionalProperties": false,
+        "properties": {"item": {"type": "string"}, "reason": {"type": "string", "minLength": 1}}
+      }
+    }
+  }
+}

@@ -197,6 +197,12 @@ def next_pending(state: dict[str, Any], order: list[str]) -> str | None:
     return None
 
 
+def ready_nodes(graph: dict[str, Any], order: list[str], state: dict[str, Any]) -> list[str]:
+    """D6: every node of the trace that could start now (not settled, every required token produced by a settled
+    node), not only the first. The controller and the runner start all of them; independent work runs in parallel."""
+    return [n for n in order if not settled(state, n) and not missing_prerequisites(graph, order, state, n)]
+
+
 def missing_prerequisites(graph: dict[str, Any], order: list[str], state: dict[str, Any], node: str) -> list[str]:
     """Readiness = every token the node requires is produced by a settled node of the trace.
     A token no node in the trace produces is inert (e.g. a family-only token)."""

@@ -31,11 +31,11 @@
     "requirement-analysis",
     "impact-analysis",
     "feature-plan",
+    "testcase",
+    "testcase-review",
     "coding",
     "code-review",
     "@slot:after-code-review",
-    "testcase",
-    "testcase-review",
     "execute-and-evidence",
     "@slot:after-evidence",
     "final-review",
@@ -68,12 +68,23 @@
         "read-review"
       ],
       "inPlace": true
+    },
+    "standard": {
+      "description": "The default path for a typical feature or bug (plan D8): prepare (env + baseline) -> one deep plan unit with a deep plan reviewer (requirements and impact inside the plan; every business question in one batch) -> test cases + test-case judge -> coding -> technical and semantic review in parallel -> evidence + two judges -> final review -> drafts written by the controller and checked against the repository rules -> deliverable-ready. Use full for shared flows, data/API/schema changes or several repositories; lite for a copy or style tweak.",
+      "skip": [
+        "requirement-analysis",
+        "impact-analysis"
+      ],
+      "inline": [
+        "delivery-drafts",
+        "read-review"
+      ]
     }
   },
   "nodes": {
     "prepare": {
       "layer": "analysis",
-      "purpose": "Fetch the ticket through the tracker adapter, resolve repositories, stacks and surfaces from the profile, create the worktree, run the environment doctor.",
+      "purpose": "Fetch the ticket through the tracker adapter, resolve repositories, stacks and surfaces from the profile, create the worktree, run the environment doctor, record the install / lint / test / build baseline (sdlc baseline) and the evidence environment preflight (sdlc env check).",
       "requires": [],
       "produces": [
         "context",
@@ -94,7 +105,8 @@
       ],
       "artifacts": [
         "ticket.md",
-        "environment.md"
+        "environment.md",
+        "baseline.json"
       ],
       "card": "references/nodes/prepare.md",
       "checks": {
@@ -197,6 +209,9 @@
             "design-rules"
           ]
         }
+      },
+      "reviewer": {
+        "tier": "deep"
       }
     },
     "requirement-analysis": {
@@ -289,7 +304,7 @@
         {
           "id": "worker",
           "role": "worker",
-          "tier": "routine"
+          "tier": "deep"
         }
       ],
       "boundary": "user",
@@ -318,6 +333,9 @@
             "design-rules"
           ]
         }
+      },
+      "reviewer": {
+        "tier": "deep"
       }
     },
     "coding": {
@@ -325,7 +343,8 @@
       "purpose": "Implement the approved plan in the ticket worktree; self-check every code-phase rule bound to the touched paths.",
       "requires": [
         "approved-plan",
-        "review-scope"
+        "review-scope",
+        "reviewed-testcases"
       ],
       "produces": [
         "source-change"
@@ -388,11 +407,10 @@
         {
           "id": "semantic-review",
           "role": "worker",
-          "tier": "deep",
-          "after": "technical-review"
+          "tier": "deep"
         }
       ],
-      "pattern": "staged-units-controller-judged",
+      "pattern": "parallel-units-controller-judged",
       "boundary": "controller",
       "gates": [
         "G4"
@@ -438,20 +456,20 @@
         "test"
       ],
       "artifacts": [
-        "testcases.md"
+        "testcases.json"
       ],
       "card": "references/nodes/testcase.md",
       "checks": {
-        "testcases.md": {
-          "sections": [
-            "## Coverage matrix"
+        "testcases.json": {
+          "parsers": [
+            "testcases"
           ]
         }
       }
     },
     "testcase-review": {
       "layer": "implementation",
-      "purpose": "Coverage of every plan condition and every expected value; NEEDS CHANGES reopens testcase.",
+      "purpose": "Test-case judge: decide, with requirement citations, whether testcases.json tests the plan (expected values, proxies, risk, one observable per check); escalate only business questions.",
       "requires": [
         "testcases"
       ],
@@ -463,7 +481,7 @@
         {
           "id": "worker",
           "role": "worker",
-          "tier": "routine"
+          "tier": "deep"
         }
       ],
       "boundary": "controller",
@@ -507,7 +525,11 @@
         }
       ],
       "reviewer": {
-        "tier": "routine"
+        "tier": "deep",
+        "second": {
+          "tier": "routine",
+          "scope": "critical"
+        }
       },
       "boundary": "controller",
       "gates": [
@@ -518,9 +540,17 @@
         "evidence"
       ],
       "artifacts": [
-        "run-report.md"
+        "run-report.md",
+        "evidence.json"
       ],
-      "card": "references/nodes/execute-and-evidence.md"
+      "card": "references/nodes/execute-and-evidence.md",
+      "checks": {
+        "evidence.json": {
+          "parsers": [
+            "evidence"
+          ]
+        }
+      }
     },
     "final-review": {
       "layer": "delivery",

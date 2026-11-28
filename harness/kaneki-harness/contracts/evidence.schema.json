@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "evidence.json: an observed value and its source per check (plan C1)",
+  "description": "Written by the driver after `sdlc evidence run` from what the tests and step files recorded through evidence(). A case that passed but never recorded a check leaves that check UNOBSERVED: a pass of the test is not a pass of the check (feature-flags overclaimed PASS this way).",
+  "type": "object",
+  "required": ["schemaVersion", "ticket", "at", "checks"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "ticket": {"type": "string"},
+    "at": {"type": "string"},
+    "runFile": {"type": "string"},
+    "checks": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["case", "status"],
+        "additionalProperties": false,
+        "properties": {
+          "case": {"type": "string"},
+          "status": {"enum": ["PASS", "FAIL", "UNOBSERVED", "NOT-RUN", "MANUAL"]},
+          "expected": {},
+          "observed": {},
+          "note": {"type": "string"},
+          "source": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "kind": {"enum": ["test", "step", "manual"]},
+              "ref": {"type": "string", "description": "the line that observed it (tests/flags.spec.ts:41, steps/TC-61.json#expect[0])"},
+              "log": {"type": "string", "description": "the run log of the case"},
+              "param": {}
+            }
+          },
+          "observations": {"type": "integer", "minimum": 0}
+        }
+      }
+    }
+  }
+}

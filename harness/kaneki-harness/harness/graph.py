@@ -128,9 +128,10 @@ def when_matches(cond: dict[str, Any] | None, ctx: dict[str, Any]) -> bool:
 
 
 def trace(graph: dict[str, Any], ctx: dict[str, Any]) -> list[str]:
-    """The ticket's nodes in order. A lane with its own `order` replaces the main order (and its slots)."""
+    """The ticket's nodes in order. A lane with its own `order` replaces the main order (and its slots); a lane with
+    `skip` keeps the main order (and the family slots) without those nodes."""
     lane = check_lane(graph, lane_of(ctx))
-    order = lane.get("order") or graph["order"]
+    order = lane.get("order") or [n for n in graph["order"] if n not in lane.get("skip", [])]
     return [n for n in order if when_matches(graph["nodes"][n].get("when"), ctx)]
 
 

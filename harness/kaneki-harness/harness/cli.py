@@ -5,7 +5,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
+from datetime import datetime, timezone
 from pathlib import Path, PureWindowsPath
 from typing import Any, Iterator
 
@@ -23,7 +25,7 @@ from .profile import (LOCALE_KEYS, _abs, artifact_languages, build_context, lang
                       load_profile, parse_lang_settings, resolve_adapters, worktree_path, worktree_root,
                       worktree_root_errors)
 from .state import (Ticket, check_receipts, issue_receipts, missing_prerequisites, new_node_record,
-                    next_pending, now, repo_subject, settled, sha256_file, sha256_text)
+                    next_pending, now, ready_nodes, repo_subject, settled, sha256_file, sha256_text)
 
 HOME = Path(__file__).resolve().parent.parent
 
@@ -94,7 +96,8 @@ class Session:
 
     def signals(self) -> dict[str, Any]:
         """`sdlc reflect-signals` for this ticket, cached until the decision log or a ticket file it reads changes."""
-        files = (self.ticket.log_path, self.ticket.dir / "questions.md", self.ticket.dir / "triage.md")
+        files = (self.ticket.log_path, self.ticket.dir / "questions.md", self.ticket.dir / "questions.json",
+                 self.ticket.dir / "triage.md")
         key = (tuple((p.stat().st_mtime_ns, p.stat().st_size) if p.is_file() else None for p in files),
                self.ctx.get("reviewRound"))
         if self._signals is None or self._signals[0] != key:
@@ -128,6 +131,10 @@ class Session:
         units = [dict(u) for u in spec.get("units", [])]
         if spec.get("reviewer"):
             units.append({"id": "reviewer", "role": "reviewer", "tier": spec["reviewer"]["tier"]})
+            second = spec["reviewer"].get("second")
+            if second:  # J4: an independent second judge on another tier
+                units.append({"id": "reviewer-2", "role": "reviewer", "tier": second["tier"],
+                              "scope": second.get("scope", "critical")})
         return units
 
     def unit(self, node: str, unit_id: str) -> dict[str, Any]:
@@ -152,7 +159,8 @@ class Session:
         if not before:
             return None
         rec = self.state["nodes"][node]
-        prev = [u for u in rec["units"] if u["unit"] == before and u["generation"] == rec["generation"]]
+        prev = [u for u in rec["units"] if u["unit"] == before and u["generation"] == rec["generation"]
+                and u["status"] != "abandoned"]
         if not prev:
             return f"{node}/{unit_id} is staged after {before}, which has no record at generation {rec['generation']}"
         if prev[-1].get("verdict") is None and prev[-1]["status"] == "ok":
@@ -250,8 +258,8 @@ def cmd_init(args: argparse.Namespace) -> None:
         raise HarnessError(f"ticket already initialised at {ticket.dir}; use status (never re-init to recover)")
     ctx = build_context(profile, args.ticket, args.kind, args.repo, args.family, args.surface)
     ctx["lane"] = args.lane
-    if args.lane != G.DEFAULT_LANE and ctx["families"]:
-        raise HarnessError(f"lane {args.lane} has no extension slots; families {ctx['families']} need --lane full")
+    if G.check_lane(G.load_graph(HOME, profile, path.parent), args.lane).get("order") and ctx["families"]:
+        raise HarnessError(f"lane {args.lane} has no extension slots; families {ctx['families']} need --lane standard or full")
     override = parse_lang_settings(args.lang)
     if override:
         ctx["locale"] = override
@@ -309,7 +317,7 @@ def cmd_lane(args: argparse.Namespace) -> None:
     old = G.lane_of(s.ctx)
     if old == args.set:
         raise HarnessError(f"ticket is already on lane {old}")
-    if args.set != G.DEFAULT_LANE and s.ctx["families"]:
+    if s.graph["lanes"][args.set].get("order") and s.ctx["families"]:
         raise HarnessError(f"lane {args.set} has no extension slots; this ticket uses families {s.ctx['families']}")
     s.ctx["lane"] = args.set
     s.order = G.trace(s.graph, s.ctx)
@@ -319,7 +327,7 @@ def cmd_lane(args: argparse.Namespace) -> None:
     s.ticket.log({"event": "lane", "lane": args.set, "from": old, "reason": args.reason})
     out({"ok": True, "lane": args.set, "from": old, "trace": s.order, "nextPending": next_pending(s.state, s.order),
          "note": "repositories stay bound to their current checkout; prepare keeps it (sdlc worktree --path <repo>)"
-                 if old != G.DEFAULT_LANE else None})
+                 if s.graph["lanes"].get(old, {}).get("inPlace") else None})
 
 
 def cmd_status(args: argparse.Namespace) -> None:
@@ -343,9 +351,15 @@ def cmd_status(args: argparse.Namespace) -> None:
                      "hosts": sorted({board.unit_host(u) for u in rec["units"]
                                       if u["generation"] == rec["generation"]})})
     nxt = next_pending(s.state, s.order)
+    # the same total as STATUS.md and token-usage.md (usage.ticket_tokens): measured from the logs when readable
+    tt = U.ticket_tokens(s.ppath, s.ctx["ticket"], s.order, s.state["nodes"])
+    for row in rows:
+        row["tokensCurrentGeneration"] = row["tokens"]
+        row["tokens"] = (tt["nodes"].get(row["node"]) or {}).get("tokens", 0)
     res = {"ticket": s.ctx["ticket"], "kind": s.ctx["kind"], "lane": G.lane_of(s.ctx), "reviewRound": s.ctx["reviewRound"],
            "settled": sum(1 for n in s.order if settled(s.state, n)), "traceLength": len(s.order),
-           "nextPending": nxt, "tokensTotal": tokens_total}
+           "nextPending": nxt, "ready": ready_nodes(s.graph, s.order, s.state),
+           "tokensTotal": tt["total"]["tokens"], "tokens": U.compact(tt)}
     res["host"], res["hosts"] = board.ticket_hosts(s.state)
     if nxt:
         res["nextMissing"] = missing_prerequisites(s.graph, s.order, s.state, nxt)
@@ -467,7 +481,16 @@ def build_packet(s: Session, node: str, unit_id: str, facts_arg: str | None = No
     staged = s.stage_problem(node, unit_id)
     if staged:
         raise HarnessError(staged)
-    budget = budget_gate(s, node)
+    from . import budget as B
+    budget = budget_gate(s, node)  # a refusal changes nothing
+    if B.node_started(rec) is None:  # the round's wall clock (budgets.node.*.minutes) starts at its first packet
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        rec["startedAt"] = {"generation": rec["generation"], "at": now.isoformat()}
+        s.save()
+        mins = ((budget or {}).get("caps") or {}).get("node", {}) or {}
+        if budget is not None and mins.get("minutes"):
+            budget["deadline"] = datetime.fromtimestamp(now.timestamp() + mins["minutes"] * 60, timezone.utc).isoformat()
+            budget["secondsLeft"] = int(mins["minutes"] * 60)
     tier, escalated = s.tier(node, unit_id)
     exe = s.execution(node, unit_id, tier)
     facts = json.loads(Path(facts_arg).read_text(encoding="utf-8")) if facts_arg else {}
@@ -522,6 +545,8 @@ def build_packet(s: Session, node: str, unit_id: str, facts_arg: str | None = No
         "lessons": lessons["text"],
         "languages": _languages_block(s, node),
         "git": _git_block(s, exe["host"]),
+        "driver": driver_block(s.ppath, exe["host"]),
+        "timeBudget": _time_budget_block(budget),
     }
     text = template
     for key, val in values.items():
@@ -560,19 +585,31 @@ def budget_gate(s: Session, node: str) -> dict[str, Any] | None:
     """G8: refuse a packet while a budget is over (profile `budgets`, harness/budget.py). Returns the check (None
     without a budgets block) so the packet can carry the level and a warning. The refusal is an error only: no
     state change, no event."""
-    if s.profile.get("budgets") is None:
-        return None
     from . import budget as B
+    if not B.enabled(s.profile):
+        return None
     events, _ = s.ticket.verify_log()
+    rec = s.state["nodes"][node]
     res = B.check(s.ppath, s.ctx["ticket"], node, prof=s.profile, events=events,
-                  generation=s.state["nodes"][node]["generation"])
+                  generation=rec["generation"], started=B.node_started(rec))
     if not res["allowed"]:
         raise HarnessError(B.refusal(res))
     return res
 
 
 def _budget_brief(res: dict[str, Any]) -> dict[str, Any]:
-    return {k: res.get(k) for k in ("level", "allowed", "over", "usage", "caps", "override")}
+    return {k: res.get(k) for k in ("level", "allowed", "over", "usage", "caps", "override", "source", "deadline",
+                                    "secondsLeft")}
+
+
+def _time_budget_block(res: dict[str, Any] | None) -> str:
+    """The packet's wall-clock line (A4): empty without a minutes cap."""
+    if not res or not res.get("deadline"):
+        return ""
+    mins = ((res.get("caps") or {}).get("node") or {}).get("minutes")
+    return (f"\nTime cap: this node's round ends at **{res['deadline']}** (UTC, {mins} minutes from its first packet). "
+            "Do not start long work you cannot finish by then; when it passes, stop, write the result file with what is "
+            "done and what is left, and hand back. The driver refuses new packets for this node after the cap.\n")
 
 
 def cmd_budget(args: argparse.Namespace) -> None:
@@ -583,15 +620,16 @@ def cmd_budget(args: argparse.Namespace) -> None:
     node = args.allow_node or args.node or next_pending(s.state, s.order)
     if node is not None and node not in s.order:
         raise HarnessError(f"{node} is not in this ticket's trace: {s.order}")
-    if s.profile.get("budgets") is None:
+    if not B.enabled(s.profile):
         if args.allow_node:
-            raise HarnessError("G8: this profile has no budgets block, so there is nothing to override")
+            raise HarnessError("G8: this profile turns budgets off (an empty budgets block), so there is nothing to override")
         out({"ok": True, "ticket": s.ctx["ticket"], "node": node, "configured": False, "level": "ok",
-             "note": "no budgets block in the profile: no budget checks"})
+             "note": "the profile's budgets block is empty: no budget checks"})
         return
     events, _ = s.ticket.verify_log()
     gen = s.state["nodes"][node]["generation"] if node else None
-    res = B.check(s.ppath, s.ctx["ticket"], node, prof=s.profile, events=events, generation=gen)
+    res = B.check(s.ppath, s.ctx["ticket"], node, prof=s.profile, events=events, generation=gen,
+                  started=B.node_started(s.state["nodes"][node]) if node else None)
     if not args.allow_node:
         out({"ok": True, **res, "warning": B.warning(res), "status": B.line(res)})
         return
@@ -668,6 +706,27 @@ def launcher_cmd(profile_file: Path, host: str | None = None, windows: bool | No
     return f'sh "{(shim or bundled / "sdlc").as_posix()}" --profile "{profile_file.as_posix()}"'
 
 
+def posix_launcher_cmd(profile_file: Path, host: str | None = None) -> str:
+    """The sh form of the launcher with absolute forward-slash paths: it works in a POSIX shell and in Git Bash / MSYS
+    on Windows, where the `.cmd` launcher would go through cmd.exe (and can wait on its console)."""
+    bin_dir = profile_file.parent / ".sdlc" / "bin"
+    names = ([f"sdlc-{host}"] if host and host != "profile" else []) + ["sdlc"]
+    shim = next((bin_dir / n for n in names if (bin_dir / n).is_file()), None)
+    target = shim or HOME / "skills" / "kaneki-flow" / "scripts" / "sdlc"
+    return f'sh "{target.resolve().as_posix()}" --profile "{profile_file.resolve().as_posix()}"'
+
+
+def driver_block(profile_file: Path, host: str | None = None, windows: bool | None = None) -> str:
+    """The packet's Driver section: the absolute driver command for each shell a unit may run (never a bare `sdlc`,
+    which is not on PATH)."""
+    windows = (os.name == "nt") if windows is None else windows
+    lines = [f"- Bash / sh{' (Git Bash on Windows too)' if windows else ''}: `{posix_launcher_cmd(profile_file, host)}`"]
+    if windows:
+        lines.append(f"- PowerShell: `{launcher_cmd(profile_file, host, windows=True)}`")
+        lines.append("- From Bash never run the `.cmd` launcher (it goes through cmd.exe); use the sh form.")
+    return NL.join(lines)
+
+
 def _languages_block(s: Session, node: str) -> str:
     override = s.ctx.get("locale")
     langs = artifact_languages(s.profile, node, s.artifacts(node), override)
@@ -684,7 +743,8 @@ def _git_block(s: Session, host: str | None = None) -> str:
                 for r in s.ctx["repositories"] if gitid.identity(s.profile, r["id"]) != ident]
     lines = [f"- Project identity: **{ident['name']} <{ident['email']}>**" + (" (custom SSH command configured)" if ident.get("sshCommand") else ""),
              *per_repo,
-             f"- Run **every** git command as: `{cmd} git --ticket {s.ctx['ticket']} --repo <repo-id> -- <git args>`",
+             f"- Run **every** git command as: `{cmd} git --ticket {s.ctx['ticket']} --repo <repo-id> -- <git args>` "
+             "(from Bash, the sh form of the Driver section in place of the launcher)",
              "  (it runs in the ticket worktree, applies the identity and SSH command, and logs the call).",
              "- Never run plain `git` for anything that writes or talks to the remote, never set `user.*` or `core.sshCommand`, "
              "never pass `--author`. Nodes never commit, push, merge or rebase, and never delete work (reset --hard, clean -f): "
@@ -700,15 +760,65 @@ def _bullets(items: Any) -> str:
     return "\n".join(f"- {i}" for i in items)
 
 
-def record_unit(s: Session, node: str, unit_id: str, result_path: Path, model: str, *,
+def unit_dispatch_id(s: Session, node: str, unit_id: str, result_path: Path | None = None) -> str:
+    """The dispatch id (`<node>.g<gen>.<unit>.r<round>`) the next record of this unit closes: the round build_packet
+    numbered (1 + the unit's records at this generation), or the result file's own name when it names this unit."""
+    rec = s.state["nodes"][node]
+    round_no = 1 + sum(1 for u in rec["units"] if u["unit"] == unit_id and u["generation"] == rec["generation"])
+    if result_path is not None and result_path.suffix == ".md":
+        from .sessions import split_dispatch
+        ident = split_dispatch(result_path.stem, s.order)
+        if ident and (ident["node"], ident["unit"], ident["generation"]) == (node, unit_id, rec["generation"]):
+            return result_path.stem
+    return f"{node}.g{rec['generation']}.{unit_id}.r{round_no}"
+
+
+def measure_dispatch(s: Session, dispatch_id: str) -> dict[str, Any] | None:
+    """What a dispatch consumed, measured from its own logs (cost.dispatch_usage); None when no log is readable here."""
+    from . import cost
+    try:
+        return cost.dispatch_usage(s.ppath, s.ctx["ticket"], dispatch_id)
+    except Exception:  # noqa: BLE001 — a record never fails on a measurement
+        return None
+
+
+def _measured_fields(meas: dict[str, Any] | None, reported: int | None, abandoned: bool) -> dict[str, Any]:
+    """The token fields of a unit record. `tokens` is what the unit consumed, measured by the driver from the unit's own
+    log(s) (`tokensSource: measured`); without a readable log it falls back to the agent's `--tokens`
+    (`tokensSource: reported`). `contextAtEnd` keeps the `--tokens` value: the agent's last-turn context size.
+    When one packet ran in several sessions, every session but the last is listed in `abandonedAttempts`."""
+    fields: dict[str, Any] = {"contextAtEnd": reported}
+    if meas is None:
+        fields.update(tokens=reported, tokensSource="reported" if reported is not None else None)
+        return fields
+    fields.update(tokens=meas["tokens"], tokensSource="measured",
+                  tokensMeasured={k: meas[k] for k in ("input", "cacheWrite", "cacheRead", "output", "usd", "messages")}
+                  | {"usdSource": "+".join(meas["sources"]) or None, "sessions": len(meas["attempts"])})
+    gone = meas["attempts"] if abandoned else meas["attempts"][:-1]
+    if gone and not abandoned:
+        fields["abandonedAttempts"] = [{"session": a["session"], "tokens": a["tokens"], "usd": a["usd"],
+                                        "first": a["first"], "last": a["last"]} for a in gone]
+    return fields
+
+
+def record_unit(s: Session, node: str, unit_id: str, result_path: Path | None, model: str, *,
                 status: str = "ok", tokens: int | None = None, verdict: str | None = None,
-                failure_class: str | None = None) -> dict[str, Any]:
+                failure_class: str | None = None, reason: str | None = None) -> dict[str, Any]:
+    """Record one dispatch of a unit. `status=abandoned` records a dispatch that produced no usable result (a run
+    stopped, timed out or given up): no result file, a `reason`, and the tokens it spent, so no unit log is left
+    without a record; the next packet of the unit is the next round."""
     s.spec(node)
     rec = s.state["nodes"][node]
     s.unit(node, unit_id)
-    if not result_path.is_file():
+    abandoned = status == "abandoned"
+    if abandoned:
+        if not (reason or "").strip():
+            raise HarnessError("--reason is required with --status abandoned: say why the dispatch was given up")
+        if verdict:
+            raise HarnessError("an abandoned dispatch has no verdict")
+    elif result_path is None or not result_path.is_file():
         raise HarnessError(f"G7: result file missing: {result_path} (the controller never fills a missing unit)")
-    staged = s.stage_problem(node, unit_id)
+    staged = None if abandoned else s.stage_problem(node, unit_id)
     if staged:
         raise HarnessError(staged)
     tier, _ = s.tier(node, unit_id)
@@ -716,11 +826,18 @@ def record_unit(s: Session, node: str, unit_id: str, result_path: Path, model: s
     accepted, mismatch, warn = H.model_matches(model, exe)
     if not accepted:
         raise HarnessError(f"{node}/{unit_id} is planned on {exe['model']} ({tier}); a {model} record is refused")
+    dispatch_id = unit_dispatch_id(s, node, unit_id, result_path)
+    have_result = result_path is not None and result_path.is_file()
     entry: dict[str, Any] = {
         "unit": unit_id, "generation": rec["generation"], "model": model, "tier": tier, "status": status,
-        "result": str(result_path), "resultDigest": sha256_file(result_path), "tokens": tokens,
+        "dispatchId": dispatch_id,
+        "result": str(result_path) if have_result else None,
+        "resultDigest": sha256_file(result_path) if have_result else None,
+        **_measured_fields(measure_dispatch(s, dispatch_id), tokens, abandoned),
         "verdict": verdict, "failureClass": failure_class, "at": now(),
     }
+    if abandoned:
+        entry["reason"] = reason.strip()
     if exe["host"] != "profile":
         entry["host"] = exe["host"]
     if exe.get("effort"):
@@ -743,7 +860,8 @@ def record_unit(s: Session, node: str, unit_id: str, result_path: Path, model: s
     if previous is not None and previous.get("host", "profile") != host:
         s.ticket.log({"event": "host-switch", "node": node, "unit": unit_id, "from": previous.get("host", "profile"),
                       "to": host, "previousNode": previous.get("node"), "previousUnit": previous.get("unit")})
-    U.write_ticket_file(s.ticket.dir, s.ctx["ticket"], s.order, s.state["nodes"])
+    U.write_ticket_file(s.ticket.dir, s.ctx["ticket"], s.order, s.state["nodes"],
+                        totals=U.ticket_tokens(s.ppath, s.ctx["ticket"], s.order, s.state["nodes"]))
     payload: dict[str, Any] = {"ok": True, "recorded": entry, "nodeTokens": U.node_usage(rec)["total"]}
     if warn:
         payload["warning"] = warn
@@ -759,8 +877,11 @@ def _last_recorded_unit(s: Session) -> dict[str, Any] | None:
 
 def cmd_record(args: argparse.Namespace) -> None:
     s = Session(args)
-    out(record_unit(s, args.node, args.unit, Path(args.result), args.model, status=args.status,
-                    tokens=args.tokens, verdict=args.verdict, failure_class=args.failure_class))
+    if not args.result and args.status != "abandoned":
+        raise HarnessError("--result is required (only --status abandoned records a dispatch without a result)")
+    out(record_unit(s, args.node, args.unit, Path(args.result) if args.result else None, args.model,
+                    status=args.status, tokens=args.tokens, verdict=args.verdict, failure_class=args.failure_class,
+                    reason=args.reason))
 
 
 def _readiness_walk(s: "Session", node: str, status: str, reopen: str | None, notes: dict[str, Any] | None = None,
@@ -786,24 +907,42 @@ def _readiness_walk(s: "Session", node: str, status: str, reopen: str | None, no
         if not spec.get("loopBackTo"):
             yield f"{node} has no loop-back; use rejected + invalidate", False
             return
-        attempts = rec["attempts"] + 1
+        attempts = loop_rounds(s, spec["loopBackTo"], rec["attempts"])
         cap = s.profile.get("gates", {}).get("loopCap", 2)
         if attempts >= cap:
-            yield (f"G4: {node} NEEDS CHANGES after {attempts} rounds (cap {cap}); ask the user, then repeat with "
-                   "--actor user"), True
+            yield (f"G4: {node} NEEDS CHANGES after {attempts} rounds (cap {cap}, counting manual reopens of "
+                   f"{spec['loopBackTo']}); ask the user, then repeat with --actor user"), True
         problems = artifact_problems(s, node, "needs-changes", None)
         if problems:
             yield f"G7: {node}: " + "; ".join(problems), False
     elif status == "approved":
+        if node in ("fix-plan", "feature-plan", "scope"):
+            from . import questions as Q
+            high = Q.open_high(s.ticket.dir)
+            if high:
+                yield (f"G1: {node} cannot close while HIGH questions are open: {high}. Ask them in one batch "
+                       f"(`sdlc questions --ticket {s.ctx['ticket']}`), then record each with `sdlc answer ... --actor user`"), False
         planned = [u["id"] for u in s.units(node)]
         done_units = {u["unit"] for u in current if u["status"] == "ok"}
         lacking = [u for u in planned if u not in done_units]
         if lacking:
             yield f"G7: {node} has no ok record for units {lacking} at generation {rec['generation']}", False
         elif spec.get("reviewer"):
-            last_rev = [u for u in current if u["unit"] == "reviewer"][-1]
-            if last_rev.get("verdict") == "FAIL":
-                yield f"{node}: last reviewer verdict is FAIL ({last_rev.get('failureClass')}); fix and re-review", False
+            for rid in ("reviewer", "reviewer-2") if spec["reviewer"].get("second") else ("reviewer",):
+                last_rev = [u for u in current if u["unit"] == rid and u["status"] != "abandoned"][-1]
+                if last_rev.get("verdict") == "FAIL":
+                    yield f"{node}: last {rid} verdict is FAIL ({last_rev.get('failureClass')}); fix and re-review", False
+            if spec["reviewer"].get("second"):  # J1-J5: the evidence judges, held to the driver's facts
+                from . import judge as J
+                for p in J.gate_problems(s):
+                    yield (p if p.startswith("G1:") else f"G7: {node}: {p}"), False
+        if "unrecorded" not in memo:
+            memo["unrecorded"] = unrecorded_dispatches(s, node)
+        if memo["unrecorded"]:
+            yield (f"G7: {node} has unit logs with no record at generation {rec['generation']}: "
+                   f"{memo['unrecorded']}. Record each dispatch, including one given up: "
+                   f"`sdlc record --ticket {s.ctx['ticket']} --node {node} --unit <unit> --model <model> "
+                   "--status abandoned --reason '<why>'`"), False
         absent = [a for a in s.artifacts(node) if not (s.ticket.dir / a).is_file()]
         if absent:
             yield f"G7: {node} artifacts missing: {absent}", False
@@ -816,7 +955,8 @@ def _readiness_walk(s: "Session", node: str, status: str, reopen: str | None, no
             problems = artifact_problems(s, node, "approved", reopen)
             if problems:
                 yield f"G7: {node}: " + "; ".join(problems), False
-            broken = {a: C.citations(live_text(s.ticket.dir / a), citation_roots(s)) for a in s.artifacts(node) if a.endswith(".md")}
+            roots, search = citation_roots(s), citation_search_roots(s)
+            broken = {a: C.citations(live_text(s.ticket.dir / a), roots, search) for a in s.artifacts(node) if a.endswith(".md")}
             broken = {a: b for a, b in broken.items() if b}
             if broken and spec.get("subjectNode"):
                 yield f"G7: {node}: citations that do not resolve (receipt node): {broken}", False
@@ -841,6 +981,31 @@ def _readiness_walk(s: "Session", node: str, status: str, reopen: str | None, no
                 memo["receipts"] = ("G7: receipts not shippable: " + "; ".join(found)) if found else ""
             if memo["receipts"]:
                 yield memo["receipts"], False
+
+
+def unrecorded_dispatches(s: "Session", node: str) -> list[str]:
+    """Dispatch ids of this node's current generation that have a unit log (cost.py's exact packet match) but no
+    record. Round R of a unit is recorded once the unit has R records at that generation (build_packet's numbering),
+    so an abandoned run recorded with `--status abandoned` counts. A re-dispatch of the same packet is one dispatch;
+    its extra sessions land in that record's `abandonedAttempts`. [] when the logs cannot be read."""
+    from . import cost
+    from .sessions import split_dispatch
+    rec = s.state["nodes"][node]
+    try:
+        data = cost.rows(s.ppath, s.ctx["ticket"])
+    except Exception:  # noqa: BLE001 — unreadable logs never block a gate
+        return []
+    found = sorted({r["dispatchId"] for r in data["rows"] if r["ticket"] == s.ctx["ticket"] and r["node"] == node
+                    and r["kind"] in ("unit", "dispatch") and r["dispatchId"]})
+    out = []
+    for did in found:
+        ident = split_dispatch(did, s.order)
+        if not ident or ident["generation"] != rec["generation"]:
+            continue
+        recorded = sum(1 for u in rec["units"] if u["unit"] == ident["unit"] and u["generation"] == rec["generation"])
+        if recorded < ident["round"]:
+            out.append(did)
+    return out
 
 
 def _effective_boundary(s: "Session", node: str) -> str:
@@ -920,6 +1085,11 @@ def cmd_gate(args: argparse.Namespace) -> None:
     elif args.status == "approved":
         if "citationWarnings" in notes:
             result["citationWarnings"] = notes["citationWarnings"]
+        rec["artifactDigests"] = {a: sha256_file(s.ticket.dir / a) for a in s.artifacts(node)
+                                  if (s.ticket.dir / a).is_file()}  # closed nodes are immutable (closed_edits)
+        if (spec.get("reviewer") or {}).get("second"):  # J5: approved verdicts feed the calibration log
+            from . import judge as J
+            result["judgeVerdicts"] = J.record_verdicts(s)
         if spec.get("subjectNode"):
             rec["subject"] = {r["id"]: repo_subject(r.get("worktree") or r["path"], s.excludes) for r in s.ctx["repositories"]}
             result["subject"] = rec["subject"]
@@ -960,7 +1130,8 @@ def cmd_gate(args: argparse.Namespace) -> None:
         if auto:
             result["autoClosed"] = auto
     s.save()
-    result["tokenUsageFile"] = str(U.write_ticket_file(s.ticket.dir, s.ctx["ticket"], s.order, s.state["nodes"]))
+    result["tokenUsageFile"] = str(U.write_ticket_file(s.ticket.dir, s.ctx["ticket"], s.order, s.state["nodes"],
+                        totals=U.ticket_tokens(s.ppath, s.ctx["ticket"], s.order, s.state["nodes"])))
     result["nextPending"] = next_pending(s.state, s.order)
     out(result)
 
@@ -992,7 +1163,8 @@ def node_rule_ids(s: "Session", node: str) -> list[str]:
 def artifact_problems(s: "Session", node: str, status: str, reopen: str | None) -> list[str]:
     spec = s.spec(node)
     out = []
-    ctx: dict[str, Any] = {"ruleIds": node_rule_ids(s, node), "status": status, "reopen": reopen}
+    ctx: dict[str, Any] = {"ruleIds": node_rule_ids(s, node), "status": status, "reopen": reopen,
+                           "ticketDir": s.ticket.dir}
     if any("proposals" in (c.get("parsers") or []) for c in (spec.get("checks") or {}).values()):
         ctx["proposals"] = proposal_context(s)
     for name, check in (spec.get("checks") or {}).items():
@@ -1001,7 +1173,94 @@ def artifact_problems(s: "Session", node: str, status: str, reopen: str | None) 
             out.append(f"{name} is missing")
             continue
         out += [f"{name}: {p}" for p in C.check_artifact(live_text(path), check, ctx)]
+    out += draft_problems(s, node)
+    if spec.get("issuesReceipts"):
+        out += unreviewed_untracked(s, node)
+    if "baseline.json" in s.artifacts(node):
+        out += baseline_problems(s)
+    out += small_path_problems(s, node)
+    if spec.get("checksReceipts"):
+        out += closed_edits(s)
     return out
+
+
+def baseline_problems(s: "Session") -> list[str]:
+    """B3: prepare leaves a ready-to-build checkout: baseline.json is the driver's record (`sdlc baseline`), with
+    every repository installed. Failing tests or lint there are the baseline, not a refusal."""
+    f = s.ticket.dir / "baseline.json"
+    if not f.is_file():
+        return []  # the artifact presence check names it
+    try:
+        data = json.loads(f.read_text(encoding="utf-8"))
+    except ValueError:
+        return [f"baseline.json is not the driver's record: run `sdlc baseline --ticket {s.ctx['ticket']}`"]
+    blocked = {r.get("repo"): r.get("blocked") for r in data.get("repos") or [] if r.get("blocked")}
+    if blocked or data.get("ok") is False:
+        return [f"baseline.json: install failed {blocked}: coding would be blocked; fix the environment, then rerun "
+                "`sdlc baseline`"]
+    return []
+
+
+def unreviewed_untracked(s: "Session", node: str) -> list[str]:
+    """B5: untracked files ship with the change (they are part of the receipt's subject). The subject node's review
+    must name each one, so a file a tool generated (feature-flags: AGENTS.md and CLAUDE.md written by `next dev`) is
+    caught at the node that issues the receipts, not after. Names count by repo-relative path or by file name."""
+    from .state import worktree_snapshot
+    text = "\n".join(live_text(s.ticket.dir / a) for a in s.artifacts(node)
+                     if a.endswith(".md") and (s.ticket.dir / a).is_file())
+    out = []
+    for r in s.ctx["repositories"]:
+        path = r.get("worktree") or r["path"]
+        try:
+            untracked = worktree_snapshot(path, s.excludes)["untracked"]
+        except Exception:  # noqa: BLE001 — git problems are reported by the subject/receipt checks
+            continue
+        missing = [rel for rel in sorted(untracked) if rel not in text and Path(rel).name not in text]
+        if missing:
+            out.append(f"{r['id']}: untracked files ship with the change but the review does not name them: {missing}. "
+                       "Name each one the change needs; move any other out of the worktree (a tool wrote it) "
+                       "before closing")
+    return out
+
+
+def draft_problems(s: "Session", node: str) -> list[str]:
+    """B5: the rules kaneki-ship applies, checked where the drafts are written (delivery-drafts), so the ship request
+    passes first time: drafts/commit-msg.md against the commit-message rules, drafts/pr-body.md against my-git's PR
+    rules (title = the commit header; GH005, GH008 sections, GH009 no AI attribution)."""
+    names = s.artifacts(node)
+    msg_file, body_file = s.ticket.dir / "drafts" / "commit-msg.md", s.ticket.dir / "drafts" / "pr-body.md"
+    out: list[str] = []
+    if "drafts/commit-msg.md" in names:
+        out += ship_readiness(s)
+    message = live_text(msg_file) if "drafts/commit-msg.md" in names and msg_file.is_file() else None
+    if message is not None:
+        out += [f"drafts/commit-msg.md: {p}" for p in draft_message_problems(s, message)]
+    if "drafts/pr-body.md" in names and body_file.is_file():
+        out += [f"drafts/pr-body.md: {p}" for p in draft_pr_problems(s, (message or "").strip().splitlines()[0] if (message or "").strip() else "",
+                                                                         live_text(body_file))]
+    return out
+
+
+def ship_readiness(s: "Session") -> list[str]:
+    """B5: the ship path itself (my-git registered for the project when it is the backend)."""
+    from . import mygit
+    try:
+        backend = SHIP.resolve_backend(s.profile, _delivery(s))
+    except HarnessError:
+        return []  # draft_message_problems reports a backend problem once
+    return mygit.readiness(HOME, s.pdir) if backend == "my-git" else []
+
+
+def draft_pr_problems(s: "Session", title: str, body: str) -> list[str]:
+    from . import mygit
+    try:
+        backend = SHIP.resolve_backend(s.profile, _delivery(s))
+    except HarnessError:
+        return []  # draft_message_problems reports the backend problem once
+    root = mygit.find_root(HOME) if backend == "my-git" else None
+    if root is None or not body.strip():
+        return [] if body.strip() else ["empty"]
+    return mygit.check_pr(root, title, body)
 
 
 def proposal_context(s: "Session") -> dict[str, Any]:
@@ -1014,7 +1273,104 @@ def proposal_context(s: "Session") -> dict[str, Any]:
 
 
 def citation_roots(s: "Session") -> list[Path]:
+    """Where a cited `path:line` may live: each repository checkout, the ticket folder, and the project folder (so
+    `.sdlc/tickets/<id>/logs/x.log:12` resolves). A bare file name that is unique under these roots also resolves
+    (checks.citations)."""
+    return [Path(r.get("worktree") or r["path"]) for r in s.ctx["repositories"]] + [s.ticket.dir, s.pdir]
+
+
+def citation_search_roots(s: "Session") -> list[Path]:
+    """Where a bare cited file name is looked up: the repository checkouts and the ticket folder (not the whole
+    project folder, which holds other checkouts of the same repository)."""
     return [Path(r.get("worktree") or r["path"]) for r in s.ctx["repositories"]] + [s.ticket.dir]
+
+
+def check_report(s: "Session", node: str, unit_id: str | None = None) -> dict[str, Any]:
+    """`sdlc check`: the gate's G7 content checks of one node as a read-only dry run, for a unit to run before it hands
+    back: the unit's result file (and a reviewer's `Verdict:` line), the node's artifacts (presence, live text,
+    required sections, `Verdict:` / `Confidence:` / `Reopen:` lines, rule verdicts, the proposals.json schema),
+    citations, output language, the commit rule and the repository's commit-message rules for drafts. Record and
+    approval checks (unit records, G0 / G4 / G5 asks) are the gate's alone. Nothing is written."""
+    spec = s.spec(node)
+    problems: list[str] = []
+    warnings: list[str] = []
+    checked: list[str] = []
+    role = None
+    dispatch_id = None
+    md_files: list[Path] = []
+    if unit_id:
+        unit = s.unit(node, unit_id)
+        role = unit.get("role")
+        dispatch_id = unit_dispatch_id(s, node, unit_id)
+        result = s.ticket.dir / "results" / f"{dispatch_id}.md"
+        checked.append(str(result))
+        if not result.is_file():
+            problems.append(f"result file missing: {result}")
+        else:
+            md_files.append(result)
+            if role == "reviewer":
+                from .dispatch import extract_verdict
+                if extract_verdict(result.read_text(encoding="utf-8"))[0] is None:
+                    problems.append(f"{result.name}: no `Verdict: PASS | FAIL` (or APPROVED | NEEDS CHANGES) line")
+    if role == "reviewer" and (spec.get("reviewer") or {}).get("second") and unit_id in ("reviewer", "reviewer-2"):
+        from . import judge as J  # an evidence judge checks its own judgement file before it hands back
+        try:
+            problems += J.judgement_problems(s, J.UNIT_JUDGE[unit_id])
+        except HarnessError as exc:
+            problems.append(str(exc))
+    if role != "reviewer":  # a reviewer reads the artifacts, the worker leaves them
+        names = s.artifacts(node)
+        checked += [str(s.ticket.dir / a) for a in names]
+        absent = [a for a in names if not (s.ticket.dir / a).is_file()]
+        if absent:
+            problems.append(f"artifacts missing: {absent}")
+        stale = [a for a in names if a.endswith(".md") and a not in absent and not live_text(s.ticket.dir / a).strip()]
+        if stale:
+            problems.append(f"artifacts not rewritten since a rerun superseded them: {stale} (replace the file, or write "
+                            f"the new round below its last `{SUPERSEDED_HEADER}` line)")
+        problems += [p for p in artifact_problems(s, node, "", None) if not p.endswith(" is missing")]
+        md_files += [s.ticket.dir / a for a in names if a.endswith(".md") and a not in absent]
+        problems += [f"output language: {a}: {why}" for a, why in language_problems(s, node).items()
+                     if a not in absent]
+    roots, search = citation_roots(s), citation_search_roots(s)
+    for f in md_files:
+        broken = C.citations(live_text(f), roots, search)
+        if broken:
+            (problems if spec.get("subjectNode") else warnings).append(f"{f.name}: citations that do not resolve: {broken}")
+    if (spec.get("subjectNode") or spec.get("checksReceipts")) and role != "reviewer":
+        try:
+            commit = _commit_rule_problem(s)
+        except HarnessError as exc:
+            commit = str(exc)
+        if commit:
+            problems.append(commit)
+    return {"ok": not problems, "ticket": s.ctx["ticket"], "node": node, "unit": unit_id, "dispatchId": dispatch_id,
+            "problems": problems, "warnings": warnings, "checked": checked,
+            "note": "the gate also needs each planned unit's record and, where the node says so, the user's approval"}
+
+
+def draft_message_problems(s: "Session", message: str) -> list[str]:
+    """The commit-message rules kaneki-ship will apply to drafts/commit-msg.md (my-git's when that is the backend)."""
+    from . import mygit
+    if not message.strip():
+        return ["empty"]
+    try:
+        backend = SHIP.resolve_backend(s.profile, _delivery(s))
+    except HarnessError as exc:
+        return [str(exc)]
+    if backend == "my-git":
+        root = mygit.find_root(HOME)
+        if root is None:
+            return ["the ship backend is my-git, but the my-git plugin is not installed (kaneki-onboarding checks it)"]
+        return mygit.check_message(root, message)
+    return C.commit_message(message)
+
+
+def cmd_check(args: argparse.Namespace) -> int:
+    s = Session(args)
+    res = check_report(s, args.node, args.unit)
+    out(res)
+    return 0 if res["ok"] else 1
 
 
 def language_problems(s: "Session", node: str) -> dict[str, str]:
@@ -1046,6 +1402,7 @@ def node_inputs(s: "Session", node: str) -> list[dict[str, str]]:
 
 
 SUPERSEDED_HEADER = "## SUPERSEDED:"
+DATA_ARTIFACTS = ("testcases.json", "evidence.json", "baseline.json")
 NL = chr(10)
 
 
@@ -1088,6 +1445,12 @@ def mark_superseded(s: "Session", node: str, from_node: str, generation: int) ->
     reason = f"rerun from {from_node} (generation {generation}) invalidated this artifact"
     for name in s.artifacts(node, static=True):
         path = s.ticket.dir / name
+        if name in DATA_ARTIFACTS and path.is_file() and not path.is_symlink():
+            aside = s.ticket.dir / "superseded" / f"{path.stem}.g{generation - 1}{path.suffix}"
+            aside.parent.mkdir(parents=True, exist_ok=True)
+            path.replace(aside)  # data cannot carry a SUPERSEDED line: the rerun writes it again
+            marked.append(name)
+            continue
         if not name.endswith(".md") or path.is_symlink() or not path.is_file():
             continue
         text = path.read_text(encoding="utf-8")
@@ -1115,8 +1478,81 @@ def superseded_preview(s: "Session", node: str) -> list[str]:
     return [n for n in stale_preview(s, node) if not _never_ran(s.state["nodes"][n])]
 
 
-def _invalidate(s: Session, node: str, reason: str) -> list[str]:
+def reopens(s: "Session", node: str) -> int:
+    """How often `node` itself was reopened in this round (a review loop-back or a manual invalidate). Never reset by
+    later invalidations, so manual reopens count toward the loop cap (D5); a new PR review round starts again at 0."""
+    return int((s.state["nodes"].get(node) or {}).get("reopens", 0))
+
+
+def loop_rounds(s: "Session", target: str, attempts: int = 0) -> int:
+    """The round a new reopen of `target` would start: the larger of the reviewer's own count and target's reopens."""
+    return max(attempts, reopens(s, target)) + 1
+
+
+# D4: a fix that touches only tests (or only docs) reopens the source node without the nodes that review source:
+# tests-only keeps code-review; docs-only keeps code-review and the evidence run. The reopened node's gate then checks
+# that nothing else changed since the reopen (small_path_problems).
+SMALL_SKIP = {"tests": ("code-review",), "docs": ("code-review", "execute-and-evidence")}
+SMALL_FILES = {
+    "tests": None,  # judge.TEST_PATH_RE (set below: one definition of a test file)
+    "docs": re.compile(r"(\.(md|mdx|rst|txt|adoc)$|(^|/)docs?/)", re.I),
+}
+
+
+def _small_pattern(kind: str) -> "re.Pattern[str]":
+    from .judge import TEST_PATH_RE
+    return TEST_PATH_RE if kind == "tests" else SMALL_FILES[kind]
+
+
+def change_digests(s: "Session") -> dict[str, dict[str, str]]:
+    """Per repository: every path git reports as changed (tracked or untracked) -> digest of its current content."""
+    from .state import _git, _excluded
+    out: dict[str, dict[str, str]] = {}
+    for r in s.ctx["repositories"]:
+        root = Path(r.get("worktree") or r["path"])
+        prefixes = []
+        for e in s.excludes:
+            try:
+                prefixes.append(Path(e).resolve().relative_to(root.resolve()).as_posix())
+            except ValueError:
+                pass
+        rows: dict[str, str] = {}
+        for line in _git(str(root), "status", "--porcelain", "--untracked-files=all").splitlines():
+            rel = line[3:].strip().strip('"').split(" -> ")[-1]
+            if not rel or _excluded(rel, prefixes):
+                continue
+            f = root / rel
+            rows[rel] = sha256_file(f) if f.is_file() else "deleted"
+        out[r["id"]] = rows
+    return out
+
+
+def small_path_problems(s: "Session", node: str) -> list[str]:
+    rec = s.state["nodes"][node]
+    sp = rec.get("smallPath")
+    if not sp or sp.get("generation") != rec["generation"]:
+        return []
+    now_d, base = change_digests(s), sp.get("baseline") or {}
+    pattern = _small_pattern(sp["kind"])
+    wrong = []
+    for repo, files in now_d.items():
+        before = base.get(repo) or {}
+        for path in sorted(set(files) | set(before)):
+            if files.get(path) != before.get(path) and not pattern.search(path):
+                wrong.append(f"{repo}:{path}")
+    if wrong:
+        return [f"{node} was reopened on the {sp['kind']}-only small path, but non-{sp['kind']} files changed: "
+                f"{wrong[:15]}. Revert them, or reopen fully: `sdlc invalidate --node {node} --reason ...` "
+                "(code review then runs again)"]
+    return []
+
+
+def _invalidate(s: Session, node: str, reason: str, actor: str = "controller", small: str | None = None) -> list[str]:
     stale = stale_preview(s, node)
+    if small:
+        stale = [n for n in stale if n == node or n not in SMALL_SKIP[small]]
+        s.state["nodes"][node]["smallPath"] = {"kind": small, "generation": s.state["nodes"][node]["generation"] + 1,
+                                              "baseline": change_digests(s)}
     for n in stale:
         rec = s.state["nodes"][n]
         if _never_ran(rec):
@@ -1124,12 +1560,15 @@ def _invalidate(s: Session, node: str, reason: str) -> list[str]:
         rec["status"] = "stale"
         rec["generation"] += 1
         rec["verdict"] = None
-        if n != stale[0]:
+        if n == stale[0]:
+            rec["reopens"] = rec.get("reopens", 0) + 1
+        else:
             rec["attempts"] = 0
         mark_superseded(s, n, node, rec["generation"])
     if any(s.spec(n).get("issuesReceipts") for n in stale):
         s.state["receipts"] = {}
-    s.ticket.log({"event": "invalidate", "node": node, "stale": stale, "reason": reason})
+    s.ticket.log({"event": "invalidate", "node": node, "stale": stale, "reason": reason, "actor": actor,
+                  **({"small": small} if small else {})})
     return stale
 
 
@@ -1137,10 +1576,194 @@ def cmd_invalidate(args: argparse.Namespace) -> None:
     s = Session(args)
     if not args.reason:
         raise HarnessError("--reason is required: name what is wrong in the earlier artifact")
-    stale = _invalidate(s, args.node, args.reason)
+    if args.node not in s.state["nodes"]:
+        raise HarnessError(f"unknown node {args.node}")
+    cap = s.profile.get("gates", {}).get("loopCap", 2)
+    rounds = loop_rounds(s, args.node)
+    if rounds >= cap and args.actor != "user" and not _never_ran(s.state["nodes"][args.node]):
+        raise HarnessError(f"G4: reopening {args.node} would be round {rounds} (loop cap {cap}, counting manual "
+                           "reopens); ask the user, then repeat with --actor user")
+    if args.small and args.node != "coding":
+        raise HarnessError("--small is for reopening coding with a tests-only or docs-only fix")
+    stale = _invalidate(s, args.node, args.reason, args.actor, args.small)
     kept = [n for n in s.order if n not in stale]
     s.save()
     out({"stale": stale, "kept": kept, "nextPending": next_pending(s.state, s.order)})
+
+
+def cmd_env(args: argparse.Namespace) -> int:
+    """`sdlc env check|up|status|down|exec` (harness/env.py): the harness-owned evidence environment."""
+    from . import env as E
+    s = Session(args)
+    if args.action == "exec":
+        argv = list(args.argv or [])
+        if argv and argv[0] == "--":
+            argv = argv[1:]
+        return E.exec_in(s, argv, args.repo)
+    if args.action == "check":
+        res = E.check(s, args.repo)
+    elif args.action == "up":
+        res = E.up(s, args.repo, args.timeout)
+    elif args.action == "status":
+        res = E.status(s)
+    else:
+        res = E.down(s, args.drop_db)
+    out(res)
+    return 0 if res.get("ok") else 1
+
+
+def cmd_evidence(args: argparse.Namespace) -> int:
+    """`sdlc evidence run|status` (harness/evidence.py): the driver runs the cases, smoke first, by failure class."""
+    from . import evidence as EV
+    s = Session(args)
+    if args.action == "status":
+        run = EV.load_run(s.ticket.dir)
+        res = {"ok": True, "ticket": s.ctx["ticket"], "summary": EV.summary(run.get("cases") or {}),
+               "stopped": run.get("stopped"), "escalations": run.get("escalations") or [], "cases": run.get("cases") or {}}
+        out(res)
+        return 0
+    if args.action == "helper":
+        return _evidence_helper(s, args)
+    from . import steps as ST
+    tc = EV.load_testcases(s.ticket.dir)
+    if args.cases:
+        cases = EV.load_cases(Path(args.cases))
+    elif tc is not None:
+        cases = EV.cases_from_testcases(s.ticket.dir, tc, ST.load_kit(ST.kit_path(s)))
+    else:
+        raise HarnessError("no testcases.json in the ticket and no --cases <file>")
+    if cases:
+        res = EV.execute(s.ticket.dir, cases, EV.env_runner(s, args.repo), rerun=args.rerun, deadline=EV.deadline_of(s))
+    else:  # every case manual or out of scope: evidence.json records that
+        res = {"ok": True, "stopped": None, "escalations": [], "summary": {}, "file": None}
+    if tc is not None:
+        data = EV.build_evidence(s.ticket.dir, s.ctx["ticket"], tc)
+        res["checks"] = EV.evidence_summary(data)
+        res["evidenceFile"] = str(s.ticket.dir / "evidence.json")
+    out({"ticket": s.ctx["ticket"], **res})
+    return 0 if res["ok"] else 1
+
+
+def _evidence_helper(s: "Session", args: argparse.Namespace) -> int:
+    """`sdlc evidence helper --repo R`: copy the stack's evidence() helper into the repository's checkout (C3), once."""
+    import shutil
+    repo = next((r for r in s.ctx["repositories"] if r["id"] == args.repo), None) if args.repo else s.ctx["repositories"][0]
+    if repo is None:
+        raise HarnessError(f"unknown repo {args.repo}")
+    stack = resolve_adapters(HOME, s.pdir, s.profile, s.ctx)["stacks"][repo["id"]]
+    helper = stack.get("evidenceHelper")
+    if not helper:
+        raise HarnessError(f"G7: stack {stack.get('id')} has no evidenceHelper (adapters/stack/*.json)")
+    dest = Path(repo.get("worktree") or repo["path"]) / (args.dest or helper["dest"])
+    src = HOME / helper["source"]
+    same = dest.is_file() and dest.read_bytes() == src.read_bytes()
+    if not same:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(src, dest)
+    out({"ok": True, "repo": repo["id"], "path": str(dest), "written": not same, "import": helper.get("import"),
+         "call": helper.get("call")})
+    return 0
+
+
+def cmd_judge_facts(args: argparse.Namespace) -> None:
+    """`sdlc judge-facts`: the driver's determinable facts per check (J2), for the evidence judges to start from."""
+    from . import judge as J
+    out(J.write_facts(Session(args)))
+
+
+def cmd_mutate(args: argparse.Namespace) -> int:
+    """`sdlc mutate`: break each critical check's guarded line, run its tests, restore the file (J3)."""
+    from . import judge as J
+    res = J.mutate(Session(args), args.check)
+    out(res)
+    return 0 if res["ok"] else 1
+
+
+def cmd_judge_miss(args: argparse.Namespace) -> None:
+    """`sdlc judge-miss`: a later stage overturned a judge's verdict (J5 calibration)."""
+    from . import judge as J
+    s = Session(args)
+    if not (args.reason or "").strip():
+        raise HarnessError("--reason is required: what overturned the verdict, with a citation")
+    res = J.record_miss(s, args.check, args.reason.strip(), args.actor)
+    s.ticket.log({"event": "judge-miss", "check": args.check, "reason": args.reason.strip(), "actor": args.actor})
+    out({"ok": True, **res})
+
+
+def cmd_handoff(args: argparse.Namespace) -> None:
+    """`sdlc handoff`: HANDOFF.md, the page a fresh controller session starts from (D9)."""
+    from . import handoff as HO
+    out(HO.write(Session(args)))
+
+
+def closed_edits(s: "Session") -> list[str]:
+    """Closed nodes are immutable for the controller: an artifact changed after its node's gate closed (feature-flags:
+    an AI trailer appended to drafts/commit-msg.md after delivery-drafts closed) must go through a reopen."""
+    out = []
+    for n in s.order:
+        rec = s.state["nodes"].get(n) or {}
+        if rec.get("status") != "done":
+            continue
+        for name, digest in (rec.get("artifactDigests") or {}).items():
+            path = s.ticket.dir / name
+            now_d = sha256_file(path) if path.is_file() else "missing"
+            if now_d != digest:
+                out.append(f"{n}/{name}")
+    if out:
+        return [f"artifacts of closed nodes changed after their gate: {out}. Reopen the node that owns each "
+                "(`sdlc invalidate --node <node> --reason ...`) instead of editing it"]
+    return []
+
+
+def cmd_report(args: argparse.Namespace) -> None:
+    """`sdlc report`: the read-only tester notebook from testcases.json + evidence.json (harness/report.py)."""
+    from . import report as RP
+    s = Session(args)
+    out(RP.write(s, Path(args.out) if args.out else None))
+
+
+def cmd_baseline(args: argparse.Namespace) -> int:
+    """`sdlc baseline` (B3): install + lint / unit tests / build on each checkout, recorded in baseline.json."""
+    from . import env as E
+    s = Session(args)
+    stacks = resolve_adapters(HOME, s.pdir, s.profile, s.ctx)["stacks"]
+    res = E.baseline(s, stacks, args.timeout)
+    out({"ok": res["ok"], "ticket": res["ticket"], "summary": res["summary"], "file": str(s.ticket.dir / E.BASELINE_FILE),
+         "blocked": {r["repo"]: r["blocked"] for r in res["repos"] if r.get("blocked")}})
+    return 0 if res["ok"] else 1
+
+
+def cmd_ask(args: argparse.Namespace) -> None:
+    """`sdlc ask`: add one question for the user to the ticket's batch (D7, harness/questions.py)."""
+    from . import questions as Q
+    s = Session(args)
+    if args.node not in s.state["nodes"]:
+        raise HarnessError(f"unknown node {args.node}")
+    row = Q.add(s.ticket.dir, s.ctx["ticket"], s.state, node=args.node, cls=args.cls, severity=args.severity,
+                question=args.question, recommendation=args.recommend, why=args.why, options=args.option)
+    if not row.get("duplicate"):
+        s.ticket.log({"event": "question", "id": row["id"], "node": args.node, "class": row["class"],
+                      "severity": row["severity"], "late": row["late"]})
+    res = {"ok": True, **row}
+    if row.get("late"):
+        res["warning"] = ("asked after the plan was approved: decide it from the requirements with citations unless it "
+                          "really changes scope; it is reported to reflect as a late question")
+    out(res)
+
+
+def cmd_questions(args: argparse.Namespace) -> None:
+    """`sdlc questions`: the open questions as one batch (read-only)."""
+    from . import questions as Q
+    s = Session(args)
+    out({"ok": True, "ticket": s.ctx["ticket"], **Q.batch(s.ticket.dir)})
+
+
+def cmd_answer(args: argparse.Namespace) -> None:
+    from . import questions as Q
+    s = Session(args)
+    q = Q.answer(s.ticket.dir, s.ctx["ticket"], args.id, text=args.answer, actor=args.actor, adopt=args.adopt)
+    s.ticket.log({"event": "answer", "id": q["id"], "status": q["status"], "actor": q["by"], "severity": q["severity"]})
+    out({"ok": True, **q, "openHigh": Q.open_high(s.ticket.dir)})
 
 
 def cmd_worktree(args: argparse.Namespace) -> None:
@@ -1205,6 +1828,8 @@ def do_handback(s: "Session", src: Path) -> dict[str, Any]:
     s.ctx["reviewRound"] += 1
     s.ctx["maturity"] = "pr_opened"
     rnd = s.ctx["reviewRound"]
+    for rec in s.state["nodes"].values():
+        rec["reopens"] = 0  # a PR review round has its own loop cap
     dest = s.ticket.dir / "reviews" / f"round-{rnd}{src.suffix or '.md'}"
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_bytes(src.read_bytes())
@@ -1391,6 +2016,8 @@ def cmd_host(args: argparse.Namespace) -> None:
         tier = next((u["tier"] for u in spec.get("units", []) if u["id"] == unit_id), None)
         if tier is None and unit_id == "reviewer" and spec.get("reviewer"):
             tier = spec["reviewer"]["tier"]
+        if tier is None and unit_id == "reviewer-2" and (spec.get("reviewer") or {}).get("second"):
+            tier = spec["reviewer"]["second"]["tier"]
         if tier is None:
             tier = "routine"
         fake_unit = {"id": unit_id, "tier": tier}
@@ -1603,7 +2230,11 @@ def cmd_schedule(args: argparse.Namespace) -> int | None:
 
 
 def cmd_digest(args: argparse.Namespace) -> None:
-    path = Path(args.path)
+    if args.file and args.path_opt and Path(args.file) != Path(args.path_opt):
+        raise HarnessError(f"two different files: {args.file} and --path {args.path_opt}")
+    if not (args.file or args.path_opt):
+        raise HarnessError("name the file: sdlc digest <path> [--expect <sha256>]")
+    path = Path(args.file or args.path_opt)
     if not path.is_file():
         raise HarnessError(f"not a file: {path}")
     d = sha256_file(path)
@@ -1640,7 +2271,8 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--surface", action="append", help="extra surface beyond the repositories' defaults")
     x.add_argument("--force", action="store_true")
     x.add_argument("--lang", action="append", help="explicit per-ticket language, e.g. delivery=ja (only when the user asked)")
-    x.add_argument("--lane", default="full", help="full (every node, worktree) or lite (small change: scope, change in place, quick review, drafts)")
+    x.add_argument("--lane", default="full", help="standard (typical feature or bug: one plan unit, judges, drafts by the controller), "
+                   "full (every node: requirement and impact analysis too) or lite (small change in place)")
     x.set_defaults(fn=cmd_init)
 
     x = sub.add_parser("lane", parents=[ticketed], help="show the ticket's lane, or move it (lite -> full) with --set and --reason")
@@ -1684,13 +2316,22 @@ def build_parser() -> argparse.ArgumentParser:
     x = sub.add_parser("record", parents=[ticketed], help="record one unit result (worker or reviewer)")
     x.add_argument("--node", required=True)
     x.add_argument("--unit", required=True)
-    x.add_argument("--result", required=True)
+    x.add_argument("--result", help="the unit's result file (required unless --status abandoned)")
     x.add_argument("--model", required=True)
-    x.add_argument("--status", default="ok", choices=["ok", "blocked", "partial"])
-    x.add_argument("--tokens", type=int)
+    x.add_argument("--status", default="ok", choices=["ok", "blocked", "partial", "abandoned"],
+                   help="abandoned: a dispatch given up without a usable result (needs --reason); its tokens are recorded")
+    x.add_argument("--reason", help="why the dispatch was abandoned")
+    x.add_argument("--tokens", type=int, help="the agent's own last-turn context size (kept as contextAtEnd); the driver "
+                                              "measures what the unit consumed from its log")
     x.add_argument("--verdict", choices=["PASS", "FAIL", "APPROVED", "NEEDS CHANGES"])
     x.add_argument("--failure-class", choices=["record", "artifact"])
     x.set_defaults(fn=cmd_record)
+
+    x = sub.add_parser("check", parents=[ticketed],
+                       help="the gate's content checks of a node as a read-only dry run (run it before handing back)")
+    x.add_argument("--node", required=True)
+    x.add_argument("--unit", help="also check this unit's result file of its open round")
+    x.set_defaults(fn=cmd_check)
 
     x = sub.add_parser("gate", parents=[ticketed], help="close (or loop back) a node")
     x.add_argument("--node", required=True)
@@ -1704,7 +2345,80 @@ def build_parser() -> argparse.ArgumentParser:
     x = sub.add_parser("invalidate", parents=[ticketed], help="stale a node and only the later nodes consuming its output")
     x.add_argument("--node", required=True)
     x.add_argument("--reason", required=True)
+    x.add_argument("--actor", default="controller", choices=["controller", "user"],
+                   help="user: a person decided the reopen (needed past the loop cap, G4)")
+    x.add_argument("--small", choices=["tests", "docs"],
+                   help="D4: a tests-only or docs-only fix of coding: code review (and, for docs, the evidence run) "
+                        "is kept; the coding gate refuses any other file change")
     x.set_defaults(fn=cmd_invalidate)
+
+    x = sub.add_parser("env", parents=[ticketed], help="the harness-owned evidence environment: check (preflight), "
+                                                        "up, status, down, exec -- <cmd>")
+    x.add_argument("action", choices=["check", "up", "status", "down", "exec"])
+    x.add_argument("--repo", help="the repository whose worktree runs the app (default: environment.evidence.repo)")
+    x.add_argument("--timeout", type=int, default=900, help="seconds per migrate / seed command")
+    x.add_argument("--drop-db", action="store_true", help="down: also drop the ticket's database")
+    x.add_argument("argv", nargs="*", help="exec: the command to run with the env loaded, after `--`")
+    x.set_defaults(fn=cmd_env)
+
+    x = sub.add_parser("evidence", parents=[ticketed], help="run evidence cases (smoke first, resumable, failure "
+                                                             "classes, breaker) or show the last run")
+    x.add_argument("action", choices=["run", "status", "helper"])
+    x.add_argument("--cases", help="run: JSON file {\"cases\": [{\"id\", \"surface\", \"command\", \"smoke\"?}]} "
+                                   "(default: the ticket's testcases.json)")
+    x.add_argument("--dest", help="helper: where to write it in the checkout (default: the stack adapter's)")
+    x.add_argument("--rerun", nargs="*", default=[], help="case ids to run again (after a step fix)")
+    x.add_argument("--repo", help="the repository whose worktree runs the cases (default: environment.evidence.repo)")
+    x.set_defaults(fn=cmd_evidence)
+
+    x = sub.add_parser("judge-facts", parents=[ticketed], help="the driver's determinable facts per check for the "
+                                                                "evidence judges (evidence/judge-facts.json)")
+    x.set_defaults(fn=cmd_judge_facts)
+
+    x = sub.add_parser("mutate", parents=[ticketed], help="mutation proof: break each critical check's guarded line "
+                                                           "(mutations.json), run its tests, restore the file")
+    x.add_argument("--check", help="only this check id")
+    x.set_defaults(fn=cmd_mutate)
+
+    x = sub.add_parser("judge-miss", parents=[ticketed], help="record that a later stage overturned a judge's verdict")
+    x.add_argument("--check", required=True)
+    x.add_argument("--reason", required=True)
+    x.add_argument("--actor", default="controller", choices=["controller", "user"])
+    x.set_defaults(fn=cmd_judge_miss)
+
+    x = sub.add_parser("handoff", parents=[ticketed], help="HANDOFF.md: the page a fresh controller session starts from")
+    x.set_defaults(fn=cmd_handoff)
+
+    x = sub.add_parser("report", parents=[ticketed], help="the read-only tester notebook (tester-notebook.html) from "
+                                                           "testcases.json and evidence.json")
+    x.add_argument("--out", help="write the page here (default: <ticket>/tester-notebook.html)")
+    x.set_defaults(fn=cmd_report)
+
+    x = sub.add_parser("baseline", parents=[ticketed], help="install, then lint / unit tests / build on each checkout "
+                                                             "as the ticket found it (baseline.json)")
+    x.add_argument("--timeout", type=int, help="seconds per command (default environment.baseline.timeoutSeconds or 900)")
+    x.set_defaults(fn=cmd_baseline)
+
+    x = sub.add_parser("ask", parents=[ticketed], help="add a question for the user to the ticket's one batch (D7)")
+    x.add_argument("--node", required=True, help="the node that needs the answer")
+    x.add_argument("--class", dest="cls", required=True, choices=["business", "infra", "critical-logic", "judgeable"],
+                   help="judgeable is refused: a judge decides those with citations")
+    x.add_argument("--severity", required=True, choices=["HIGH", "LOW"])
+    x.add_argument("--question", required=True)
+    x.add_argument("--recommend", required=True, help="the recommended answer (asked first)")
+    x.add_argument("--why", help="what changes with the answer")
+    x.add_argument("--option", action="append", help="another option (repeatable)")
+    x.set_defaults(fn=cmd_ask)
+
+    x = sub.add_parser("questions", parents=[ticketed], help="the open questions as one batch for the user (read-only)")
+    x.set_defaults(fn=cmd_questions)
+
+    x = sub.add_parser("answer", parents=[ticketed], help="record the user's answer to a question (or adopt a LOW one)")
+    x.add_argument("--id", required=True)
+    x.add_argument("--answer")
+    x.add_argument("--adopt", action="store_true", help="take the recommendation (LOW: controller; HIGH: --actor user)")
+    x.add_argument("--actor", default="controller", choices=["controller", "user"])
+    x.set_defaults(fn=cmd_answer)
 
     x = sub.add_parser("worktree", parents=[ticketed], help="bind a repository to the ticket worktree (installs the git-safety hooks)")
     x.add_argument("--repo", required=True)
@@ -1894,9 +2608,10 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--dry-run", action="store_true")
     x.set_defaults(fn=cmd_zed_setup)
 
-    x = sub.add_parser("digest", help="sha256 of a file (never prints content)")
-    x.add_argument("--path", required=True)
-    x.add_argument("--expect")
+    x = sub.add_parser("digest", parents=[common], help="sha256 of a file (never prints content): sdlc digest <path>")
+    x.add_argument("file", nargs="?", help="the file (or --path)")
+    x.add_argument("--path", dest="path_opt", help="the file (same as the positional argument)")
+    x.add_argument("--expect", help="fail unless the sha256 is this one")
     x.set_defaults(fn=cmd_digest)
 
     x = sub.add_parser("run", parents=[ticketed],
@@ -1955,9 +2670,10 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
-READ_ONLY = {"status", "plan", "validate", "digest", "host", "onboard-scan", "onboard-verify", "onboard-write", "install",
+READ_ONLY = {"status", "plan", "check", "validate", "digest", "host", "onboard-scan", "onboard-verify", "onboard-write", "install",
              "tickets", "status-of", "web", "zed-setup", "contract", "ticket-detail", "gate-request",
-             "transcripts", "cost", "budget", "reflect-signals",
+             "transcripts", "cost", "budget", "reflect-signals", "questions",
+             "env", "baseline", "evidence", "report", "judge-facts", "mutate",  # own files only (env.json, baseline.json); no lock while a server starts or tests run
              "learn",  # the workspace learning store has its own lock; apply/reject refresh STATUS.md themselves
              "decide"}  # decide takes the lock only for the gate it runs (through main), never while it waits for you
 NO_STATUS_REFRESH = READ_ONLY | {"git"}
@@ -1982,6 +2698,48 @@ def _ticket_lock(args: argparse.Namespace):
     return Ticket(ticket_root(prof, profile_path(args).parent), args.ticket).lock(args.cmd)
 
 
+GLOBAL_OPTIONS = ("--profile", "--host")
+
+
+def _subcommands(parser: argparse.ArgumentParser) -> dict[str, argparse.ArgumentParser]:
+    for action in parser._actions:  # noqa: SLF001 — argparse keeps subparsers only here
+        if isinstance(action, argparse._SubParsersAction):  # noqa: SLF001
+            return dict(action.choices)
+    return {}
+
+
+def hoist_global_options(parser: argparse.ArgumentParser, argv: list[str]) -> list[str]:
+    """`sdlc --profile P [--host H] <cmd> [<sub>] ...` → `sdlc <cmd> [<sub>] --profile P [--host H] ...`.
+
+    Launchers and packets put the profile before the command (`<launcher> --profile P git ...`), but argparse only
+    knows these options on each subcommand. Leading global options move behind the (sub)command; a command that does
+    not take one (contract, install ...) simply does not get it."""
+    lead: list[list[str]] = []
+    i = 0
+    while i < len(argv) and argv[i].split("=", 1)[0] in GLOBAL_OPTIONS:
+        if "=" in argv[i]:
+            lead.append([argv[i]])
+            i += 1
+        elif i + 1 < len(argv):
+            lead.append(argv[i:i + 2])
+            i += 2
+        else:
+            break
+    if not lead or i >= len(argv):
+        return argv
+    head, rest = [argv[i]], argv[i + 1:]
+    target = _subcommands(parser).get(argv[i])
+    if target is None:
+        return argv  # let argparse name the unknown command
+    nested = _subcommands(target)
+    if nested and rest and rest[0] in nested:  # sdlc learn list ...
+        head.append(rest[0])
+        target, rest = nested[rest[0]], rest[1:]
+    takes = target._option_string_actions  # noqa: SLF001
+    moved = [tok for pair in lead if pair[0].split("=", 1)[0] in takes for tok in pair]
+    return head + moved + rest
+
+
 def main(argv: list[str] | None = None) -> int:
     # one JSON line in UTF-8 whatever the console code page (Windows defaults to cp1252 on a pipe)
     if hasattr(sys.stdout, "reconfigure") and (sys.stdout.encoding or "").lower().replace("-", "") != "utf8":
@@ -1989,7 +2747,8 @@ def main(argv: list[str] | None = None) -> int:
             sys.stdout.reconfigure(encoding="utf-8")
         except (ValueError, OSError):
             pass
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(hoist_global_options(parser, sys.argv[1:] if argv is None else list(argv)))
     try:
         with _ticket_lock(args):
             rc = args.fn(args)

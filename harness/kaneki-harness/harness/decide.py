@@ -126,6 +126,8 @@ def options(req: dict[str, Any]) -> tuple[list[Option], list[str]]:
         label = f"Reopen {t['node']} (rejects this round)"
         if reopen["allowed"]:
             follow = [[t["node"] if a == "<node>" else a for a in step] for step in reopen.get("followUp") or []]
+            # a person picked this reopen: it counts as theirs (needed past the loop cap, G4)
+            follow = [step + ["--actor", "user"] if step and step[0] == "invalidate" else step for step in follow]
             offered.append(Option(label, [reopen["argv"], *follow], t.get("staleNodes"), note="required"))
         else:
             refused.append(f"{label}: {reopen['whyNot']}")

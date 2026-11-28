@@ -96,12 +96,63 @@ class Base(unittest.TestCase):
                 lines.append(f"Verdict: {verdict}")
             if "reopen" in parsers:
                 lines.append(f"Reopen: {reopen or 'none'}")
+            if "testcases" in parsers:  # testcases.json (C1): one criterion, one critical repo-test case
+                lines = [json.dumps({"schemaVersion": 1, "ticket": ticket,
+                                     "criteria": [{"id": "AC-1", "text": "the change works"}],
+                                     "cases": [{"id": "TC-1", "title": "the change", "surface": "cli", "risk": "critical",
+                                                "criteria": ["AC-1"], "checks": [{"id": "TC-1.a1", "expect": "exit 0"}],
+                                                "inScope": True, "reason": None,
+                                                "run": {"kind": "repo-test", "command": "python -c 0"}}]})]
+            if "evidence" in parsers:  # evidence.json (C1): every check of testcases.json observed
+                tcs = json.loads((self.tdir(ticket) / "testcases.json").read_text(encoding="utf-8"))
+                lines = [json.dumps({"schemaVersion": 1, "ticket": ticket, "at": "2026-11-27T00:00:00+00:00",
+                                     "checks": {k["id"]: {"case": c["id"], "status": "PASS", "observed": 0}
+                                                for c in tcs["cases"] for k in c["checks"]}})]
             if "proposals" in parsers:  # reflect: a valid, empty proposals file
                 lines = [json.dumps({"schemaVersion": 1, "ticket": ticket, "proposals": []})]
+            if art == "baseline.json":  # written by `sdlc baseline` (B3)
+                lines = [json.dumps({"ticket": ticket, "ok": True, "repos": [], "summary": {}})]
+            if art == "drafts/commit-msg.md":  # drafts follow the ship rules (B5: the delivery-drafts gate checks them)
+                lines = ["fix(app): correct the edge case", "", f"Work for {ticket}."]
+            if art == "drafts/pr-body.md":
+                lines = ["## Summary", "x", "## Detailed changes", "x", "## Explanation", "x",
+                         "## Test results (local)", "- unit: pass", "- lint: pass"]
+            if node in ("final-review", "check") and art.endswith(".md"):  # a receipt review names every new file (B5)
+                status = subprocess.run(["git", "-C", str(self.repo), "status", "--porcelain", "--untracked-files=all"],
+                                        capture_output=True, text=True).stdout.splitlines()
+                lines += ["", "Files in the change:"] + [f"- {ln[3:]}" for ln in status if ln.startswith("??")]
             path = self.tdir(ticket) / art
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        if node == "execute-and-evidence" and verdict == "APPROVED":
+            self.write_judgements(ticket)
         return plan
+
+    def write_judgements(self, ticket: str) -> None:
+        """What the evidence run and the two judges leave (J1-J5): run.json, a mutation exemption, two judgements
+        citing testcases.json / evidence.json verbatim, a reason for every changed file no case observes."""
+        tdir = self.tdir(ticket)
+        tcs = json.loads((tdir / "testcases.json").read_text(encoding="utf-8"))
+        (tdir / "evidence").mkdir(exist_ok=True)
+        (tdir / "evidence" / "run.json").write_text(json.dumps(
+            {"cases": {c["id"]: {"status": "PASS", "log": ""} for c in tcs["cases"]}}), encoding="utf-8")
+        ev = json.loads((tdir / "evidence.json").read_text(encoding="utf-8"))
+        for row in ev["checks"].values():
+            row["source"] = {"kind": "test", "ref": "testcases.json:1"}
+        (tdir / "evidence.json").write_text(json.dumps(ev), encoding="utf-8")
+        (tdir / "mutations.json").write_text(json.dumps(
+            {k["id"]: {"none": "test fixture"} for c in tcs["cases"] for k in c["checks"]}), encoding="utf-8")
+        code, fx = run("judge-facts", "--ticket", ticket, *self.p)
+        self.assertEqual(code, 0, fx)
+        verdict = {"verdict": "PASS", "confidence": "High", "class": "judgeable", "reason": "observed as required",
+                   "requirement": {"ref": "testcases.json:1", "quote": tcs["criteria"][0]["text"]},
+                   "evidence": {"ref": "evidence.json:1", "quote": '"status": "PASS"'}}
+        checks = [k["id"] for c in tcs["cases"] for k in c["checks"]]
+        for judge, name in (("a", "evidence-judgement.json"), ("b", "evidence-judgement-2.json")):
+            (tdir / name).write_text(json.dumps({
+                "schemaVersion": 1, "ticket": ticket, "judge": judge, "verdicts": {c: verdict for c in checks},
+                **({"uncoveredFiles": {f: "fixture change outside the cases" for f in fx["uncoveredFiles"]}}
+                   if judge == "a" else {})}), encoding="utf-8")
 
     def complete(self, ticket: str, node: str, *, actor: str = "controller", extra: tuple[str, ...] = ()) -> dict:
         """Simulate the controller: write artifacts, record every planned unit, close the node."""
@@ -127,8 +178,9 @@ class TraceTests(Base):
         graph = G.load_graph(HOME, profile, self.tmp)
         bug = G.trace(graph, build_context(profile, "T", "bug", None, None, None))
         feat = G.trace(graph, build_context(profile, "T", "feature", None, None, None))
-        self.assertEqual(bug[:4], ["prepare", "investigate", "fix-plan", "coding"])
-        self.assertEqual(feat[:5], ["prepare", "requirement-analysis", "impact-analysis", "feature-plan", "coding"])
+        self.assertEqual(bug[:6], ["prepare", "investigate", "fix-plan", "testcase", "testcase-review", "coding"])
+        self.assertEqual(feat[:7], ["prepare", "requirement-analysis", "impact-analysis", "feature-plan", "testcase",
+                                    "testcase-review", "coding"])
         self.assertNotIn("read-review", bug)  # after-PR nodes appear only on handback
 
     def test_invalidate_coding_keeps_testcases(self) -> None:
@@ -176,6 +228,8 @@ class DriverTests(Base):
         code, res = run("plan", "--ticket", t, "--node", "fix-plan", *self.p)
         self.assertEqual(res["boundary"], "user")
         self.complete(t, "fix-plan", actor="user")
+        for node in ("testcase", "testcase-review"):  # D1: test cases before coding
+            self.complete(t, node)
 
         (self.repo / "main.py").write_text("print('v2')\n")  # the "fix"
         self.complete(t, "coding")
@@ -188,7 +242,7 @@ class DriverTests(Base):
         self.assertEqual(res["nextPending"], "coding")
         self.complete(t, "coding")
         self.complete(t, "code-review")
-        for node in ("testcase", "testcase-review", "execute-and-evidence"):
+        for node in ("execute-and-evidence",):
             self.complete(t, node)
         res = self.complete(t, "final-review")
         self.assertIn("app", res["receipts"])
@@ -228,7 +282,7 @@ class DriverTests(Base):
         for node in ("prepare", "investigate"):
             self.complete(t, node)
         self.complete(t, "fix-plan", actor="user")
-        for node in ("coding", "code-review", "testcase", "testcase-review", "execute-and-evidence", "final-review", "delivery-drafts"):
+        for node in ("testcase", "testcase-review", "coding", "code-review", "execute-and-evidence", "final-review", "delivery-drafts"):
             self.complete(t, node)
         (self.repo / "main.py").write_text("print('sneaky')\n")
         code, res = run("gate", "--ticket", t, "--node", "deliverable-ready", "--status", "approved", "--actor", "user", *self.p)
@@ -252,6 +306,8 @@ class DriverTests(Base):
         for node in ("prepare", "investigate"):
             self.complete(t, node)
         self.complete(t, "fix-plan", actor="user")
+        for node in ("testcase", "testcase-review"):  # D1: test cases before coding
+            self.complete(t, node)
         self.complete(t, "coding")
         self.write_artifacts(t, "code-review", verdict="NEEDS CHANGES")
         code, _ = run("gate", "--ticket", t, "--node", "code-review", "--status", "needs-changes", *self.p)
@@ -261,6 +317,52 @@ class DriverTests(Base):
         code, res = run("gate", "--ticket", t, "--node", "code-review", "--status", "needs-changes", *self.p)
         self.assertEqual(code, 2)
         self.assertIn("G4", res["error"])
+
+    def test_final_review_names_every_untracked_file(self) -> None:
+        """B5: a file a tool generated in the worktree is caught at final-review, not after the receipts."""
+        t = "BUG-6"
+        run("init", "--ticket", t, "--kind", "bug", *self.p)
+        for node in ("prepare", "investigate"):
+            self.complete(t, node)
+        self.complete(t, "fix-plan", actor="user")
+        for node in ("testcase", "testcase-review", "coding", "code-review", "execute-and-evidence"):
+            self.complete(t, node)
+        self.write_artifacts(t, "final-review")  # the review lists the change's files ...
+        (self.repo / "AGENTS.md").write_text("generated by a dev server\n")  # ... then a tool writes one more
+        code, res = run("check", "--ticket", t, "--node", "final-review", *self.p)
+        self.assertEqual(code, 1, res)
+        self.assertTrue(any("untracked files ship with the change" in p and "AGENTS.md" in p for p in res["problems"]),
+                        res["problems"])
+        (self.repo / "AGENTS.md").unlink()
+        self.complete(t, "final-review")
+
+    def test_loop_cap_counts_manual_reopens(self) -> None:
+        """D5, the feature-flags pattern: coding reopened by hand between review loop-backs. Manual reopens count, and
+        reopening a node does not reset the count of the review that loops back to it."""
+        t = "BUG-5"
+        run("init", "--ticket", t, "--kind", "bug", *self.p)
+        for node in ("prepare", "investigate"):
+            self.complete(t, node)
+        self.complete(t, "fix-plan", actor="user")
+        for node in ("testcase", "testcase-review"):  # D1: test cases before coding
+            self.complete(t, node)
+        self.complete(t, "coding")
+        self.complete(t, "code-review")
+        code, res = run("invalidate", "--ticket", t, "--node", "coding", "--reason", "fix docs", *self.p)
+        self.assertEqual(code, 0, res)                      # round 1 of 2: the controller may reopen
+        self.complete(t, "coding")
+        code, res = run("invalidate", "--ticket", t, "--node", "coding", "--reason", "again", *self.p)
+        self.assertEqual(code, 2)                           # round 2 reaches the cap: the user decides
+        self.assertIn("G4", res["error"])
+        code, res = run("invalidate", "--ticket", t, "--node", "coding", "--reason", "again", "--actor", "user", *self.p)
+        self.assertEqual(code, 0, res)
+        self.complete(t, "coding")
+        self.write_artifacts(t, "code-review", verdict="NEEDS CHANGES")
+        code, res = run("gate", "--ticket", t, "--node", "code-review", "--status", "needs-changes", *self.p)
+        self.assertEqual(code, 2)                           # the first review loop-back already needs the user
+        self.assertIn("G4", res["error"])
+        state = json.loads((self.tdir(t) / "state.json").read_text(encoding="utf-8"))
+        self.assertEqual(state["nodes"]["coding"]["reopens"], 2)
 
 
 if __name__ == "__main__":

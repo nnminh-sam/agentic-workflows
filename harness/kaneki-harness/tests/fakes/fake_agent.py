@@ -96,6 +96,23 @@ def complete_node(ticket: str, node: str) -> None:
             lines.append("Verdict: APPROVED")
         if "reopen" in parsers:
             lines.append("Reopen: none")
+        if "testcases" in parsers:  # testcases.json (C1): one criterion, one critical repo-test case
+            lines = [json.dumps({"schemaVersion": 1, "ticket": ticket,
+                                 "criteria": [{"id": "AC-1", "text": "the change works"}],
+                                 "cases": [{"id": "TC-1", "title": "the change", "surface": "cli", "risk": "critical",
+                                            "criteria": ["AC-1"], "checks": [{"id": "TC-1.a1", "expect": "exit 0"}],
+                                            "inScope": True, "reason": None,
+                                            "run": {"kind": "repo-test", "command": "python -c 0"}}]})]
+        if "evidence" in parsers:  # evidence.json (C1): every check of testcases.json observed
+            tcs = json.loads((tdir / "testcases.json").read_text(encoding="utf-8"))
+            lines = [json.dumps({"schemaVersion": 1, "ticket": ticket, "at": "2026-11-27T00:00:00+00:00",
+                                 "checks": {k["id"]: {"case": c["id"], "status": "PASS", "observed": 0}
+                                            for c in tcs["cases"] for k in c["checks"]}})]
+        if art == "drafts/commit-msg.md":  # drafts follow the ship rules (the delivery-drafts gate checks them)
+            lines = ["feat(app): add the change", "", f"Work for {ticket}."]
+        if art == "drafts/pr-body.md":
+            lines = ["## Summary", "x", "## Detailed changes", "x", "## Explanation", "x",
+                     "## Test results (local)", "- unit: pass", "- lint: pass"]
         path = tdir / art
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("\n".join(lines) + "\n", encoding="utf-8")
